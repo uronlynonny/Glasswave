@@ -44,6 +44,51 @@ object History {
         save()
     }
 
+    /**
+     * One-time repair for history saved by older versions, where a song's address could be stored
+     * under the name and cover of the song before it. Each YouTube song's real details are fetched
+     * again; Spotify songs whose saved name doesn't match their own search text are dropped.
+     * Fixed details are also written into your own playlists and the stats log.
+     */
+    fun repairOnce(context: Context) {
+        if (prefs.getBoolean("repaired_v1", false)) return
+        Thread {
+            val fixed = HashMap<String, Track>()
+            val drop = HashSet<String>()
+            var failed = 0
+            for (t in tracks.toList()) {
+                val uri = android.net.Uri.parse(t.url)
+                if (uri.scheme == "gwmatch") {
+                    val q = uri.getQueryParameter("q") ?: continue
+                    if (!q.startsWith(t.title, ignoreCase = true)) drop += t.url
+                    continue
+                }
+                val id = uri.getQueryParameter("v") ?: continue
+                val real = try {
+                    YtMusicApi.trackInfo(id)
+                } catch (e: Exception) {
+                    failed++
+                    null
+                } ?: continue
+                if (real.title != t.title || real.artist != t.artist) fixed[t.url] = real
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                for (i in tracks.indices.reversed()) {
+                    val t = tracks[i]
+                    when {
+                        t.url in drop -> tracks.removeAt(i)
+                        fixed[t.url] != null -> tracks[i] = fixed.getValue(t.url).copy(seconds = t.seconds)
+                    }
+                }
+                save()
+                Library.repairTracks(fixed, drop)
+                Stats.repairTracks(fixed, drop)
+                // Offline or YouTube didn't answer: try again next launch.
+                if (failed == 0) prefs.edit { putBoolean("repaired_v1", true) }
+            }
+        }.start()
+    }
+
     private fun save() {
         val arr = JSONArray()
         tracks.forEach {

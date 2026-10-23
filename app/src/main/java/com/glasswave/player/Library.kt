@@ -245,6 +245,19 @@ object Library {
         version++
     }
 
+    /** Puts corrected song details into your own playlists (see History.repairOnce). */
+    @Synchronized
+    fun repairTracks(fixed: Map<String, Track>, drop: Set<String>) {
+        if (fixed.isEmpty() && drop.isEmpty()) return
+        for (p in ownPlaylists()) {
+            val list = readTracks(p.id)
+            if (list.none { it.url in fixed || it.url in drop }) continue
+            val now = list.filter { it.url !in drop }.map { t -> fixed[t.url]?.copy(seconds = maxOf(t.seconds, fixed.getValue(t.url).seconds)) ?: t }
+            writeTracks(p.id, now)
+            updateInfo(p.id, now)
+        }
+    }
+
     /* ---------------- Pins ---------------- */
 
     fun isPinned(id: String) = id in pins

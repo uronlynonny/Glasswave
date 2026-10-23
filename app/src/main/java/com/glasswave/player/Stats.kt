@@ -64,6 +64,25 @@ object Stats {
         }
     }
 
+    /** Puts corrected song details into the log (see History.repairOnce). */
+    fun repairTracks(fixed: Map<String, Track>, drop: Set<String>) {
+        if (fixed.isEmpty() && drop.isEmpty()) return
+        writer.execute {
+            runCatching {
+                if (!file.exists()) return@runCatching
+                val out = file.readLines().mapNotNull { l ->
+                    val o = runCatching { JSONObject(l) }.getOrNull() ?: return@mapNotNull null
+                    val u = o.optString("u")
+                    if (u in drop) return@mapNotNull null
+                    fixed[u]?.let { t -> o.put("t", t.title).put("a", t.artist).put("i", t.thumb ?: "") }
+                    o.toString()
+                }
+                file.writeText(out.joinToString("\n", postfix = "\n"))
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).post { version++ }
+        }
+    }
+
     fun clear() {
         writer.execute { runCatching { file.delete() } }
         version++

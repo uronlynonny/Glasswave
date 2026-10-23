@@ -23,6 +23,8 @@ class GlassApp : Application(), ImageLoaderFactory {
         val lastPlayed = History.tracks.firstOrNull()?.url
         Thread {
             YtRepo.init()
+            // Fix song names saved wrongly by older versions (runs once).
+            History.repairOnce(this)
             // Warm up: the first YouTube lookup loads YouTube's player code, which is slow.
             // Doing it now (with the song you played last) makes your first tap play sooner.
             lastPlayed?.let { YtRepo.prefetch(android.net.Uri.parse(it)) }

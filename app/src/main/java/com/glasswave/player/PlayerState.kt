@@ -117,14 +117,18 @@ class PlayerState(private val context: Context) {
 
     private fun sync() {
         val c = controller ?: return
-        val md = c.mediaMetadata
+        // Title, artist and cover come from the very same queue item as the address. (The player's
+        // overall metadata can lag a moment behind during a song change; mixing the two used to save
+        // one song's address under another song's name, which then played the wrong song in Rewind and Flow.)
+        val item = c.currentMediaItem
+        val md = item?.mediaMetadata ?: c.mediaMetadata
         title = md.title?.toString() ?: ""
         artist = md.artist?.toString() ?: ""
         art = md.artworkUri?.toString()
         playing = c.isPlaying
         hasItem = c.mediaItemCount > 0
         buffering = c.playbackState == Player.STATE_BUFFERING
-        val id = c.currentMediaItem?.mediaId
+        val id = item?.mediaId
         if (id != null && id != currentId && title.isNotBlank()) {
             History.add(Track(id, title, artist, 0, md.artworkUri?.toString()))
         }

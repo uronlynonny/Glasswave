@@ -524,6 +524,18 @@ object YtMusicApi {
      * Songs similar to [videoId] (YouTube Music's "radio" for it), for Autoplay. Leaves out the song
      * itself. Blocking.
      */
+    /** The real title, artist, length and cover of a song, straight from YouTube Music. Blocking. */
+    fun trackInfo(videoId: String): Track? {
+        val json = call("next", JSONObject().put("videoId", videoId).put("isAudioOnly", true))
+        val r = collect(json, "playlistPanelVideoRenderer").firstOrNull { it.optString("videoId") == videoId } ?: return null
+        val title = ytText(r.opt("title")).ifEmpty { return null }
+        val (artist, _) = artistAndLength(r.opt("longBylineText") ?: r.opt("shortBylineText"))
+        return Track(
+            ytWatchUrl(videoId), title, artist.ifEmpty { ytText(r.opt("shortBylineText")) },
+            parseDuration(ytText(r.opt("lengthText"))), sized(lastThumb(r.opt("thumbnail")), 226),
+        )
+    }
+
     fun radio(videoId: String): List<Track> {
         val json = call(
             "next",
