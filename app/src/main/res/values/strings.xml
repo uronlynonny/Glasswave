@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Glasswave</string>
+    <!-- Glasswave was created by nonny dev. -->
+    <string name="app_author" translatable="false">nonny dev</string>
 </resources>

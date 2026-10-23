@@ -1,55 +1,225 @@
+// Glasswave · created by nonny dev. Original work; see AUTHORS.md.
 package com.glasswave.player
 
 import android.os.Build
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
+import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
+import coil.imageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-val Accent = Color(0xFF8FB4FF)
+val Accent = Color(0xFFFF4D6D)
+val Dim = Color.White.copy(alpha = 0.6f)
+val Faint = Color.White.copy(alpha = 0.4f)
 
-/** The "glass" look: a dark tint, a soft light gradient, and a bright edge that catches light. */
+/* ---------------- Motion ---------------- */
+
+/**
+ * A quick spring that settles without wobbling (kept calm on purpose), or no animation when
+ * animations are turned off in Settings. [stiffness] is kept for callers but raised to stay snappy.
+ */
+fun <T> bouncy(stiffness: Float = Spring.StiffnessMediumLow): FiniteAnimationSpec<T> =
+    if (Settings.animations) spring(dampingRatio = 1f, stiffness = maxOf(stiffness, Spring.StiffnessMedium)) else snap()
+
+/** A short timed animation (capped at 250 ms so nothing drags), or none when animations are off. */
+fun <T> smooth(ms: Int = 200): FiniteAnimationSpec<T> = if (Settings.animations) tween(minOf(ms, 250)) else snap()
+
+/**
+ * A slowly turning angle (0..2π over [periodMs]) for drifting backgrounds. Updated about 20 times a
+ * second (every frame in high performance mode): these move so slowly that more is wasted work.
+ * Pauses by itself when the app isn't on screen.
+ */
+@Composable
+fun rememberDrift(periodMs: Int): androidx.compose.runtime.State<Float> {
+    val v = remember { androidx.compose.runtime.mutableFloatStateOf(0.8f) }
+    LaunchedEffect(periodMs, Settings.highPerformance, Settings.animations) {
+        if (!Settings.animations) return@LaunchedEffect
+        val step = if (Settings.highPerformance) 0L else 50_000_000L
+        var last = 0L
+        var t = v.floatValue.toDouble()
+        while (true) {
+            androidx.compose.runtime.withFrameNanos { now ->
+                if (last == 0L) last = now
+                val dt = now - last
+                if (dt >= step) {
+                    t = (t + dt / 1_000_000.0 / periodMs * 2 * Math.PI) % (2 * Math.PI)
+                    v.floatValue = t.toFloat()
+                    last = now
+                }
+            }
+        }
+    }
+    return v
+}
+
+/** A tablet, or a phone on its side: wide enough for two columns. */
+@Composable
+fun isWide(): Boolean = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
+
+/* ---------------- Colours from the album cover ---------------- */
+
+/** The accent of what's playing: a bright, readable colour from the cover (lime when nothing plays). */
+object CoverTint {
+    var accent by mutableStateOf(Color(0xFFC6F432))
+        internal set
+}
+
+/** Lifts a colour until it reads well on the dark glass. */
+fun readable(c: Color): Color {
+    var x = c
+    repeat(5) { if (x.luminance() < 0.42f) x = lerp(x, Color.White, 0.22f) }
+    return x
+}
+
+@Immutable
+data class CoverColors(val a: Color, val b: Color, val c: Color, val base: Color)
+
+/** The app's own lime-and-black look, used until a song is playing (then the cover's colours take over). */
+val Lime = Color(0xFFC6F432)
+val DefaultColors = CoverColors(Color(0xFF9FD12A), Color(0xFF24400C), Lime, Color(0xFF0A0B08))
+
+/**
+ * Reads the main colours out of [art] (loaded tiny, so it's quick) and smoothly fades to them
+ * whenever the song changes.
+ */
+@Composable
+fun rememberCoverColors(art: String?): CoverColors {
+    val ctx = LocalContext.current
+    val target = remember { mutableStateOf(DefaultColors) }
+    LaunchedEffect(art) {
+        if (art == null) {
+            target.value = DefaultColors
+            CoverTint.accent = Lime
+            return@LaunchedEffect
+        }
+        val req = ImageRequest.Builder(ctx).data(art).size(96).allowHardware(false).build()
+        val bmp = (ctx.imageLoader.execute(req) as? SuccessResult)?.drawable?.toBitmap() ?: return@LaunchedEffect
+        val p = withContext(Dispatchers.Default) { Palette.from(bmp).maximumColorCount(16).generate() }
+        val fallback = p.getDominantColor(0xFF2B4CFF.toInt())
+        fun pick(vararg c: Int?): Color = Color(c.firstOrNull { it != null && it != 0 } ?: fallback)
+        val a = pick(p.vibrantSwatch?.rgb, p.lightVibrantSwatch?.rgb, p.dominantSwatch?.rgb)
+        val b = pick(p.darkVibrantSwatch?.rgb, p.mutedSwatch?.rgb, p.dominantSwatch?.rgb)
+        val c = pick(p.lightMutedSwatch?.rgb, p.lightVibrantSwatch?.rgb, p.mutedSwatch?.rgb)
+        val base = lerp(pick(p.darkMutedSwatch?.rgb, p.darkVibrantSwatch?.rgb, p.dominantSwatch?.rgb), Color.Black, 0.72f)
+        target.value = CoverColors(a, b, c, base)
+        CoverTint.accent = readable(a)
+    }
+    val spec: androidx.compose.animation.core.AnimationSpec<Color> = if (Settings.animations) tween(900) else snap()
+    val a by animateColorAsState(target.value.a, spec, label = "a")
+    val b by animateColorAsState(target.value.b, spec, label = "b")
+    val c by animateColorAsState(target.value.c, spec, label = "c")
+    val base by animateColorAsState(target.value.base, spec, label = "base")
+    return CoverColors(a, b, c, base)
+}
+
+/* ---------------- Background ---------------- */
+
+private fun DrawScope.blob(color: Color, cx: Float, cy: Float, r: Float) {
+    drawCircle(
+        brush = Brush.radialGradient(listOf(color, color.copy(alpha = 0f)), center = Offset(cx, cy), radius = r),
+        radius = r,
+        center = Offset(cx, cy),
+    )
+}
+
+/**
+ * The moving gradient behind everything, in the colours of the song's cover (like Apple Music).
+ * The blobs move in the draw step only, inside their own layer, so animating them never redraws
+ * the rest of the screen. On Android 12+ the cover itself is also blurred in, loaded tiny.
+ */
+@Composable
+fun GlassBackground(colors: CoverColors, art: String?, modifier: Modifier = Modifier, artAlpha: Float = 0.35f) {
+    val anim by rememberDrift(40_000)
+    val ctx = LocalContext.current
+    val request = remember(art) { art?.let { ImageRequest.Builder(ctx).data(it).size(96).build() } }
+    Box(modifier.fillMaxSize().background(colors.base)) {
+        if (request != null && Build.VERSION.SDK_INT >= 31) {
+            AsyncImage(
+                model = request,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().blur(80.dp).alpha(artAlpha),
+            )
+        }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer()
+                .drawBehind {
+                    val t = if (Settings.animations) anim else 0.8f
+                    val w = size.width
+                    val h = size.height
+                    blob(colors.a.copy(alpha = 0.55f), w * (0.25f + 0.25f * cos(t)), h * (0.18f + 0.08f * sin(t * 2)), w * 1.0f)
+                    blob(colors.b.copy(alpha = 0.60f), w * (0.80f + 0.18f * sin(t)), h * (0.48f + 0.10f * cos(t)), w * 0.95f)
+                    blob(colors.c.copy(alpha = 0.40f), w * (0.30f + 0.25f * sin(t + 1.7f)), h * (0.86f + 0.06f * cos(t * 2)), w * 0.85f)
+                    blob(colors.a.copy(alpha = 0.25f), w * (0.70f + 0.20f * cos(t + 2.4f)), h * (0.10f + 0.05f * sin(t)), w * 0.6f)
+                    drawRect(Brush.verticalGradient(listOf(Color(0x22000000), Color(0x99000000))))
+                },
+        )
+    }
+}
+
+/* ---------------- Glass and text ---------------- */
+
+/** Cheap frosted glass for things inside scrolling lists (no backdrop sampling, so long lists stay smooth). */
 fun Modifier.glass(
     shape: Shape = RoundedCornerShape(24.dp),
-    base: Float = 0.30f,
-    light: Float = 0.16f,
+    base: Float = 0.25f,
+    light: Float = 0.12f,
 ): Modifier = this
     .clip(shape)
     .background(Color(0xFF0B0F18).copy(alpha = base))
@@ -62,9 +232,9 @@ fun Modifier.glass(
         1.dp,
         Brush.linearGradient(
             listOf(
-                Color.White.copy(alpha = 0.60f),
-                Color.White.copy(alpha = 0.06f),
-                Color.White.copy(alpha = 0.28f),
+                Color.White.copy(alpha = 0.40f),
+                Color.White.copy(alpha = 0.04f),
+                Color.White.copy(alpha = 0.18f),
             ),
         ),
         shape,
@@ -82,136 +252,20 @@ fun GText(
     BasicText(
         text = text,
         modifier = modifier,
-        style = TextStyle(color = color, fontSize = size.sp, fontWeight = weight),
+        style = TextStyle(
+            color = color,
+            fontSize = size.sp,
+            fontWeight = weight,
+            // Big bold titles sit a little tighter, like Apple's.
+            letterSpacing = if (size >= 22) (-0.4).sp else 0.sp,
+        ),
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
     )
 }
 
-private fun DrawScope.blob(color: Color, cx: Float, cy: Float, r: Float) {
-    drawCircle(
-        brush = Brush.radialGradient(listOf(color, Color.Transparent), center = Offset(cx, cy), radius = r),
-        radius = r,
-        center = Offset(cx, cy),
-    )
-}
-
-/**
- * Slowly drifting colour behind everything, plus the song's artwork blurred on Android 12+.
- * Colour blobs are drawn in the draw phase only, so animating them never recomposes the screen.
- */
+/** A tinted icon from the rounded icon set. */
 @Composable
-fun GlassBackground(
-    art: String?,
-    modifier: Modifier = Modifier,
-    content: @Composable BoxScope.() -> Unit,
-) {
-    val transition = rememberInfiniteTransition(label = "bg")
-    val t by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(20000, easing = LinearEasing), RepeatMode.Reverse),
-        label = "drift",
-    )
-    Box(modifier.fillMaxSize().background(Color(0xFF070A10))) {
-        if (art != null && Build.VERSION.SDK_INT >= 31) {
-            AsyncImage(
-                model = art,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().blur(70.dp).alpha(0.7f),
-            )
-        }
-        Box(
-            Modifier.fillMaxSize().drawBehind {
-                val w = size.width
-                val h = size.height
-                blob(Color(0x884C7DFF), w * (0.15f + 0.6f * t), h * 0.15f, w * 0.95f)
-                blob(Color(0x77B04CFF), w * (0.9f - 0.6f * t), h * 0.55f, w * 0.9f)
-                blob(Color(0x6636D6C4), w * (0.2f + 0.4f * t), h * 0.95f, w * 0.8f)
-            },
-        )
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(listOf(Color(0x55000000), Color(0xBB000000))),
-            ),
-        )
-        content()
-    }
-}
-
-/* ---- Icons, drawn directly so the app needs no icon library ---- */
-
-@Composable
-fun PlayIcon(color: Color, s: Dp) = Canvas(Modifier.size(s)) {
-    val w = size.width
-    val h = size.height
-    val p = Path().apply {
-        moveTo(w * 0.28f, h * 0.15f)
-        lineTo(w * 0.86f, h * 0.5f)
-        lineTo(w * 0.28f, h * 0.85f)
-        close()
-    }
-    drawPath(p, color)
-}
-
-@Composable
-fun PauseIcon(color: Color, s: Dp) = Canvas(Modifier.size(s)) {
-    val w = size.width
-    val h = size.height
-    val r = CornerRadius(w * 0.06f)
-    drawRoundRect(color, Offset(w * 0.2f, h * 0.15f), Size(w * 0.22f, h * 0.7f), r)
-    drawRoundRect(color, Offset(w * 0.58f, h * 0.15f), Size(w * 0.22f, h * 0.7f), r)
-}
-
-@Composable
-fun NextIcon(color: Color, s: Dp) = Canvas(Modifier.size(s)) {
-    val w = size.width
-    val h = size.height
-    val p = Path().apply {
-        moveTo(w * 0.15f, h * 0.2f)
-        lineTo(w * 0.68f, h * 0.5f)
-        lineTo(w * 0.15f, h * 0.8f)
-        close()
-    }
-    drawPath(p, color)
-    drawRoundRect(color, Offset(w * 0.74f, h * 0.2f), Size(w * 0.12f, h * 0.6f), CornerRadius(w * 0.04f))
-}
-
-@Composable
-fun PrevIcon(color: Color, s: Dp) = Canvas(Modifier.size(s)) {
-    val w = size.width
-    val h = size.height
-    val p = Path().apply {
-        moveTo(w * 0.85f, h * 0.2f)
-        lineTo(w * 0.32f, h * 0.5f)
-        lineTo(w * 0.85f, h * 0.8f)
-        close()
-    }
-    drawPath(p, color)
-    drawRoundRect(color, Offset(w * 0.14f, h * 0.2f), Size(w * 0.12f, h * 0.6f), CornerRadius(w * 0.04f))
-}
-
-@Composable
-fun SearchIcon(color: Color, s: Dp) = Canvas(Modifier.size(s)) {
-    val w = size.width
-    drawCircle(color, radius = w * 0.31f, center = Offset(w * 0.42f, w * 0.42f), style = Stroke(w * 0.1f))
-    drawLine(color, Offset(w * 0.66f, w * 0.66f), Offset(w * 0.88f, w * 0.88f), strokeWidth = w * 0.1f, cap = StrokeCap.Round)
-}
-
-@Composable
-fun ChevronDownIcon(color: Color, s: Dp) = Canvas(Modifier.size(s)) {
-    val w = size.width
-    val h = size.height
-    val sw = w * 0.09f
-    drawLine(color, Offset(w * 0.2f, h * 0.38f), Offset(w * 0.5f, h * 0.66f), strokeWidth = sw, cap = StrokeCap.Round)
-    drawLine(color, Offset(w * 0.5f, h * 0.66f), Offset(w * 0.8f, h * 0.38f), strokeWidth = sw, cap = StrokeCap.Round)
-}
-
-/** A round glass button holding an icon. */
-@Composable
-fun GlassCircle(size: Dp, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Box(modifier.size(size).glass(CircleShape, base = 0.25f, light = 0.2f), contentAlignment = androidx.compose.ui.Alignment.Center) {
-        content()
-    }
+fun Ico(icon: ImageVector, color: Color = Color.White, size: Dp = 24.dp, modifier: Modifier = Modifier) {
+    Image(icon, contentDescription = null, colorFilter = ColorFilter.tint(color), modifier = modifier.size(size))
 }

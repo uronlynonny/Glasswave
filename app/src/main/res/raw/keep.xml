@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keeps the author credit in the release build. Glasswave was created by nonny dev. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@string/app_author" />

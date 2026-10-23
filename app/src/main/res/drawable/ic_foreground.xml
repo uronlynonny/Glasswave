@@ -1,12 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher icon front ("Lime on black"): one bold lime wave stroke. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#44FFFFFF"
-        android:pathData="M54,24 A30,30 0 1,0 54.01,24 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M46,38 L72,54 L46,70 Z" />
+        android:pathData="M30,60C38,38 48,38 54,54S70,70 78,48"
+        android:strokeWidth="9"
+        android:strokeColor="#FFC6F432"
+        android:strokeLineCap="round" />
 </vector>

@@ -1,3 +1,4 @@
+// Glasswave · created by nonny dev. Original work; see AUTHORS.md.
 package com.glasswave.player
 
 import okhttp3.OkHttpClient

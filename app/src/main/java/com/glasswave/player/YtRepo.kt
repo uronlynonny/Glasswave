@@ -1,8 +1,13 @@
+// Glasswave · created by nonny dev. Original work; see AUTHORS.md.
 package com.glasswave.player
 
+import android.content.Context
+import android.content.SharedPreferences
+import androidx.core.content.edit
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -15,12 +20,13 @@ import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 
 /**
- * Everything that touches YouTube lives in this one file.
- * If YouTube changes and playback breaks, this is the only place that should need work
+ * Searching YouTube Music and finding the audio for a song.
+ * If YouTube changes and playback breaks, this is the first place to look
  * (usually just a newer NewPipeExtractor version in app/build.gradle.kts).
  */
 object YtRepo {
-    private val client = OkHttpClient.Builder()
+    /** One shared connection pool for the whole app. */
+    val http: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
@@ -31,15 +37,22 @@ object YtRepo {
     private val urlCache = ConcurrentHashMap<String, Pair<String, Long>>()
     private const val URL_LIFETIME_MS = 3 * 60 * 60 * 1000L
 
+    /** Spotify song -> YouTube Music song it was matched to. Saved so each song is only searched once. */
+    private var matches: SharedPreferences? = null
+
     @Synchronized
     fun init() {
         if (!ready) {
-            NewPipe.init(YtDownloader(client))
+            NewPipe.init(YtDownloader(http))
             ready = true
         }
     }
 
-    suspend fun search(query: String): List<Track> = withContext(Dispatchers.IO) {
+    fun initMatches(context: Context) {
+        matches = context.getSharedPreferences("matches", Context.MODE_PRIVATE)
+    }
+
+    private fun searchBlocking(query: String): List<Track> {
         init()
         val yt = ServiceList.YouTube
         val handler = yt.searchQHFactory.fromQuery(
@@ -48,7 +61,7 @@ object YtRepo {
             "",
         )
         val info = SearchInfo.getInfo(yt, handler)
-        info.relatedItems
+        return info.relatedItems
             .filterIsInstance<StreamInfoItem>()
             .map {
                 Track(
@@ -62,26 +75,133 @@ object YtRepo {
             .distinctBy { it.url }
     }
 
+    suspend fun search(query: String): List<Track> = withContext(Dispatchers.IO) { searchBlocking(query) }
+
+    /**
+     * Finds the YouTube Music song for a Spotify song. Of the top results, picks the one whose
+     * length is closest to the Spotify length. Blocking.
+     */
+    @Throws(IOException::class)
+    fun match(query: String, seconds: Long): String {
+        matches?.getString(query, null)?.let { return it }
+        val found = try {
+            searchBlocking(query)
+        } catch (e: IOException) {
+            throw e
+        } catch (e: Exception) {
+            throw IOException("YouTube search failed", e)
+        }
+        val top = found.take(5)
+        val best = (if (seconds > 0) top.minByOrNull { abs(it.seconds - seconds) } else top.firstOrNull())
+            ?: throw IOException("No match on YouTube Music for \"$query\"")
+        matches?.edit { putString(query, best.url) }
+        return best.url
+    }
+
+    fun forgetStreamUrls() = urlCache.clear()
+
+    /** Forgets which YouTube song each Spotify song was matched to. */
+    fun clearMatches() { matches?.edit { clear() } }
+
+    /** One lock per song, so the player and the prefetcher never look the same song up twice at once. */
+    private val locks = ConcurrentHashMap<String, Any>()
+
+    /**
+     * Reads just the stream list for a video. Faster than building the full StreamInfo,
+     * which also parses related videos, comments links, subtitles and more.
+     */
+    private fun extractor(url: String): org.schabi.newpipe.extractor.stream.StreamExtractor = try {
+        ServiceList.YouTube.getStreamExtractor(url).also { it.fetchPage() }
+    } catch (e: IOException) {
+        throw e
+    } catch (e: Exception) {
+        throw IOException("YouTube lookup failed", e)
+    }
+
     /** Blocking. Called by the player on its loading thread, never on the main thread. */
     @Throws(IOException::class)
-    fun streamUrl(videoUrl: String): String {
+    fun streamUrl(videoUrl: String, quality: Quality = Settings.quality): String {
         init()
-        val now = System.currentTimeMillis()
-        urlCache[videoUrl]?.let { (u, at) -> if (now - at < URL_LIFETIME_MS) return u }
+        val key = "$videoUrl|${quality.name}"
+        urlCache[key]?.let { (u, at) -> if (System.currentTimeMillis() - at < URL_LIFETIME_MS) return u }
+        synchronized(locks.getOrPut(key) { Any() }) {
+            // Someone else may have just finished looking it up.
+            urlCache[key]?.let { (u, at) -> if (System.currentTimeMillis() - at < URL_LIFETIME_MS) return u }
+            return lookUpAudio(videoUrl, quality, key)
+        }
+    }
 
-        val info = try {
-            StreamInfo.getInfo(ServiceList.YouTube, videoUrl)
+    private fun lookUpAudio(videoUrl: String, quality: Quality, key: String): String {
+        val streams = try {
+            extractor(videoUrl).audioStreams
         } catch (e: IOException) {
             throw e
         } catch (e: Exception) {
             throw IOException("YouTube lookup failed", e)
         }
-        val best = info.audioStreams
-            .filter { it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP && it.isUrl }
-            .maxByOrNull { it.averageBitrate }
+        val now = System.currentTimeMillis()
+        val playable = streams.filter { it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP && it.isUrl }
+        // Pick by format number first: YouTube doesn't always say the bitrate, which used to
+        // make "best" land on a low-quality stream.
+        val byRank = quality.itags.firstNotNullOfOrNull { tag -> playable.firstOrNull { it.itag == tag } }
+        val kbps: (org.schabi.newpipe.extractor.stream.AudioStream) -> Int = { maxOf(it.averageBitrate, it.bitrate / 1000) }
+        val best = byRank
+            ?: (if (quality == Quality.LOW) playable.minByOrNull(kbps) else playable.maxByOrNull(kbps))
             ?: throw IOException("No playable audio found")
         val u = best.content
-        urlCache[videoUrl] = u to now
+        urlCache[key] = u to now
         return u
+    }
+
+    private val videoCache = ConcurrentHashMap<String, Pair<String, Long>>()
+
+    /**
+     * A silent video stream for a YouTube video, at most [maxHeight] pixels tall. Prefers MP4,
+     * which every phone can decode in hardware. Blocking.
+     */
+    @Throws(IOException::class)
+    fun videoUrl(videoId: String, maxHeight: Int): String? {
+        init()
+        val key = "$videoId|$maxHeight"
+        val now = System.currentTimeMillis()
+        videoCache[key]?.let { (u, at) -> if (now - at < URL_LIFETIME_MS) return u }
+        val videos = try {
+            extractor("https://www.youtube.com/watch?v=$videoId").videoOnlyStreams
+        } catch (e: IOException) {
+            throw e
+        } catch (e: Exception) {
+            throw IOException("YouTube lookup failed", e)
+        }
+        val ok = videos.filter {
+            it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP && it.isUrl && it.height in 1..maxHeight
+        }
+        val best = ok.filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }.maxByOrNull { it.height }
+            ?: ok.maxByOrNull { it.height }
+            ?: return null
+        videoCache[key] = best.content to now
+        return best.content
+    }
+
+    /** The YouTube video id behind a queue item: read from the address, or matched for Spotify songs. Blocking. */
+    fun videoIdFor(trackUrl: String): String? {
+        val uri = android.net.Uri.parse(trackUrl)
+        val page = if (uri.scheme == "gwmatch") {
+            runCatching { match(uri.getQueryParameter("q") ?: return null, uri.getQueryParameter("d")?.toLongOrNull() ?: 0) }.getOrNull() ?: return null
+        } else trackUrl
+        return android.net.Uri.parse(page).getQueryParameter("v")
+    }
+
+    /** Looks up a song's audio address ahead of time so the next song starts without a wait. */
+    fun prefetch(uri: android.net.Uri) {
+        try {
+            val page = when {
+                uri.scheme == "gwmatch" -> match(uri.getQueryParameter("q") ?: return, uri.getQueryParameter("d")?.toLongOrNull() ?: 0)
+                uri.host?.endsWith("youtube.com") == true -> uri.toString()
+                else -> return
+            }
+            streamUrl(page)
+        } catch (e: Exception) {
+            android.util.Log.w("Glasswave", "Prefetch failed for $uri", e)
+        }
     }
 }

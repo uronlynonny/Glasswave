@@ -12,8 +12,10 @@ android {
         applicationId = "com.glasswave.player"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 12
+        versionName = "0.10.0"
+        // Only English text from libraries; keeps the APK small.
+        resourceConfigurations += "en"
     }
 
     buildTypes {
@@ -21,6 +23,8 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Signed with the local debug key so the APK installs straight onto your phone.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -52,11 +56,18 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    // Installs the speed-up profiles that Compose ships with, so screens and scrolling run as
+    // precompiled code from the first launches instead of being interpreted.
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 
     implementation(platform("androidx.compose:compose-bom:2024.11.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.animation:animation")
+    // Rounded icon set (unused icons are stripped from the release build).
+    implementation("androidx.compose.material:material-icons-extended")
+    // Picks colours out of album covers for the background.
+    implementation("androidx.palette:palette-ktx:1.0.0")
 
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-session:1.4.1")
@@ -66,5 +77,5 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     // The YouTube source. If YouTube stops working, bump this version first.
-    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.24.8")
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
 }

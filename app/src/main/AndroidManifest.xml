@@ -6,6 +6,21 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Voice search: singing or saying lyrics. Only used while the voice search screen is open. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- In-app updates: hand a downloaded APK to Android's installer. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <queries>
+        <!-- The phone's speech recognizer, for voice search. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <!-- Google's "hum to search". -->
+        <intent>
+            <action android:name="com.google.android.googlequicksearchbox.MUSIC_SEARCH" />
+        </intent>
+    </queries>
 
     <application
         android:name=".GlassApp"
@@ -14,16 +29,37 @@
         android:label="@string/app_name"
         android:theme="@style/Theme.Glass">
 
+        <!-- Glasswave was created by nonny dev. -->
+        <meta-data android:name="glasswave.author" android:value="nonny dev" />
+
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout|uiMode"
             android:exported="true"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- The Spotify sign-in page links back here when it's done. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="glasswave" android:host="spotify-done" />
+            </intent-filter>
         </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <service
             android:name=".PlaybackService"
