@@ -177,6 +177,7 @@ class PlaybackService : MediaSessionService() {
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) SleepTimer.onSongEnded(player)
                 prefetchAhead(player)
                 maybeAutoplay(player)
+                verifyCurrent(player)
             }
 
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
@@ -212,6 +213,49 @@ class PlaybackService : MediaSessionService() {
                 .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC),
         )
         session = MediaSession.Builder(this, player).build()
+    }
+
+    /* ---- Make sure the song playing is the song you picked ---- */
+
+    private val verified = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
+
+    /**
+     * Checks, in the background, that the audio behind the playing entry really is the song its name
+     * says (a wrong Spotify match, or an entry mislabelled by an older version, could point at another
+     * song). If it isn't, the right song is found by its name and artist and swapped in straight away,
+     * the right match is remembered, and the wrong audio is dropped from the cache.
+     */
+    private fun verifyCurrent(p: Player) {
+        val item = p.currentMediaItem ?: return
+        val id = item.mediaId
+        if (id.isEmpty() || !verified.add(id) || Downloads.fileFor(id) != null) return
+        val title = item.mediaMetadata.title?.toString()?.takeIf { it.isNotBlank() } ?: return
+        val artist = item.mediaMetadata.artist?.toString() ?: ""
+        worker.execute {
+            try {
+                val videoId = YtRepo.videoIdFor(id) ?: return@execute
+                val real = YtMusicApi.trackInfo(videoId) ?: return@execute
+                if (YtRepo.sameSong(title, real.title)) return@execute
+                android.util.Log.w("Glasswave", "\"$title\" was playing \"${real.title}\"; finding the right song")
+                val right = YtRepo.findSong(title, artist, real.seconds) ?: return@execute
+                val rightId = android.net.Uri.parse(right.url).getQueryParameter("v")
+                if (rightId == null || rightId == videoId) return@execute
+                val uri = Uri.parse(id)
+                if (uri.scheme == "gwmatch") uri.getQueryParameter("q")?.let { YtRepo.setMatch(it, right.url) }
+                // Drop the wrong audio kept for this entry.
+                Quality.entries.forEach { q -> runCatching { AudioCache.get(this).removeResource(id + "|" + q.name) } }
+                main.post {
+                    val idx = (0 until p.mediaItemCount).firstOrNull { p.getMediaItemAt(it).mediaId == id } ?: return@post
+                    val fixed = item.buildUpon().setMediaId(right.url).setUri(right.url).build()
+                    verified += right.url
+                    History.removeUrl(id)
+                    p.replaceMediaItem(idx, fixed)
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("Glasswave", "Couldn't check the playing song", e)
+                verified.remove(id) // try again next time it plays
+            }
+        }
     }
 
     /* ---- Listening stats: log a play once a song has really been listened to ---- */

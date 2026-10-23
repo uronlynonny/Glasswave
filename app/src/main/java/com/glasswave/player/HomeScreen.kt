@@ -306,11 +306,6 @@ private fun MadeForYou(c: ScreenCtx, seeds: List<Track>) {
                     c.ps.playList(Downloads.tracks.toList(), 0, shuffle = true)
                 }
             }
-            if (history >= 5) item(key = "rewind") {
-                MixTile("Rewind", "Your recent plays, mixed", androidx.compose.material.icons.Icons.Rounded.Replay, Color(0xFFFF9F0A)) {
-                    c.ps.playList(History.tracks.toList(), 0, shuffle = true)
-                }
-            }
         }
     }
 }

@@ -44,6 +44,11 @@ object History {
         save()
     }
 
+    /** Takes a song out (e.g. an entry that pointed at the wrong song). */
+    fun removeUrl(url: String) {
+        if (tracks.removeAll { it.url == url }) save()
+    }
+
     /**
      * One-time repair for history saved by older versions, where a song's address could be stored
      * under the name and cover of the song before it. Each YouTube song's real details are fetched

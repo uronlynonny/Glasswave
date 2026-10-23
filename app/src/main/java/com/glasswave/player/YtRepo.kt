@@ -101,6 +101,42 @@ object YtRepo {
         return best.url
     }
 
+    /** Remembers the right YouTube song for a Spotify song (after a wrong match was caught). */
+    fun setMatch(query: String, url: String) { matches?.edit { putString(query, url) } }
+
+    /** Two titles name the same song (ignoring case, brackets, "feat." and punctuation). */
+    fun sameSong(a: String, b: String): Boolean {
+        fun norm(s: String) = s.lowercase()
+            .replace(Regex("[(\\[][^)\\]]*[)\\]]"), " ")
+            .replace(Regex("\\s(feat\\.?|ft\\.?|featuring|with)\\s.*$"), " ")
+            .replace(Regex("[^\\p{L}\\p{N}]+"), "")
+        val x = norm(a)
+        val y = norm(b)
+        if (x.isEmpty() || y.isEmpty()) return true // can't tell (e.g. only symbols): don't second-guess
+        return x == y || (minOf(x.length, y.length) >= 3 && (x.contains(y) || y.contains(x)))
+    }
+
+    /**
+     * Finds the YouTube Music song called [title] by [artist]: same title, then the right artist,
+     * then the closest length. Null if nothing really matches. Blocking.
+     */
+    fun findSong(title: String, artist: String, seconds: Long): Track? {
+        val page = runCatching {
+            kotlinx.coroutines.runBlocking { YtMusicApi.search("$title $artist".trim(), YtMusicApi.Filter.SONGS) }
+        }.getOrNull() ?: return null
+        val songs = page.sections.flatMap { it.items }.filterIsInstance<SongItem>().take(10)
+        val lead = artist.substringBefore(",").substringBefore(" & ").trim().lowercase()
+        return songs.filter { sameSong(title, it.track.title) }
+            .sortedWith(
+                compareBy<SongItem>(
+                    { if (lead.isNotEmpty() && it.track.artist.lowercase().contains(lead)) 0 else 1 },
+                    { if (it.explicit) 0 else 1 },
+                    { if (seconds > 0 && it.track.seconds > 0) abs(it.track.seconds - seconds) else 0 },
+                ),
+            )
+            .firstOrNull()?.track
+    }
+
     fun forgetStreamUrls() = urlCache.clear()
 
     /** Forgets which YouTube song each Spotify song was matched to. */

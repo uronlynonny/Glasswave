@@ -319,8 +319,14 @@ class ScreenCtx(
     /** Tapping something: songs play (with their neighbours as the queue), everything else opens. */
     fun tap(item: MusicItem, neighbours: List<MusicItem>) {
         if (item is SongItem) {
-            val songs = neighbours.filterIsInstance<SongItem>()
-            ps.playList(songs.map { it.track }, songs.indexOf(item).coerceAtLeast(0))
+            // A song picked from a Home shelf or search plays on its own, and Autoplay follows it
+            // with songs like it. With Autoplay off, the rest of the shelf plays after it instead.
+            if (Settings.autoplay) {
+                ps.playList(listOf(item.track), 0)
+            } else {
+                val songs = neighbours.filterIsInstance<SongItem>()
+                ps.playList(songs.map { it.track }, songs.indexOf(item).coerceAtLeast(0))
+            }
         } else {
             vm.open(Route.Online(item))
         }

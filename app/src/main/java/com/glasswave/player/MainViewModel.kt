@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withPermit
@@ -103,9 +104,14 @@ class MainViewModel : ViewModel() {
         homeJob = viewModelScope.launch {
             val old = home
             home = try {
-                val feed = YtMusicApi.home(homeChip?.params)
+                // YouTube's feed and your own shelves, fetched at the same time.
+                val chip = homeChip
+                val mineJob: kotlinx.coroutines.Deferred<List<Section>>? = if (chip == null) async {
+                    try { ForYou.shelves() } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList<Section>() }
+                } else null
+                val feed = YtMusicApi.home(chip?.params)
                 if (homeChip == null || homeChips.isEmpty()) homeChips = feed.chips
-                Load.Done(cleanHome(feed.sections))
+                Load.Done(ForYou.mix(cleanHome(feed.sections), mineJob?.await() ?: emptyList()))
             } catch (e: CancellationException) {
                 refreshing = false
                 throw e
