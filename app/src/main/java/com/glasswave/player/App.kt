@@ -133,6 +133,7 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
                         is Route.Online -> OnlinePage(ctx, key.item)
                         is Route.Saved -> SavedPage(ctx, key.info)
                         Route.Offline -> DownloadsPage(ctx)
+                        Route.Stats -> StatsPage(ctx)
                         Tab.HOME -> HomeScreen(ctx)
                         Tab.SEARCH -> SearchScreen(ctx)
                         Tab.LIBRARY -> LibraryScreen(ctx)

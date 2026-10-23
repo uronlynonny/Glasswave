@@ -36,12 +36,13 @@ sealed interface MusicItem {
     val thumb: String?
 }
 
-data class SongItem(val track: Track, override val subtitle: String) : MusicItem {
+/** [explicit]: YouTube Music marks it Explicit (the uncensored version). */
+data class SongItem(val track: Track, override val subtitle: String, val explicit: Boolean = false) : MusicItem {
     override val title get() = track.title
     override val thumb get() = track.thumb
 }
 
-data class AlbumItem(val browseId: String, override val title: String, override val subtitle: String, override val thumb: String?) : MusicItem
+data class AlbumItem(val browseId: String, override val title: String, override val subtitle: String, override val thumb: String?, val explicit: Boolean = false) : MusicItem
 data class ArtistItem(val browseId: String, override val title: String, override val subtitle: String, override val thumb: String?) : MusicItem
 data class PlaylistItem(val browseId: String, override val title: String, override val subtitle: String, override val thumb: String?) : MusicItem
 

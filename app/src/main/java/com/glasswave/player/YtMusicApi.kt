@@ -138,13 +138,25 @@ object YtMusicApi {
         return artist to seconds
     }
 
-    private fun songFrom(videoId: String, title: String, line: Any?, thumb: String?, fallbackArtist: String = ""): SongItem {
+    private fun songFrom(videoId: String, title: String, line: Any?, thumb: String?, fallbackArtist: String = "", explicit: Boolean = false): SongItem {
         val (artist, seconds) = artistAndLength(line)
         val a = artist.ifEmpty { fallbackArtist }
-        return SongItem(Track(ytWatchUrl(videoId), title.ifEmpty { "Unknown" }, a, seconds, thumb), a)
+        return SongItem(Track(ytWatchUrl(videoId), title.ifEmpty { "Unknown" }, a, seconds, thumb), a, explicit)
     }
 
-    private fun item(o: JSONObject, kind: String): MusicItem? = when (kind) {
+    /** YouTube Music's "E" badge: the explicit (uncensored) version. */
+    private fun isExplicit(o: JSONObject): Boolean =
+        collect(o, "musicInlineBadgeRenderer").any { findString(it, "iconType") == "MUSIC_EXPLICIT_BADGE" }
+
+    private fun item(o: JSONObject, kind: String): MusicItem? = item0(o, kind)?.let { i ->
+        if (!isExplicit(o)) i else when (i) {
+            is SongItem -> i.copy(explicit = true)
+            is AlbumItem -> i.copy(explicit = true)
+            else -> i
+        }
+    }
+
+    private fun item0(o: JSONObject, kind: String): MusicItem? = when (kind) {
         "musicTwoRowItemRenderer" -> {
             val title = ytText(o.opt("title"))
             val subtitle = ytText(o.opt("subtitle"))
@@ -222,8 +234,36 @@ object YtMusicApi {
         return out
     }
 
-    /** Every shelf on a page, in order, as titled sections. */
-    private fun sections(json: JSONObject): List<Section> {
+    private val cleanTag = Regex("\\s*[(\\[]?\\s*(clean( version)?|edited|radio edit|censored)\\s*[)\\]]?\\s*$", RegexOption.IGNORE_CASE)
+
+    /**
+     * No censored versions: when the same song or album shows up both clean and explicit, only the
+     * explicit one is kept, and songs labelled "(Clean)" / "(Radio Edit)" give way to the original.
+     */
+    private fun preferExplicit(items: List<MusicItem>): List<MusicItem> {
+        fun key(i: MusicItem) = when (i) {
+            is SongItem -> "s|" + i.title.replace(cleanTag, "").lowercase().trim() + "|" + i.track.artist.substringBefore(",").lowercase().trim()
+            is AlbumItem -> "a|" + i.title.replace(cleanTag, "").lowercase().trim()
+            else -> null
+        }
+        val explicitKeys = items.filter { (it is SongItem && it.explicit) || (it is AlbumItem && it.explicit) }.mapNotNull(::key).toSet()
+        val originals = items.filter { !cleanTag.containsMatchIn(it.title) }.mapNotNull(::key).toSet()
+        return items.filter { i ->
+            val k = key(i) ?: return@filter true
+            val isExplicit = (i is SongItem && i.explicit) || (i is AlbumItem && i.explicit)
+            when {
+                isExplicit -> true
+                k in explicitKeys -> false // an explicit version is right there
+                cleanTag.containsMatchIn(i.title) && k in originals -> false
+                else -> true
+            }
+        }
+    }
+
+    /** Every shelf on a page, in order, as titled sections (clean duplicates removed). */
+    private fun sections(json: JSONObject): List<Section> = sections0(json).map { s -> s.copy(items = preferExplicit(s.items)) }
+
+    private fun sections0(json: JSONObject): List<Section> {
         val out = mutableListOf<Section>()
         fun walk(n: Any?) {
             when (n) {
@@ -340,7 +380,7 @@ object YtMusicApi {
             .forEach { songs.putIfAbsent(it.track.url, it) }
         (top as? SongItem)?.let { songs.remove(it.track.url) }
         // Songs you've listened to before go first among the top ones (otherwise YouTube's order).
-        val ordered = songs.values.toList().let { all ->
+        val ordered = preferExplicit(songs.values.toList()).filterIsInstance<SongItem>().let { all ->
             val head = all.take(20)
             head.sortedBy { if (it.track.url in played) 0 else 1 } + all.drop(20)
         }

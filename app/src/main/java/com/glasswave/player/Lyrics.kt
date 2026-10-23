@@ -47,9 +47,35 @@ object LyricsRepo {
         val found = runCatching { lrclib(t, a, seconds) }.getOrNull()
             ?: runCatching { kugou(t, a, seconds) }.getOrNull()
             ?: runCatching { youtube(url) }.getOrNull()
-        if (found != null && found.lines.isNotEmpty()) cache[url] = found else none += url
-        found
+        val clean = found?.let { ly -> ly.copy(lines = ly.lines.map { it.copy(text = uncensor(it.text)) }) }
+        if (clean != null && clean.lines.isNotEmpty()) cache[url] = clean else none += url
+        clean
     }
+
+    /* ---------------- No censoring ---------------- */
+
+    /** The words lyric sites most often star out, so "f**k" can be put back as the artist wrote it. */
+    private val swears = listOf(
+        "fuck", "fucks", "fucked", "fucker", "fuckers", "fucking", "fuckin", "motherfucker", "motherfuckers", "motherfuckin",
+        "shit", "shits", "shitty", "bullshit", "bitch", "bitches", "bitchin", "ass", "asses", "asshole", "assholes", "damn",
+        "goddamn", "dick", "dicks", "pussy", "pussies", "cock", "cunt", "bastard", "bastards", "hoe", "hoes", "whore", "whores",
+        "nigga", "niggas", "slut", "sluts", "piss", "pissed", "crap", "hell", "titties", "tits",
+    )
+    private val starred = Regex("[A-Za-z]*[*#]+[A-Za-z*#]*")
+
+    /** Fills in starred-out words ("sh*t", "f***ing", "b----") when exactly one common word fits. */
+    fun uncensor(line: String): String = starred.replace(line) { m ->
+        val w = m.value
+        if (w.none { it.isLetter() } && w.length < 3) return@replace w
+        val hits = swears.filter { s ->
+            s.length == w.length && s.indices.all { i -> !w[i].isLetter() || w[i].equals(s[i], ignoreCase = true) }
+        }
+        val pick = hits.singleOrNull() ?: return@replace w
+        // Keep the original capitals.
+        if (w.firstOrNull()?.isUpperCase() == true) pick.replaceFirstChar { it.uppercase() } else pick
+    }
+
+    private fun isCensored(text: String) = Regex("[A-Za-z][*#]+[A-Za-z]?").containsMatchIn(text)
 
     private fun fetch(u: String): String? {
         val req = Request.Builder().url(u).header("User-Agent", UA).build()
@@ -73,8 +99,9 @@ object LyricsRepo {
             if (hits.any { seconds <= 0 || abs(it.optDouble("duration", 0.0) - seconds) <= 3 }) break
         }
         fun gap(o: JSONObject) = if (seconds <= 0) 0.0 else abs(o.optDouble("duration", 0.0) - seconds)
+        // Closest length first; between equally close ones, the uncensored version.
         val synced = hits.filter { it.optString("syncedLyrics").let { s -> s.isNotBlank() && s != "null" } && gap(it) <= 12 }
-            .sortedBy { gap(it) }
+            .sortedWith(compareBy({ Math.round(gap(it)) }, { if (isCensored(it.optString("syncedLyrics"))) 1 else 0 }))
         synced.firstOrNull()?.let { fromLrclib(it) }?.let { return it }
         val plain = hits.filter { it.optString("plainLyrics").let { s -> s.isNotBlank() && s != "null" } }.minByOrNull { gap(it) }
         return plain?.let { fromLrclib(it) }

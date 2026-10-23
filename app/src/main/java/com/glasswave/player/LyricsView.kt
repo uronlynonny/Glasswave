@@ -7,6 +7,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -94,14 +95,12 @@ import kotlinx.coroutines.delay
  *  - The lyrics with the closest length to the song are chosen (the same song has many cuts).
  *  - If the chosen lyrics were timed to a slightly longer or shorter cut, their timing is stretched
  *    to fit this recording.
- *  - You can nudge any song's lyrics earlier or later; the nudge is remembered for that song.
  *
  * Two looks, clearly different:
  *  - Liquid glass on: lines glide into place one after another like a wave with a soft overshoot,
- *    far lines shrink and blur, and the sung line lights up letter by letter: the letter being sung
- *    glows hard, the ones already sung keep a softer glow.
- *  - Liquid glass off: the list glides smoothly, the current line grows and brightens, and it fills
- *    with a quick sweep as it starts. Lighter, but still moving.
+ *    far lines shrink and blur, and the sung line lights up letter by letter.
+ *  - Liquid glass off: the list glides smoothly, and the sung line lights up letter by letter too.
+ *    No wave, no blur: lighter, but just as in time.
  */
 
 @Composable
@@ -294,7 +293,7 @@ private fun SyncedLyrics(ps: PlayerState, ly: Lyrics, fancy: Boolean, accent: Co
             if (r in 0.9f..1.1f && abs(r - 1f) > 0.004f) 1f / r else 1f
         }
     }
-    var nudge by remember(url) { mutableLongStateOf(LyricsRepo.offset(url)) }
+    val nudge = 0L
 
     // The song position (on the lyrics' clock), read every frame while this is open (cheap: it only feeds drawing).
     val pos = remember { mutableLongStateOf(0L) }
@@ -405,7 +404,11 @@ private fun SyncedLyrics(ps: PlayerState, ly: Lyrics, fancy: Boolean, accent: Co
                                     renderEffect = if (r <= 0) null else blurs.getOrPut(r) { BlurEffect(r.toFloat(), r.toFloat(), TileMode.Decal) }
                                 }
                             }
-                            .pressable(0.98f) { ps.seekTo(((line.ms - nudge) / stretch).toLong().coerceAtLeast(0)) },
+                            // Hold a line to jump there. (A plain tap used to fire by accident when
+                            // swiping to close, sending the song back to an older line.)
+                            .pointerInput(line.ms, stretch) {
+                                detectTapGestures(onLongPress = { ps.seekTo(((line.ms - nudge) / stretch).toLong().coerceAtLeast(0)) })
+                            },
                     ) {
                         LyricText(line, next, i, { active }, { pos.longValue }, fancy, accent)
                     }
@@ -415,32 +418,13 @@ private fun SyncedLyrics(ps: PlayerState, ly: Lyrics, fancy: Boolean, accent: Co
             }
         }
 
-        // Nudge: lyrics showing early or late? Shift them, and it's remembered for this song.
-        Row(
-            Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 8.dp)
-                .clip(CircleShape).background(Color.Black.copy(alpha = 0.35f)).padding(horizontal = 6.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            fun set(ms: Long) {
-                nudge = ms.coerceIn(-10_000, 10_000)
-                LyricsRepo.setOffset(url, nudge)
-            }
-            Box(Modifier.size(32.dp).pressable(0.85f) { set(nudge - 250) }, contentAlignment = Alignment.Center) { GText("−", 18, Color.White, FontWeight.Bold) }
-            GText(
-                if (nudge == 0L) "sync" else "%+.2fs".format(nudge / 1000f), 11, if (nudge == 0L) Faint else accent, FontWeight.SemiBold,
-                modifier = Modifier.pressable { set(0) }.padding(horizontal = 4.dp),
-            )
-            Box(Modifier.size(32.dp).pressable(0.85f) { set(nudge + 250) }, contentAlignment = Alignment.Center) { GText("+", 18, Color.White, FontWeight.Bold) }
-        }
     }
 }
 
 /**
- * One line: a dim copy, with bright copies on top revealed by moving masks. The masks are worked out
- * while drawing, so the glow moves every frame without rebuilding the text.
- *
- * Glass look: letter by letter. The letter being sung glows strongly; letters already sung keep a
- * softer glow; the rest stay dim. Plain look: a quick bright sweep as the line starts.
+ * One line: a dim copy, with a bright copy on top revealed by a moving mask, letter by letter in
+ * time with the singing (both looks). The mask is worked out while drawing, so it moves every frame
+ * without rebuilding the text, and there's no glow to blur: one cheap layer, only on the sung line.
  */
 @Composable
 private fun LyricText(line: LyricLine, nextMs: Long, index: Int, active: () -> Int, pos: () -> Long, fancy: Boolean, accent: Color) {
@@ -450,105 +434,44 @@ private fun LyricText(line: LyricLine, nextMs: Long, index: Int, active: () -> I
     val layout = remember { arrayOfNulls<TextLayoutResult>(1) }
     val fontSize = if (fancy) 30.sp else 27.sp
     val base = TextStyle(fontSize = fontSize, fontWeight = FontWeight.ExtraBold, lineHeight = if (fancy) 37.sp else 33.sp)
-    val chars = text.length
-    // Letters that count for timing (spaces are skipped, so the glow doesn't pause between words).
+    // Letters that count for timing (spaces are skipped, so the fill doesn't pause between words).
     val letterAt = remember(text) { text.indices.filter { !text[it].isWhitespace() } }
-
-    /** Which letter is being sung, 0..letters (letters = the line is done). */
-    fun letterIndex(): Int {
-        val span = ((nextMs - line.ms) * 0.92f).coerceIn(600f, 12_000f)
-        val f = ((pos() - line.ms) / span).coerceIn(0f, 1f)
-        return (f * letterAt.size).toInt().coerceIn(0, letterAt.size)
-    }
-
-    /** Keeps only the part of the text between [x0] and [x1] on one visual line, with soft edges. */
-    fun androidx.compose.ui.graphics.drawscope.ContentDrawScope.keepBetween(tl: TextLayoutResult, x0: Float, x1: Float, vline: Int, feather: Float) {
-        val lineTop = tl.getLineTop(vline)
-        val lineBottom = tl.getLineBottom(vline)
-        drawContent()
-        // Everything above and below this visual line goes.
-        if (lineTop > 0f) drawRect(Color.Transparent, Offset.Zero, Size(size.width, lineTop), blendMode = BlendMode.DstIn)
-        if (lineBottom < size.height) drawRect(Color.Transparent, Offset(0f, lineBottom), Size(size.width, size.height - lineBottom), blendMode = BlendMode.DstIn)
-        // On the line: keep x0..x1 with soft edges.
-        drawRect(
-            Brush.horizontalGradient(
-                0f to Color.Transparent, 1f to Color.Black,
-                startX = x0 - feather, endX = x0,
-            ),
-            Offset(0f, lineTop), Size(maxOf(x0, 0f), lineBottom - lineTop), blendMode = BlendMode.DstIn,
-        )
-        drawRect(
-            Brush.horizontalGradient(
-                0f to Color.Black, 1f to Color.Transparent,
-                startX = x1, endX = x1 + feather,
-            ),
-            Offset(x1, lineTop), Size(maxOf(size.width - x1, 0f), lineBottom - lineTop), blendMode = BlendMode.DstIn,
-        )
-    }
-
-    /** Keeps everything before [x] on visual line [vline] and all lines above it. */
-    fun androidx.compose.ui.graphics.drawscope.ContentDrawScope.keepBefore(tl: TextLayoutResult, x: Float, vline: Int, feather: Float) {
-        val lineTop = tl.getLineTop(vline)
-        val lineBottom = tl.getLineBottom(vline)
-        drawContent()
-        drawRect(
-            Brush.horizontalGradient(0f to Color.Black, 1f to Color.Transparent, startX = x - feather / 2, endX = x + feather / 2),
-            Offset(0f, lineTop), Size(size.width, lineBottom - lineTop), blendMode = BlendMode.DstIn,
-        )
-        if (lineBottom < size.height) drawRect(Color.Transparent, Offset(0f, lineBottom), Size(size.width, size.height - lineBottom), blendMode = BlendMode.DstIn)
-    }
 
     Box(Modifier.padding(horizontal = 24.dp, vertical = if (fancy) 12.dp else 10.dp)) {
         BasicText(text, style = base.copy(color = Color.White.copy(alpha = 0.4f)), onTextLayout = { layout[0] = it })
         if (passed) {
             BasicText(text, style = base.copy(color = Color.White))
-        } else if (isActive && fancy) {
-            // Letters already sung: bright with a soft glow.
+        } else if (isActive) {
             BasicText(
                 text,
-                style = base.copy(color = Color.White, shadow = Shadow(accent.copy(alpha = 0.45f), blurRadius = 18f)),
+                style = base.copy(color = if (fancy) Color.White else Color.White.copy(alpha = 0.95f)),
                 modifier = Modifier
                     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                     .drawWithContent {
                         val tl = layout[0] ?: return@drawWithContent drawContent()
-                        val li = letterIndex()
+                        // How far through the line the singing is, as a letter (with the part of the next letter).
+                        val span = ((nextMs - line.ms) * 0.92f).coerceIn(600f, 12_000f)
+                        val f = ((pos() - line.ms) / span).coerceIn(0f, 1f)
+                        val exact = f * letterAt.size
+                        val li = exact.toInt()
                         if (li >= letterAt.size) return@drawWithContent drawContent()
-                        if (li == 0) return@drawWithContent
-                        val c = letterAt[li]
-                        keepBefore(tl, tl.getHorizontalPosition(c, true), tl.getLineForOffset(c), 10.dp.toPx())
-                    },
-            )
-            // The letter being sung: a hard glow.
-            BasicText(
-                text,
-                style = base.copy(color = Color.White, shadow = Shadow(accent, blurRadius = 38f)),
-                modifier = Modifier
-                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                    .drawWithContent {
-                        val tl = layout[0] ?: return@drawWithContent
-                        val li = letterIndex()
-                        if (li >= letterAt.size) return@drawWithContent
                         val c = letterAt[li]
                         val vline = tl.getLineForOffset(c)
                         val x0 = tl.getHorizontalPosition(c, true)
-                        val x1 = if (c + 1 <= chars) tl.getHorizontalPosition(c + 1, true) else size.width
-                        keepBetween(tl, minOf(x0, x1), maxOf(x0, x1), vline, 6.dp.toPx())
-                    },
-            )
-        } else if (isActive) {
-            // Plain look: a quick sweep from left to right as the line starts.
-            BasicText(
-                text,
-                style = base.copy(color = Color.White),
-                modifier = Modifier
-                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                    .drawWithContent {
-                        val tl = layout[0] ?: return@drawWithContent drawContent()
-                        val f = ((pos() - line.ms) / 420f).coerceIn(0f, 1f)
-                        if (f >= 1f) return@drawWithContent drawContent()
-                        val at = (f * chars).toInt().coerceIn(0, chars)
-                        val c = at.coerceAtMost(chars - 1).coerceAtLeast(0)
-                        keepBefore(tl, tl.getHorizontalPosition(at, true), tl.getLineForOffset(c), 26.dp.toPx())
+                        val x1 = tl.getHorizontalPosition(c + 1, true)
+                        val x = x0 + (x1 - x0) * (exact - li)
+                        val lineTop = tl.getLineTop(vline)
+                        val lineBottom = tl.getLineBottom(vline)
+                        val feather = 14.dp.toPx()
+                        drawContent()
+                        // Keep lines above, the sung part of this line (soft edge), clear the rest.
+                        drawRect(
+                            Brush.horizontalGradient(0f to Color.Black, 1f to Color.Transparent, startX = x - feather / 2, endX = x + feather / 2),
+                            Offset(0f, lineTop), Size(size.width, lineBottom - lineTop), blendMode = BlendMode.DstIn,
+                        )
+                        if (lineBottom < size.height) {
+                            drawRect(Color.Transparent, Offset(0f, lineBottom), Size(size.width, size.height - lineBottom), blendMode = BlendMode.DstIn)
+                        }
                     },
             )
         }

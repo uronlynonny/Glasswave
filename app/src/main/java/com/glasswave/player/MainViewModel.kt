@@ -31,6 +31,8 @@ sealed interface Route {
     data class Saved(val info: PlaylistInfo) : Route
     /** Songs downloaded to the phone. */
     data object Offline : Route
+    /** Your listening stats: top songs and artists, history. */
+    data object Stats : Route
 }
 
 /** Loading state for anything fetched from the internet. */

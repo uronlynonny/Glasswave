@@ -172,6 +172,8 @@ class PlaybackService : MediaSessionService() {
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                logPlay(player)
+                listening = mediaItem
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) SleepTimer.onSongEnded(player)
                 prefetchAhead(player)
                 maybeAutoplay(player)
@@ -185,6 +187,15 @@ class PlaybackService : MediaSessionService() {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 main.removeCallbacks(fader)
                 if (isPlaying) main.post(fader)
+                // Count only time actually spent playing.
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (isPlaying) {
+                    if (listening == null) listening = player.currentMediaItem
+                    playingSince = now
+                } else if (playingSince > 0) {
+                    listenedMs += now - playingSince
+                    playingSince = 0
+                }
             }
 
             override fun onShuffleModeEnabledChanged(shuffle: Boolean) = maybeAutoplay(player)
@@ -201,6 +212,28 @@ class PlaybackService : MediaSessionService() {
                 .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC),
         )
         session = MediaSession.Builder(this, player).build()
+    }
+
+    /* ---- Listening stats: log a play once a song has really been listened to ---- */
+
+    private var listening: MediaItem? = null
+    private var listenedMs = 0L
+    private var playingSince = 0L
+
+    /** Logs the song that was playing (if listened to for 30 s, or most of a short song), then starts counting afresh. */
+    private fun logPlay(p: Player) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val ms = listenedMs + if (playingSince > 0) now - playingSince else 0
+        val item = listening
+        if (item != null && item.mediaId.isNotEmpty()) {
+            val md = item.mediaMetadata
+            val enough = ms >= 30_000 || (ms >= 10_000 && p.duration in 1..(ms * 2))
+            if (enough) {
+                Stats.record(Track(item.mediaId, md.title?.toString() ?: "", md.artist?.toString() ?: "", 0, md.artworkUri?.toString()), ms)
+            }
+        }
+        listenedMs = 0
+        playingSince = if (p.isPlaying) now else 0
     }
 
     /** Looks up the next two songs' audio in the background so skipping is instant. */
@@ -294,6 +327,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        session?.player?.let { logPlay(it) }
         Settings.listeners -= settingsListener
         main.removeCallbacks(fader)
         worker.shutdownNow()

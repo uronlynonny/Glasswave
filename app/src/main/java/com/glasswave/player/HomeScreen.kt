@@ -161,9 +161,8 @@ fun HomeScreen(c: ScreenCtx) {
                                 if (i == heroIndex) Hero(c, s) else SectionBody(c, s)
                             }
                         }
-                        // After the first shelf: Recently played, then Made for you (Flow and your mixes).
+                        // After the first shelf: Made for you (Flow and your mixes).
                         if (i == 0 && vm.homeChip == null) {
-                            if (recent.isNotEmpty()) item(key = "recent") { RecentShelf(c, recent) }
                             item(key = "madeForYou") {
                                 val seeds = h.value.flatMap { it.items }.filterIsInstance<SongItem>().map { it.track }
                                 MadeForYou(c, seeds)

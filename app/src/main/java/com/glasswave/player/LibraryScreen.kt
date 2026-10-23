@@ -42,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -93,6 +94,21 @@ fun LibraryScreen(c: ScreenCtx) {
             verticalArrangement = Arrangement.spacedBy(18.dp),
             modifier = Modifier.weight(1f),
         ) {
+            // Your stats: top songs and artists this month / year, listening history.
+            item(key = "stats", span = { GridItemSpan(maxLineSpan) }) { StatsCard(c) }
+            // Recently played, as a shelf.
+            val recent = History.tracks.take(15)
+            if (recent.isNotEmpty()) item(key = "recent", span = { GridItemSpan(maxLineSpan) }) {
+                Column {
+                    GText("Recently played", 19, weight = FontWeight.Bold, modifier = Modifier.padding(bottom = 10.dp))
+                    androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        items(recent.size) { i ->
+                            val t = recent[i]
+                            ShapeCard(SongItem(t, t.artist), 120.dp) { c.ps.playList(recent, i) }
+                        }
+                    }
+                }
+            }
             // Downloads: always here, works without internet.
             item(key = "downloads", span = { GridItemSpan(maxLineSpan) }) {
                 Row(
@@ -169,5 +185,39 @@ private fun PlaylistCard(p: PlaylistInfo, onOpen: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         GText(p.name, 14, Color.White, FontWeight.Medium, 1)
         GText("${p.source.label} · ${p.count}", 12, Dim, maxLines = 1)
+    }
+}
+
+/** The way into your stats: this month's minutes and your top song so far. */
+@Composable
+private fun StatsCard(c: ScreenCtx) {
+    var month by remember { androidx.compose.runtime.mutableStateOf<Stats.Summary?>(null) }
+    androidx.compose.runtime.LaunchedEffect(Stats.version) { month = Stats.summary(Stats.Period.MONTH) }
+    val accent = CoverTint.accent
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .pressable(0.98f) { c.vm.open(Route.Stats) }
+            .clip(RoundedCornerShape(20.dp))
+            .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.32f), Color.White.copy(alpha = 0.04f))))
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            GText("YOUR STATS · THIS MONTH", 11, accent, FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            val m = month
+            GText(if (m == null) "…" else " min ·  plays", 22, weight = FontWeight.ExtraBold, maxLines = 1)
+            GText(
+                m?.topSongs?.firstOrNull()?.let { "Top song: " } ?: "Top songs, top artists and your history",
+                13, Dim, maxLines = 1,
+            )
+        }
+        val top = month?.topSongs?.firstOrNull()
+        if (top != null) {
+            Cover(top.track.thumb, Modifier.size(56.dp), 10.dp)
+            Spacer(Modifier.width(8.dp))
+        }
+        Ico(Icons.AutoMirrored.Rounded.KeyboardArrowRight, Faint, 24.dp)
     }
 }

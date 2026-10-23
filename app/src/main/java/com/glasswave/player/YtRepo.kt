@@ -91,7 +91,10 @@ object YtRepo {
         } catch (e: Exception) {
             throw IOException("YouTube search failed", e)
         }
-        val top = found.take(5)
+        // Never pick a clean / censored upload when the original is among the results.
+        val censored = Regex("clean|edited|censored|radio edit", RegexOption.IGNORE_CASE)
+        val wantsClean = censored.containsMatchIn(query)
+        val top = found.take(6).filter { wantsClean || !censored.containsMatchIn(it.title) }.ifEmpty { found.take(5) }
         val best = (if (seconds > 0) top.minByOrNull { abs(it.seconds - seconds) } else top.firstOrNull())
             ?: throw IOException("No match on YouTube Music for \"$query\"")
         matches?.edit { putString(query, best.url) }

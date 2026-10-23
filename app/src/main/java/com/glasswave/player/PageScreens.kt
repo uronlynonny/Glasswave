@@ -33,6 +33,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.ui.Alignment
@@ -149,6 +152,129 @@ fun DownloadsPage(c: ScreenCtx) {
         itemsIndexed(tracks, key = { _, t -> "dl|${t.url}" }) { i, t ->
             // "Remove download" is in each song's ⋮ menu.
             Box(Modifier.padding(horizontal = 8.dp)) { TrackRow(t, t.url == c.ps.currentId, c.ps.playing) { c.ps.playList(tracks, i) } }
+        }
+    }
+}
+
+/**
+ * Your listening stats, like BitChord's: minutes and plays, your most played songs and artists
+ * ranked for this month, this year or all time, and your listening history day by day.
+ */
+@Composable
+fun StatsPage(c: ScreenCtx) {
+    val list = rememberLazyListState()
+    var period by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(Stats.Period.MONTH) }
+    var data by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Stats.Summary?>(null) }
+    LaunchedEffect(period, Stats.version) { data = Stats.summary(period) }
+    val accent = CoverTint.accent
+    PageFrame(c, list) {
+        item(key = "title") {
+            Column(Modifier.padding(horizontal = 20.dp)) {
+                GText("Your stats", 32, weight = FontWeight.Bold)
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Stats.Period.entries.forEach { p -> Chip(p.label, period == p, c.bg) { period = p } }
+                }
+            }
+        }
+        val d = data
+        if (d == null) {
+            items(6) { SkeletonRow() }
+            return@PageFrame
+        }
+        if (d.plays == 0) {
+            item(key = "none") { Centered("Nothing here yet. Songs you listen to for 30 seconds or more are counted here.") }
+            return@PageFrame
+        }
+        // The big numbers
+        item(key = "nums") {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf("Minutes" to d.minutes.toString(), "Plays" to d.plays.toString(), "Songs" to d.songs.toString()).forEach { (label, value) ->
+                    Column(Modifier.weight(1f).glass(RoundedCornerShape(18.dp), base = 0.22f, light = 0.08f).padding(14.dp)) {
+                        GText(value, 24, accent, FontWeight.ExtraBold, 1)
+                        GText(label, 12, Dim)
+                    }
+                }
+            }
+        }
+        // Number one, big
+        d.topSongs.firstOrNull()?.let { top ->
+            item(key = "one") {
+                Row(
+                    Modifier.padding(horizontal = 16.dp).fillMaxWidth()
+                        .pressable(0.98f) { c.ps.playList(d.topSongs.map { it.track }, 0) }
+                        .glass(RoundedCornerShape(22.dp), base = 0.2f, light = 0.1f).padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Cover(hiRes(top.track.thumb), Modifier.size(96.dp), 14.dp)
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        GText("#1 SONG", 11, accent, FontWeight.Bold)
+                        GText(top.track.title, 20, weight = FontWeight.Bold, maxLines = 2)
+                        GText(top.track.artist, 14, Dim, maxLines = 1)
+                        GText("${top.plays} plays · ${top.ms / 60_000} min", 12, Faint)
+                    }
+                }
+            }
+        }
+        // Top artists
+        if (d.topArtists.isNotEmpty()) {
+            item(key = "artistsTitle") { SectionTitle("Top artists") }
+            item(key = "artists") {
+                androidx.compose.foundation.lazy.LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    items(d.topArtists.size) { i ->
+                        val a = d.topArtists[i]
+                        Column(Modifier.width(104.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box {
+                                Cover(a.thumb, Modifier.size(104.dp), 0.dp, circle = true)
+                                Box(
+                                    Modifier.align(Alignment.BottomStart).size(30.dp).clip(CircleShape).background(Color(0xE6000000)),
+                                    contentAlignment = Alignment.Center,
+                                ) { GText("${i + 1}", 13, accent, FontWeight.Bold) }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            GText(a.name, 14, weight = FontWeight.SemiBold, maxLines = 1)
+                            GText("${a.plays} plays", 12, Dim, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        }
+        // Most played songs, ranked
+        item(key = "songsTitle") { SectionTitle("Most played") }
+        val songs = d.topSongs.map { it.track }
+        itemsIndexed(d.topSongs, key = { i, r -> "top$i|${r.track.url}" }) { i, r ->
+            Row(Modifier.padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                GText("${i + 1}", 16, if (i < 3) accent else Faint, FontWeight.Bold, modifier = Modifier.width(30.dp))
+                Box(Modifier.weight(1f)) { TrackRow(r.track, r.track.url == c.ps.currentId, c.ps.playing) { c.ps.playList(songs, i) } }
+                GText("${r.plays}×", 12, Faint, modifier = Modifier.padding(end = 6.dp))
+            }
+        }
+        // Listening history, day by day
+        item(key = "historyTitle") { SectionTitle("Listening history") }
+        val fmt = java.text.SimpleDateFormat("EEEE d MMMM", java.util.Locale.getDefault())
+        val today = java.util.Calendar.getInstance()
+        fun dayLabel(at: Long): String {
+            val c2 = java.util.Calendar.getInstance().apply { timeInMillis = at }
+            val sameYear = c2.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR)
+            val diff = today.get(java.util.Calendar.DAY_OF_YEAR) - c2.get(java.util.Calendar.DAY_OF_YEAR)
+            return when {
+                sameYear && diff == 0 -> "Today"
+                sameYear && diff == 1 -> "Yesterday"
+                else -> fmt.format(java.util.Date(at))
+            }
+        }
+        val timeFmt = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
+        d.history.groupBy { dayLabel(it.at) }.forEach { (day, plays) ->
+            item(key = "day$day") { GText(day.uppercase(), 12, Faint, FontWeight.SemiBold, modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 4.dp)) }
+            plays.forEachIndexed { i, p ->
+                item(key = "h$day$i${p.at}") {
+                    Row(Modifier.padding(start = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { TrackRow(p.track, p.track.url == c.ps.currentId, c.ps.playing) { c.ps.playList(listOf(p.track), 0) } }
+                        GText(timeFmt.format(java.util.Date(p.at)), 12, Faint, modifier = Modifier.padding(end = 6.dp))
+                    }
+                }
+            }
         }
     }
 }
