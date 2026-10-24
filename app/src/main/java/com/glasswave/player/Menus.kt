@@ -421,7 +421,8 @@ private fun Toast(modifier: Modifier) {
     val text = Menus.toast
     LaunchedEffect(Menus.toastId) {
         if (Menus.toast != null) {
-            delay(1800)
+            // Longer notes stay up longer, so there's time to read them.
+            delay((1800L + (Menus.toast?.length ?: 0) * 35L).coerceAtMost(6000L))
             Menus.clearToast()
         }
     }
@@ -434,7 +435,8 @@ private fun Toast(modifier: Modifier) {
         var last by remember { mutableStateOf("") }
         if (text != null) last = text
         Box(
-            Modifier.clip(CircleShape).background(Color(0xEE1B1C20)).padding(horizontal = 18.dp, vertical = 10.dp),
-        ) { GText(last, 14, Color.White, FontWeight.Medium, 1) }
+            Modifier.padding(horizontal = 24.dp).clip(RoundedCornerShape(20.dp)).background(Color(0xEE1B1C20))
+                .padding(horizontal = 18.dp, vertical = 10.dp),
+        ) { GText(last, 14, Color.White, FontWeight.Medium, 3) }
     }
 }

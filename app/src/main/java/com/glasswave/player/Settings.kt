@@ -59,6 +59,7 @@ object Settings {
 
     var quality by mutableStateOf(Quality.HIGH); private set
     var skipSilence by mutableStateOf(false); private set
+    var volumeLeveling by mutableStateOf(true); private set
     var animations by mutableStateOf(true); private set
     var glass by mutableStateOf(true); private set
     var playerStyle by mutableStateOf(PlayerStyle.IMMERSIVE); private set
@@ -86,6 +87,7 @@ object Settings {
         prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         quality = enumPref("quality", Quality.HIGH)
         skipSilence = prefs.getBoolean("skip_silence", false)
+        volumeLeveling = prefs.getBoolean("volume_leveling", true)
         animations = prefs.getBoolean("animations", true)
         glass = prefs.getBoolean("glass", true)
         playerStyle = enumPref("player_style", PlayerStyle.IMMERSIVE)
@@ -123,6 +125,12 @@ object Settings {
     fun updateSkipSilence(on: Boolean) {
         skipSilence = on
         prefs.edit { putBoolean("skip_silence", on) }
+        listeners.forEach { it() }
+    }
+
+    fun updateVolumeLeveling(on: Boolean) {
+        volumeLeveling = on
+        prefs.edit { putBoolean("volume_leveling", on) }
         listeners.forEach { it() }
     }
 

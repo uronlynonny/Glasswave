@@ -43,7 +43,7 @@ class PlayerState(private val context: Context) {
     data class QueueEntry(val index: Int, val track: Track)
 
     /** The songs coming up after the current one, in the order they'll actually play (shuffle included). */
-    fun upcoming(limit: Int = 200): List<QueueEntry> {
+    fun upcoming(limit: Int = 5000): List<QueueEntry> {
         queueVersion // read so callers refresh when the queue changes
         val c = controller ?: return emptyList()
         val tl = c.currentTimeline

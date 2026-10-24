@@ -82,16 +82,16 @@ half4 main(float2 coord) {
     float2 p = coord - hs;
     float inside = -sdf(p, hs, radius);
     if (inside > depth || inside < 0.0) { return content.eval(coord); }
-    float2 n = normalize(float2(
-        sdf(p + float2(1.0, 0.0), hs, radius) - sdf(p - float2(1.0, 0.0), hs, radius),
-        sdf(p + float2(0.0, 1.0), hs, radius) - sdf(p - float2(0.0, 1.0), hs, radius)) + 0.0001);
+    // The edge direction, worked out directly from the shape (cheaper than sampling the shape
+    // four more times per pixel).
+    float2 q = abs(p) - hs + radius;
+    float2 s = sign(p);
+    float2 n = (q.x > 0.0 && q.y > 0.0) ? normalize(q) * s : (q.x > q.y ? float2(s.x, 0.0) : float2(0.0, s.y));
     float t = 1.0 - inside / depth;
     float bend = 1.0 - sqrt(max(1.0 - t * t, 0.0));
     float2 o = n * bend * amount;
-    half4 g = content.eval(coord - o);
-    half r = content.eval(coord - o * 1.10).r;
-    half b = content.eval(coord - o * 0.90).b;
-    half4 c = half4(r, g.g, b, g.a);
+    // One look at what's behind per pixel (the rainbow fringe used three).
+    half4 c = content.eval(coord - o);
     float key = pow(max(dot(n, normalize(float2(-0.45, -1.0))), 0.0), 2.0);
     float fill = 0.45 * pow(max(dot(n, normalize(float2(0.45, 1.0))), 0.0), 2.0);
     c.rgb += half3((key + fill) * pow(t, 3.0) * 0.45);
@@ -101,6 +101,26 @@ half4 main(float2 coord) {
 
 @Volatile
 private var lensWorks = true
+
+/**
+ * How much glass the phone can afford. Low-end phones (little memory, or Android's own "not a
+ * high-performance phone" rating) get a softer blur and no edge bending, so scrolling stays smooth.
+ */
+object GlassTier {
+    @Volatile
+    var light = false
+        private set
+
+    fun init(context: android.content.Context) {
+        val am = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val mem = android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.totalMem
+        val perfClass = if (Build.VERSION.SDK_INT >= 31) Build.VERSION.MEDIA_PERFORMANCE_CLASS else 0
+        light = am.isLowRamDevice || mem < 4L * 1024 * 1024 * 1024 || (Build.VERSION.SDK_INT >= 31 && perfClass == 0 && mem < 6L * 1024 * 1024 * 1024)
+    }
+
+    /** Blur strength: a bit lighter everywhere, and half on low-end phones. */
+    fun blur(px: Float) = px * if (light) 0.45f else 0.7f
+}
 
 private class GlassCache {
     var size = Size.Zero
@@ -112,13 +132,15 @@ private class GlassCache {
 private fun buildEffect(size: Size, radius: Float, blur: Float, depth: Float, amount: Float): RenderEffect {
     val sat = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(1.6f) })
     var fx = RenderEffect.createColorFilterEffect(sat)
-    if (blur > 0f) fx = RenderEffect.createChainEffect(fx, RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.CLAMP))
-    if (Build.VERSION.SDK_INT >= 33 && depth > 0f && lensWorks) {
+    val b = GlassTier.blur(blur)
+    if (b > 0.5f) fx = RenderEffect.createChainEffect(fx, RenderEffect.createBlurEffect(b, b, Shader.TileMode.CLAMP))
+    if (Build.VERSION.SDK_INT >= 33 && depth > 0f && lensWorks && !GlassTier.light) {
         try {
             val lens = RuntimeShader(LENS).apply {
                 setFloatUniform("size", size.width, size.height)
                 setFloatUniform("radius", radius)
-                setFloatUniform("depth", depth.coerceAtMost(radius))
+                // A slightly thinner bent edge: fewer pixels go through the lens.
+                setFloatUniform("depth", (depth * 0.85f).coerceAtMost(radius))
                 setFloatUniform("amount", amount.coerceAtMost(size.minDimension / 2f))
             }
             fx = RenderEffect.createChainEffect(RenderEffect.createRuntimeShaderEffect(lens, "content"), fx)

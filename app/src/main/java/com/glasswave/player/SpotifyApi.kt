@@ -160,15 +160,29 @@ object SpotifyApi {
     }
 
     /** Reads every page of a Spotify list. */
+    /**
+     * Every page of a list, however long. Follows Spotify's "next" link, and if that's missing
+     * while songs are still left (Spotify sometimes stops early on big playlists), asks for the
+     * rest by position instead.
+     */
     private fun pages(first: String, each: (JSONObject) -> Unit) {
         var url: String? = first
         var guard = 0
-        while (url != null && guard++ < 200) {
+        var seen = 0
+        while (url != null && guard++ < 1000) {
             val page = get(url)
             val items = page.optJSONArray("items") ?: JSONArray()
             for (i in 0 until items.length()) items.optJSONObject(i)?.let(each)
+            seen += items.length()
+            val total = page.optInt("total", -1)
             url = page.optString("next").takeIf { it.isNotEmpty() && it != "null" }
+                ?: if (total > seen && items.length() > 0) withOffset(first, seen) else null
         }
+    }
+
+    private fun withOffset(url: String, offset: Int): String {
+        val clean = url.replace(Regex("([?&])offset=\\d+&?"), "$1").trimEnd('&', '?')
+        return clean + (if ('?' in clean) "&" else "?") + "offset=$offset"
     }
 
     private fun trackFrom(row: JSONObject): Track? {
@@ -255,8 +269,11 @@ object SpotifyApi {
         }
     }
 
-    /** A playlist or album imported from a share link: its name, cover and songs. */
-    data class Imported(val name: String, val cover: String?, val tracks: List<Track>)
+    /**
+     * A playlist or album imported from a share link: its name, cover and songs. [cut] is true when
+     * Spotify's public page stopped at its 100-song limit, so the playlist has more than this.
+     */
+    data class Imported(val name: String, val cover: String?, val tracks: List<Track>, val cut: Boolean = false)
 
     private val linkRx = Regex("(playlist|album)[/:]([A-Za-z0-9]{22})")
 
@@ -289,7 +306,8 @@ object SpotifyApi {
             Track(matchUrl(title, artist, seconds), title, artist, seconds, cover)
         }
         if (tracks.isEmpty()) throw java.io.IOException("No songs found")
-        Imported(name, cover, tracks)
+        // Spotify's public page lists at most 100 songs.
+        Imported(name, cover, tracks, cut = type == "playlist" && list.length() >= 100)
     }
 
     private fun findObject(node: Any?, key: String): JSONObject? {

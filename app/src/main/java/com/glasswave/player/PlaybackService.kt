@@ -98,7 +98,47 @@ class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
     private val worker = Executors.newFixedThreadPool(2)
     private val main = Handler(Looper.getMainLooper())
-    private val settingsListener: () -> Unit = { session?.player?.let { applySettings(it); maybeAutoplay(it) } }
+    private val settingsListener: () -> Unit = { session?.player?.let { applySettings(it); maybeAutoplay(it); applyLevel(it) } }
+
+    /* ---- Volume leveling: every song at the same loudness ---- */
+
+    /** How loud this song should play (0..1), multiplied into the crossfade volume. */
+    private var levelGain = 1f
+    /** Lifts quiet songs (the player's volume can only go down, not up). */
+    private var boost: android.media.audiofx.LoudnessEnhancer? = null
+    private var boostSession = 0
+
+    private fun applyLevel(p: Player) {
+        val item = p.currentMediaItem ?: return
+        if (!Settings.volumeLeveling) { setLevel(p, 0f); return }
+        val next = p.nextMediaItemIndex.takeIf { it != C.INDEX_UNSET }?.let { p.getMediaItemAt(it).mediaId }
+        worker.execute {
+            val db = runCatching { YtRepo.videoIdFor(item.mediaId)?.let { Loudness.fetch(it) } }.getOrNull()
+            if (db != null) main.post { if (p.currentMediaItem?.mediaId == item.mediaId && Settings.volumeLeveling) setLevel(p, Loudness.gainDb(db)) }
+            // Look the next song up now, so its level is ready the moment it starts.
+            next?.let { runCatching { YtRepo.videoIdFor(it)?.let { id -> Loudness.fetch(id) } } }
+        }
+    }
+
+    private fun setLevel(p: Player, gainDb: Float) {
+        levelGain = if (gainDb < 0f) Math.pow(10.0, gainDb / 20.0).toFloat() else 1f
+        runCatching {
+            val sid = (p as? ExoPlayer)?.audioSessionId ?: 0
+            if (gainDb > 0.2f && sid != 0) {
+                if (boost == null || boostSession != sid) {
+                    boost?.release()
+                    boost = android.media.audiofx.LoudnessEnhancer(sid)
+                    boostSession = sid
+                }
+                boost?.setTargetGain((gainDb * 100).toInt())
+                boost?.enabled = true
+            } else {
+                boost?.enabled = false
+            }
+        }
+        // While crossfading the fader sets the volume itself (and uses levelGain).
+        if (Settings.crossfade == 0 || !p.isPlaying) p.volume = levelGain
+    }
 
     private class Resolver : ResolvingDataSource.Resolver {
         override fun resolveDataSpec(dataSpec: DataSpec): DataSpec {
@@ -124,7 +164,7 @@ class PlaybackService : MediaSessionService() {
 
     private fun applySettings(p: Player) {
         (p as? ExoPlayer)?.skipSilenceEnabled = Settings.skipSilence
-        if (Settings.crossfade == 0) p.volume = 1f
+        if (Settings.crossfade == 0) p.volume = levelGain
     }
 
     override fun onCreate() {
@@ -180,6 +220,7 @@ class PlaybackService : MediaSessionService() {
                 prefetchAhead(player)
                 maybeAutoplay(player)
                 verifyCurrent(player)
+                applyLevel(player)
             }
 
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
@@ -215,6 +256,25 @@ class PlaybackService : MediaSessionService() {
                 .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC),
         )
         session = MediaSession.Builder(this, player).build()
+
+        // The home-screen widget follows the song and the play state.
+        livePlayer = player
+        player.addListener(object : Player.Listener {
+            override fun onEvents(p: Player, events: Player.Events) {
+                if (events.containsAny(
+                        Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_IS_PLAYING_CHANGED,
+                        Player.EVENT_MEDIA_METADATA_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED,
+                    )
+                ) pushWidget(p)
+            }
+        })
+        pushWidget(player)
+    }
+
+    private fun pushWidget(p: Player) {
+        val item = p.currentMediaItem
+        val md = item?.mediaMetadata
+        Widget.update(this, md?.title?.toString(), md?.artist?.toString(), md?.artworkUri?.toString(), p.isPlaying, live = true)
     }
 
     /* ---- Make sure the song playing is the song you picked ---- */
@@ -358,15 +418,20 @@ class PlaybackService : MediaSessionService() {
                 var v = 1f
                 if (pos < fadeMs) v = pos.toFloat() / fadeMs
                 if (dur > 0 && dur - pos < fadeMs) v = minOf(v, (dur - pos).toFloat() / fadeMs)
-                p.volume = v.coerceIn(0f, 1f)
-            } else if (p.volume != 1f) {
-                p.volume = 1f
+                p.volume = v.coerceIn(0f, 1f) * levelGain
+            } else if (p.volume != levelGain) {
+                p.volume = levelGain
             }
             if (p.isPlaying) main.postDelayed(this, 80)
         }
     }
 
     companion object {
+        /** The running player, for the home-screen widget's buttons. Null when the service isn't running. */
+        @Volatile
+        var livePlayer: Player? = null
+            private set
+
         /** The player's audio session, for opening the phone's equalizer. 0 when not playing yet. */
         @Volatile
         var audioSessionId = 0
@@ -382,6 +447,14 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         session?.player?.let { logPlay(it) }
+        runCatching { boost?.release() }
+        boost = null
+        // The widget keeps the last song but its buttons now open the app.
+        session?.player?.let { p ->
+            val md = p.currentMediaItem?.mediaMetadata
+            Widget.update(this, md?.title?.toString(), md?.artist?.toString(), md?.artworkUri?.toString(), false, live = false)
+        }
+        livePlayer = null
         Settings.listeners -= settingsListener
         main.removeCallbacks(fader)
         worker.shutdownNow()

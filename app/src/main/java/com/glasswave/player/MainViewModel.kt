@@ -474,7 +474,10 @@ class MainViewModel : ViewModel() {
             try {
                 val got = SpotifyApi.importLink(link.trim())
                 withContext(Dispatchers.IO) { Library.createWith(got.name, got.cover, got.tracks) }
-                Menus.say("Imported ${got.name} · ${got.tracks.size} songs")
+                Menus.say(
+                    if (got.cut) "Imported the first ${got.tracks.size} songs of ${got.name}. Spotify only shares 100 by link; sign in to Spotify in Settings to get them all."
+                    else "Imported ${got.name} · ${got.tracks.size} songs",
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

@@ -295,6 +295,7 @@ private fun Audio(c: ScreenCtx) {
         SwitchRow("Autoplay", "When the queue ends, keep playing similar songs.", Settings.autoplay) { Settings.updateAutoplay(it) }
         Divider()
         SwitchRow("Skip silence", "Skips quiet gaps at the start and end of songs.", Settings.skipSilence) { Settings.updateSkipSilence(it) }
+        SwitchRow("Volume leveling", "Plays every song at the same loudness, so you don't have to keep changing the volume.", Settings.volumeLeveling) { Settings.updateVolumeLeveling(it) }
         Divider()
         SwitchRow("Shuffle & repeat beside controls", "They're always in the player's Up next list too.", Settings.showModeButtons) {
             Settings.updateShowModeButtons(it)
@@ -565,16 +566,91 @@ private fun About(c: ScreenCtx) {
 private const val YT_LOGIN_URL =
     "https://accounts.google.com/ServiceLogin?ltmpl=music&service=youtube&passive=true&continue=https%3A%2F%2Fmusic.youtube.com%2F"
 
-@SuppressLint("SetJavaScriptEnabled")
+/**
+ * Signing in to YouTube Music. First a choice: "Continue with Google" opens Android's own account
+ * picker with the Google accounts already on the phone; the picked account is filled into Google's
+ * sign-in, which then usually just asks to confirm ("Tap Yes on your phone") or offers the saved
+ * password. "Use another account" opens Google's sign-in empty.
+ */
 @Composable
 fun YtLogin(onCookie: (String) -> Unit, onClose: () -> Unit) {
+    // null: still choosing; "": sign in by typing; an email: that Google account.
+    var account by remember { mutableStateOf<String?>(null) }
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { res ->
+        val email = res.data?.getStringExtra(android.accounts.AccountManager.KEY_ACCOUNT_NAME)
+        if (res.resultCode == android.app.Activity.RESULT_OK && !email.isNullOrBlank()) account = email
+    }
+    BackHandler(enabled = account != null) { account = null }
     Column(Modifier.fillMaxSize().background(Color(0xFF0A0B10)).systemBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(44.dp).clip(CircleShape).pressable(0.85f, onClick = onClose), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.size(44.dp).clip(CircleShape).pressable(0.85f) { if (account != null) account = null else onClose() },
+                contentAlignment = Alignment.Center,
+            ) {
                 Ico(Icons.AutoMirrored.Rounded.ArrowBack, Color.White, 24.dp)
             }
             GText("Sign in to YouTube Music", 17, weight = FontWeight.SemiBold)
         }
+        val a = account
+        if (a == null) {
+            SignInChoice(
+                onGoogle = {
+                    val intent = android.accounts.AccountManager.newChooseAccountIntent(
+                        null, null, arrayOf("com.google"), null, null, null, null,
+                    )
+                    runCatching { picker.launch(intent) }.onFailure { account = "" }
+                },
+                onOther = { account = "" },
+            )
+        } else {
+            YtLoginWeb(a, onCookie)
+        }
+    }
+}
+
+@Composable
+private fun SignInChoice(onGoogle: () -> Unit, onOther: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 26.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        GText("Sign in with your Google account", 24, weight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+        GText("Your playlists, liked songs and mixes come over from YouTube Music.", 15, Dim, modifier = Modifier.padding(bottom = 30.dp))
+        // Google's own colours on the button, so it's recognisable at a glance.
+        Row(
+            Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(28.dp)).background(Color.White).pressable(0.97f, onClick = onGoogle),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            androidx.compose.foundation.Canvas(Modifier.size(22.dp)) { drawGoogleG() }
+            Spacer(Modifier.width(12.dp))
+            GText("Continue with Google", 16, Color(0xFF1F1F1F), FontWeight.SemiBold, 1)
+        }
+        GText("Pick one of the Google accounts on this phone. No typing your email.", 13, Faint, modifier = Modifier.padding(top = 10.dp, bottom = 22.dp))
+        Box(
+            Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp)).background(Color.White.copy(alpha = 0.08f)).pressable(0.97f, onClick = onOther),
+            contentAlignment = Alignment.Center,
+        ) { GText("Use another account", 15, weight = FontWeight.SemiBold, maxLines = 1) }
+    }
+}
+
+/** Google's four-colour "G", drawn so no image file is needed. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGoogleG() {
+    val s = size.minDimension
+    val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = s * 0.2f)
+    val inset = s * 0.1f
+    val tl = androidx.compose.ui.geometry.Offset(inset, inset)
+    val sz = androidx.compose.ui.geometry.Size(s - 2 * inset, s - 2 * inset)
+    drawArc(Color(0xFFEA4335), -150f, 105f, false, tl, sz, style = stroke) // red, top
+    drawArc(Color(0xFFFBBC05), 150f, 60f, false, tl, sz, style = stroke) // yellow, left
+    drawArc(Color(0xFF34A853), 45f, 105f, false, tl, sz, style = stroke) // green, bottom
+    drawArc(Color(0xFF4285F4), -10f, 55f, false, tl, sz, style = stroke) // blue, right
+    drawRect(Color(0xFF4285F4), androidx.compose.ui.geometry.Offset(s * 0.5f, s * 0.42f), androidx.compose.ui.geometry.Size(s * 0.42f, s * 0.18f))
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun YtLoginWeb(email: String, onCookie: (String) -> Unit) {
+    Column(Modifier.fillMaxSize()) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
@@ -585,6 +661,8 @@ fun YtLogin(onCookie: (String) -> Unit, onClose: () -> Unit) {
                     settings.userAgentString = settings.userAgentString
                         .replace("; wv)", ")")
                         .replace(Regex(" Version/\\d+\\.\\d+"), "")
+                    // Let Android offer saved passwords (Google Password Manager) on the sign-in page.
+                    importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_YES
                     val cm = CookieManager.getInstance()
                     cm.setAcceptCookie(true)
                     cm.setAcceptThirdPartyCookies(this, true)
@@ -600,7 +678,12 @@ fun YtLogin(onCookie: (String) -> Unit, onClose: () -> Unit) {
                             }
                         }
                     }
-                    loadUrl(YT_LOGIN_URL)
+                    // The picked account goes straight in, so Google skips the "Email or phone" step.
+                    loadUrl(
+                        if (email.isBlank()) YT_LOGIN_URL
+                        else YT_LOGIN_URL + "&Email=" + java.net.URLEncoder.encode(email, "UTF-8") +
+                            "&login_hint=" + java.net.URLEncoder.encode(email, "UTF-8"),
+                    )
                 }
             },
             onRelease = { it.destroy() },

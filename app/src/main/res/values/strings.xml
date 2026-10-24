@@ -2,4 +2,10 @@
     <string name="app_name">Glasswave</string>
     <!-- Glasswave was created by nonny dev. -->
     <string name="app_author" translatable="false">nonny dev</string>
+    <string name="widget_description">What\'s playing, with play, pause and skip</string>
+    <string name="widget_idle_title">Glasswave</string>
+    <string name="widget_idle_artist">Tap to start listening</string>
+    <string name="widget_prev">Previous</string>
+    <string name="widget_play">Play or pause</string>
+    <string name="widget_next">Next</string>
 </resources>
