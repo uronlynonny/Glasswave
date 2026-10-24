@@ -38,13 +38,13 @@ object ForYou {
         val artistRadio = async { radio(artistSeed) }
 
         val picked = (radios.awaitAll().flatMap { it.drop(1).shuffled().take(9) } + favourites.shuffled().take(4))
-            .distinctBy { it.title.lowercase() }
+            .distinctBy { YtRepo.songKey(it.title, it.artist) }
             .filter { it.url !in justHeard }
             .shuffled()
             .take(24)
         val out = mutableListOf<Section>()
         if (picked.size >= 4) out += Section("Picked for you", picked.map { SongItem(it, it.artist) })
-        val byArtist = artistRadio.await().filter { it.url !in justHeard }.distinctBy { it.title.lowercase() }.shuffled().take(16)
+        val byArtist = artistRadio.await().filter { it.url !in justHeard }.distinctBy { YtRepo.songKey(it.title, it.artist) }.shuffled().take(16)
         if (artist != null && byArtist.size >= 4) out += Section("Because you like $artist", byArtist.map { SongItem(it, it.artist) })
         val top = month.topSongs.take(16).map { it.track }
         if (top.size >= 4) out += Section("Your top songs this month", top.map { SongItem(it, it.artist) })
@@ -62,7 +62,7 @@ object ForYou {
         if (minePicked != null) {
             val i = shuffledYt.indexOfFirst { it.title == "Picked for you" }
             if (i >= 0) {
-                val merged = (minePicked.items + shuffledYt[i].items).distinctBy { it.title.lowercase() }.shuffled().take(28)
+                val merged = (minePicked.items + shuffledYt[i].items).distinctBy { m -> (m as? SongItem)?.track?.let { YtRepo.songKey(it.title, it.artist) } ?: m.title.lowercase() }.shuffled().take(28)
                 shuffledYt[i] = Section("Picked for you", merged)
             } else {
                 shuffledYt.add(0, minePicked)

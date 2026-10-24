@@ -182,6 +182,12 @@ private fun Divider() {
 @Composable
 fun SettingsScreen(c: ScreenCtx) {
     var pageName by rememberSaveable { mutableStateOf<String?>(null) }
+    // Opened from a shortcut (e.g. "Accounts & settings" on the profile sheet).
+    androidx.compose.runtime.LaunchedEffect(c.vm.settingsJump) {
+        val jump = c.vm.settingsJump ?: return@LaunchedEffect
+        if (SettingsPage.entries.any { it.name == jump }) pageName = jump
+        c.vm.settingsJump = null
+    }
     val page = pageName?.let { SettingsPage.valueOf(it) }
     BackHandler(enabled = page != null) { pageName = null }
 

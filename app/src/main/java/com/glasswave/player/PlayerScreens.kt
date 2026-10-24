@@ -196,23 +196,6 @@ fun FullPlayer(ps: PlayerState, colors: CoverColors, onClose: () -> Unit, openEq
             PlayerStyle.MINIMAL -> MinimalStyle(ui)
         }
 
-        // Lyrics: a glass pill in the top corner, away from the playback buttons.
-        Row(
-            Modifier
-                .align(Alignment.TopEnd)
-                .statusBarsPadding()
-                .padding(top = 6.dp, end = 14.dp)
-                .pressable(0.92f) { lyrics = true }
-                .height(36.dp)
-                .liquidGlass(fp, 18.dp, Color.Black.copy(alpha = 0.18f), blur = 12.dp, depth = 8.dp, bend = 8.dp)
-                .padding(horizontal = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Ico(Icons.Rounded.Lyrics, Color.White, 18.dp)
-            Spacer(Modifier.width(6.dp))
-            GText("Lyrics", 13, Color.White, FontWeight.SemiBold, 1)
-        }
-
         // Lyrics over the player: slides up and fades in with glass, a plain fade without.
         AnimatedVisibility(
             lyrics,
@@ -397,8 +380,14 @@ private fun MinimalStyle(ui: PlayerUi) {
         Spacer(Modifier.weight(1f))
         Box(Modifier.fillMaxWidth(0.62f).aspectRatio(1f).clip(RoundedCornerShape(14.dp))) { CoverArt(ui.ps, Modifier.fillMaxSize()) }
         Spacer(Modifier.height(28.dp))
-        GText(ui.ps.title, 28, Color.White, FontWeight.Bold, 2)
-        GText(ui.ps.artist, 18, Color.White.copy(alpha = 0.6f), maxLines = 1)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                GText(ui.ps.title, 28, Color.White, FontWeight.Bold, 2)
+                GText(ui.ps.artist, 18, Color.White.copy(alpha = 0.6f), maxLines = 1)
+            }
+            Spacer(Modifier.width(10.dp))
+            LyricsButton(ui.ps.playing, ui.colors.a, ui.onLyrics)
+        }
         Spacer(Modifier.weight(1f))
         Details(ui, showTitle = false)
     }
@@ -411,8 +400,15 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
     Column(modifier.fillMaxWidth()) {
         if (Flow.active) FlowBar(ps)
         if (showTitle) {
-            GText(ps.title, if (compact) 20 else 22, Color.White, FontWeight.Bold, 1)
-            GText(ps.artist, if (compact) 16 else 18, Color.White.copy(alpha = 0.62f), maxLines = 1)
+            // Title on the left, the lyrics button on the top right, in every player style.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    GText(ps.title, if (compact) 20 else 22, Color.White, FontWeight.Bold, 1)
+                    GText(ps.artist, if (compact) 16 else 18, Color.White.copy(alpha = 0.62f), maxLines = 1)
+                }
+                Spacer(Modifier.width(10.dp))
+                LyricsButton(ps.playing, ui.colors.a, ui.onLyrics)
+            }
             Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
         }
         AppleSeekBar(ps)

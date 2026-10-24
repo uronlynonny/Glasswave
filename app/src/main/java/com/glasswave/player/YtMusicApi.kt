@@ -321,6 +321,19 @@ object YtMusicApi {
     data class HomeFeed(val chips: List<Chip>, val sections: List<Section>)
 
     /** Home feed, optionally filtered by a mood chip. */
+    data class Account(val name: String, val handle: String?, val photo: String?)
+
+    /** The signed-in account's name, @handle (or email) and picture. */
+    suspend fun account(): Account? = withContext(Dispatchers.IO) {
+        val j = call("account/account_menu", JSONObject(), requireAuth = true)
+        val h = collect(j, "activeAccountHeaderRenderer").firstOrNull() ?: return@withContext null
+        val name = ytText(h.opt("accountName")).ifEmpty { return@withContext null }
+        val handle = ytText(h.opt("channelHandle")).ifEmpty { ytText(h.opt("email")) }.ifEmpty { null }
+        // Ask for a sharper picture than the tiny default.
+        val photo = lastThumb(h.opt("accountPhoto"))?.replace(Regex("=s\\d+"), "=s240")
+        Account(name, handle, photo)
+    }
+
     suspend fun home(chipParams: String? = null): HomeFeed = withContext(Dispatchers.IO) {
         val body = JSONObject().put("browseId", "FEmusic_home")
         if (chipParams != null) body.put("params", chipParams)

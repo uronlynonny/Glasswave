@@ -104,6 +104,27 @@ object YtRepo {
     /** Remembers the right YouTube song for a Spotify song (after a wrong match was caught). */
     fun setMatch(query: String, url: String) { matches?.edit { putString(query, url) } }
 
+    /**
+     * One key per song, the same for every upload of it: "SLOW DANCING IN THE DARK",
+     * "Slow Dancing in the Dark (Official Video)" and "Joji - SLOW DANCING IN THE DARK" all match.
+     * Used to keep the same song from being queued twice.
+     */
+    fun songKey(title: String, artist: String): String {
+        var t = title.lowercase()
+        // "Artist - Title" (how music videos are often named): keep the title part.
+        val dash = t.indexOf(" - ")
+        if (dash > 0) {
+            val before = t.substring(0, dash)
+            val a = artist.lowercase()
+            if (a.isNotEmpty() && (a.contains(before.trim()) || before.contains(a.split(",", "&").first().trim()))) t = t.substring(dash + 3)
+        }
+        val key = t
+            .replace(Regex("[(\\[][^)\\]]*[)\\]]"), " ")
+            .replace(Regex("\\s(feat\\.?|ft\\.?|featuring|with)\\s.*$"), " ")
+            .replace(Regex("[^\\p{L}\\p{N}]+"), "")
+        return key.ifEmpty { title.lowercase() }
+    }
+
     /** Two titles name the same song (ignoring case, brackets, "feat." and punctuation). */
     fun sameSong(a: String, b: String): Boolean {
         fun norm(s: String) = s.lowercase()

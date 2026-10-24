@@ -165,6 +165,10 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
             FullPlayer(ps, colors, onClose = { full = false; peeking = false }, openEqualizer = openEqualizer, onPeek = { peeking = it })
         }
 
+        // Your account, from the picture on the top right of Home.
+        ProfileSheet(ctx, page, vm.profileOpen) { vm.profileOpen = false }
+        androidx.activity.compose.BackHandler(enabled = vm.profileOpen) { vm.profileOpen = false }
+
         if (vm.showYtLogin) YtLogin(onCookie = vm::onYtCookie, onClose = { vm.showYtLogin = false })
 
         if (vm.voiceOpen) {

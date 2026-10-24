@@ -328,8 +328,16 @@ class PlaybackService : MediaSessionService() {
                 return@execute
             }
             main.post {
-                val queued = (0 until p.mediaItemCount).map { p.getMediaItemAt(it).mediaId }.toSet()
-                val fresh = tracks.filter { it.url !in queued }.take(25).map { it.toMediaItem() }
+                val items = (0 until p.mediaItemCount).map { p.getMediaItemAt(it) }
+                val queued = items.map { it.mediaId }.toSet()
+                // YouTube's radio often lists the same song twice (the album track and its music
+                // video, or "Artist - Title" uploads). One of each song, and none already queued.
+                val keys = items.mapTo(HashSet()) {
+                    YtRepo.songKey(it.mediaMetadata.title?.toString() ?: "", it.mediaMetadata.artist?.toString() ?: "")
+                }
+                val fresh = tracks
+                    .filter { it.url !in queued && keys.add(YtRepo.songKey(it.title, it.artist)) }
+                    .take(25).map { it.toMediaItem() }
                 if (fresh.isNotEmpty() && Settings.autoplay) {
                     Autoplay.added += fresh.map { it.mediaId }
                     p.addMediaItems(fresh)

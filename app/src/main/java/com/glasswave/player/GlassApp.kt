@@ -19,6 +19,8 @@ class GlassApp : Application(), ImageLoaderFactory {
         LyricsRepo.init(this)
         Stats.init(this)
         Updater.init(this)
+        Profile.init(this)
+        Profile.refresh()
         YtRepo.initMatches(this)
         val lastPlayed = History.tracks.firstOrNull()?.url
         Thread {

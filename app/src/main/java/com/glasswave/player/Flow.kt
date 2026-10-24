@@ -140,8 +140,11 @@ object Flow {
     }
 
     private fun fresh(list: List<Track>, used: MutableSet<String>, n: Int, allowHeard: Boolean = false): List<Track> {
-        val out = mix(list.filter { it.url !in used && (allowHeard || it.url !in heard) }.distinctBy { it.title.lowercase() }).take(n)
+        // One upload of each song across the whole Flow (album track and music video count as one).
+        fun key(t: Track) = "k:" + YtRepo.songKey(t.title, t.artist)
+        val out = mix(list.filter { it.url !in used && key(it) !in used && (allowHeard || it.url !in heard) }.distinctBy { key(it) }).take(n)
         used += out.map { it.url }
+        used += out.map { key(it) }
         return out
     }
 

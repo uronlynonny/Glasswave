@@ -105,34 +105,31 @@ fun HomeScreen(c: ScreenCtx) {
     val vm = c.vm
     PullRefresh(vm.refreshing, vm::refreshHome, c.bg) {
         LazyColumn(state = vm.homeList, contentPadding = PaddingValues(bottom = c.bottom)) {
-            // A new version is ready: one tap to update (checked when the app opens).
-            Updater.available?.let { r ->
-                item(key = "update") {
-                    val ctx = androidx.compose.ui.platform.LocalContext.current
-                    Row(
-                        Modifier.padding(horizontal = 16.dp).padding(top = 12.dp).fillMaxWidth()
-                            .pressable(0.98f) { Updater.install(ctx) }
-                            .glass(RoundedCornerShape(16.dp), base = 0.25f, light = 0.1f).padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val p = Updater.progress
-                        if (p != null) DownloadRing(p, 24.dp, CoverTint.accent, 2.5.dp)
-                        else Ico(androidx.compose.material.icons.Icons.Rounded.SystemUpdate, CoverTint.accent, 24.dp)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            GText("Glasswave ${r.version} is ready", 15, weight = FontWeight.SemiBold)
-                            GText(if (p != null) "Downloading… ${(p * 100).toInt()}%" else "Tap to update", 12, Dim)
-                        }
-                    }
-                }
-            }
             item(key = "header") {
                 // Picked once per visit, not on every redraw.
                 val hello = androidx.compose.runtime.remember { greeting() }
                 val ask = androidx.compose.runtime.remember { askLines.random() }
-                Column(Modifier.padding(start = 20.dp, end = 16.dp, top = 14.dp, bottom = 6.dp)) {
-                    GText(hello, 34, weight = FontWeight.Bold, maxLines = 1)
-                    GText(ask, 15, Dim, maxLines = 1)
+                Row(Modifier.padding(start = 20.dp, end = 14.dp, top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        GText(hello, 34, weight = FontWeight.Bold, maxLines = 1)
+                        GText(ask, 15, Dim, maxLines = 1)
+                    }
+                    // Top right: updates, then your YouTube Music picture.
+                    UpdateButton()
+                    Spacer(Modifier.width(8.dp))
+                    ProfileButton { vm.profileOpen = true }
+                }
+            }
+            // A new version is ready: say so under the header too, with the download progress.
+            Updater.available?.let { r ->
+                item(key = "update") {
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    val p = Updater.progress
+                    GText(
+                        if (p != null) "Downloading Glasswave ${r.version}… ${(p * 100).toInt()}%" else "Glasswave ${r.version} is ready · tap the glowing button to update",
+                        13, CoverTint.accent, FontWeight.SemiBold, 1,
+                        Modifier.padding(start = 20.dp, end = 16.dp, bottom = 6.dp).pressable(0.98f) { Updater.install(ctx) },
+                    )
                 }
             }
 

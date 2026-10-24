@@ -404,11 +404,24 @@ class MainViewModel : ViewModel() {
         showYtLogin = false
         loadHome() // personalized now
         syncAll(spotify = false)
+        Profile.refresh()
+    }
+
+    /** The profile sheet opened from your picture on Home. */
+    var profileOpen by mutableStateOf(false)
+
+    /** A Settings page to open next time Settings shows (from shortcuts elsewhere in the app). */
+    var settingsJump by mutableStateOf<String?>(null)
+
+    fun openSettings(page: String) {
+        settingsJump = page
+        selectTab(Tab.SETTINGS)
     }
 
     fun signOutYt() {
         Accounts.ytCookie = null
         ytSignedIn = false
+        Profile.clear()
         android.webkit.CookieManager.getInstance().removeAllCookies(null)
         Library.clearSource(Source.YT)
         loadHome()
