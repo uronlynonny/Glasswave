@@ -104,20 +104,20 @@ object LyricsRepo {
             "https://lrclib.net/api/get?track_name=${enc(title)}&artist_name=${enc(artist)}" +
                 if (seconds > 0) "&duration=$seconds" else "",
         )?.let { runCatching { JSONObject(it) }.getOrNull() }
-        exact?.takeIf { believable(it, seconds) }?.let { fromLrclib(it) }?.takeIf { it.synced }?.let { return it }
+        // The exact match is just one candidate: on its own it can be a bad upload, so it gets
+        // compared with the search results like everything else.
         val hits = mutableListOf<JSONObject>()
+        exact?.let { hits += it }
         fun gap(o: JSONObject) = if (seconds <= 0) 0.0 else abs(o.optDouble("duration", 0.0) - seconds)
         fun hasSynced(o: JSONObject) = o.optString("syncedLyrics").let { s -> s.isNotBlank() && s != "null" }
         for (q in listOf("track_name=${enc(title)}&artist_name=${enc(artist)}", "q=${enc("$artist $title")}")) {
             val arr = fetch("https://lrclib.net/api/search?$q")?.let { runCatching { JSONArray(it) }.getOrNull() } ?: continue
             hits += (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }
             // Only stop early once there's a believable synced match of the right length.
-            if (hits.any { hasSynced(it) && gap(it) <= 3 && believable(it, seconds) }) break
+            if (hits.count { hasSynced(it) && gap(it) <= 3 && believable(it, seconds) } >= 3) break
         }
-        // Closest length first; between equally close ones, the uncensored version.
-        val synced = hits.filter { hasSynced(it) && gap(it) <= 12 && believable(it, seconds) }
-            .sortedWith(compareBy({ Math.round(gap(it)) }, { if (isCensored(it.optString("syncedLyrics"))) 1 else 0 }))
-        synced.firstOrNull()?.let { fromLrclib(it) }?.let { return it }
+        pickSynced(hits.filter { hasSynced(it) && gap(it) <= 12 && believable(it, seconds) }.distinctBy { it.optLong("id") }, ::gap)
+            ?.let { fromLrclib(it) }?.let { return it }
         val plain = hits.filter { it.optString("plainLyrics").let { s -> s.isNotBlank() && s != "null" } }.minByOrNull { gap(it) }
         return plain?.let { fromLrclib(it) }
     }
@@ -133,6 +133,31 @@ object LyricsRepo {
         if (lines.size < 4) return true
         val limit = listOf(o.optDouble("duration", 0.0), songSec.toDouble()).filter { it > 0 }.minOrNull()
         return limit == null || lines.last().ms / 1000.0 <= limit + 3
+    }
+
+    /**
+     * Chooses between uploads of the same song:
+     *  - Made-up timings start the first sung line at exactly 0:00. When other uploads start the
+     *    singing later, those zero-start ones are dropped.
+     *  - The length closest to this recording wins (within a few seconds counts as equal).
+     *  - Among those, the timing most uploads agree on (same first-line time, to the second):
+     *    real timings get copied around, one-off mistakes don't.
+     *  - Then the uncensored one, then the very closest length.
+     */
+    private fun pickSynced(cands: List<JSONObject>, gap: (JSONObject) -> Double): JSONObject? {
+        if (cands.isEmpty()) return null
+        fun first(o: JSONObject) = parseLrc(o.optString("syncedLyrics")).firstOrNull { it.text.isNotBlank() }?.ms ?: 0L
+        val starts = cands.associateWith { first(it) }
+        val pool = if (cands.any { starts.getValue(it) > 2000 }) cands.filter { starts.getValue(it) > 0 } else cands
+        val agree = pool.groupingBy { (starts.getValue(it) + 500) / 1000 }.eachCount()
+        return pool.sortedWith(
+            compareBy<JSONObject>(
+                { Math.round(gap(it)) / 4 },
+                { -agree.getValue((starts.getValue(it) + 500) / 1000) },
+                { if (isCensored(it.optString("syncedLyrics"))) 1 else 0 },
+                { gap(it) },
+            ),
+        ).firstOrNull()
     }
 
     private fun fromLrclib(o: JSONObject): Lyrics? {

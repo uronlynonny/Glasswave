@@ -129,6 +129,8 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        // A changed copy of the app doesn't get to play music.
+        check(Integrity.ok(this)) { "This copy of Glasswave has been modified. Get the original from github.com/uronlynonny/Glasswave" }
         val http = DefaultHttpDataSource.Factory()
             .setUserAgent(YtDownloader.USER_AGENT)
             .setConnectTimeoutMs(8_000)
