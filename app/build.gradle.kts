@@ -12,8 +12,8 @@ android {
         applicationId = "com.glasswave.player"
         minSdk = 26
         targetSdk = 35
-        versionCode = 26
-        versionName = "0.16.0"
+        versionCode = 27
+        versionName = "0.16.1"
         // Only English text from libraries; keeps the APK small.
         resourceConfigurations += "en"
     }
@@ -54,6 +54,8 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.3")
 
     implementation("androidx.core:core-ktx:1.15.0")
+    // Lets the sign-in page leave out the header that tells Google it's inside an app.
+    implementation("androidx.webkit:webkit:1.12.1")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     // Installs the speed-up profiles that Compose ships with, so screens and scrolling run as

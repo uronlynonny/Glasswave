@@ -321,6 +321,11 @@ object YtMusicApi {
     data class HomeFeed(val chips: List<Chip>, val sections: List<Section>)
 
     /** Home feed, optionally filtered by a mood chip. */
+    /** Likes (or un-likes) a song on your YouTube Music account, so both stay in step. Blocking. */
+    fun rate(videoId: String, like: Boolean) {
+        call(if (like) "like/like" else "like/removelike", JSONObject().put("target", JSONObject().put("videoId", videoId)), requireAuth = true)
+    }
+
     data class Account(val name: String, val handle: String?, val photo: String?)
 
     /** The signed-in account's name, @handle (or email) and picture. */

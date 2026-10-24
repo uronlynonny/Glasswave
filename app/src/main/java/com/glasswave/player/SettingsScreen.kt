@@ -580,7 +580,10 @@ private fun About(c: ScreenCtx) {
 /* ---------------- YouTube Music sign-in ---------------- */
 
 private const val YT_LOGIN_URL =
-    "https://accounts.google.com/ServiceLogin?ltmpl=music&service=youtube&passive=true&continue=https%3A%2F%2Fmusic.youtube.com%2F"
+    // The same address YouTube Music's own "Sign in" button opens: Google signs in, YouTube
+    // finishes its side, then it lands on YouTube Music.
+    "https://accounts.google.com/ServiceLogin?ltmpl=music&service=youtube&uilel=3&passive=true&hl=en" +
+        "&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fmusic.youtube.com%252F"
 
 /**
  * Signing in to YouTube Music. First a choice: "Continue with Google" opens Android's own account
@@ -596,7 +599,9 @@ fun YtLogin(onCookie: (String) -> Unit, onClose: () -> Unit) {
         androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
     ) { res ->
         val email = res.data?.getStringExtra(android.accounts.AccountManager.KEY_ACCOUNT_NAME)
-        if (res.resultCode == android.app.Activity.RESULT_OK && !email.isNullOrBlank()) account = email
+        // Picked an account: fill it in. Anything else (no accounts, picker closed by the phone):
+        // carry on to Google's normal sign-in instead of doing nothing.
+        account = if (res.resultCode == android.app.Activity.RESULT_OK && !email.isNullOrBlank()) email else ""
     }
     BackHandler(enabled = account != null) { account = null }
     Column(Modifier.fillMaxSize().background(Color(0xFF0A0B10)).systemBarsPadding()) {
@@ -666,17 +671,28 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGoogleG() {
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun YtLoginWeb(email: String, onCookie: (String) -> Unit) {
-    Column(Modifier.fillMaxSize()) {
+    // Google turned the sign-in away ("This browser or app may not be secure").
+    var blocked by remember { mutableStateOf(false) }
+    var web by remember { mutableStateOf<WebView?>(null) }
+    val startUrl = if (email.isBlank()) YT_LOGIN_URL
+    else YT_LOGIN_URL + "&Email=" + java.net.URLEncoder.encode(email, "UTF-8") + "&login_hint=" + java.net.URLEncoder.encode(email, "UTF-8")
+    Box(Modifier.fillMaxSize()) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 WebView(ctx).apply {
+                    web = this
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
-                    // Look like the phone's normal browser; Google refuses some sign-ins from app web views.
-                    settings.userAgentString = settings.userAgentString
-                        .replace("; wv)", ")")
-                        .replace(Regex(" Version/\\d+\\.\\d+"), "")
+                    // Look exactly like Chrome on this phone. Google refuses sign-ins from pages it can
+                    // tell are inside an app: by the "wv" mark in the browser name, and by a hidden
+                    // "X-Requested-With: <app>" header that web views send. Both are removed here.
+                    val chrome = Regex("Chrome/([\\d.]+)").find(settings.userAgentString)?.groupValues?.get(1) ?: "130.0.0.0"
+                    settings.userAgentString =
+                        "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$chrome Mobile Safari/537.36"
+                    if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+                        androidx.webkit.WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
+                    }
                     // Let Android offer saved passwords (Google Password Manager) on the sign-in page.
                     importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_YES
                     val cm = CookieManager.getInstance()
@@ -684,7 +700,11 @@ private fun YtLoginWeb(email: String, onCookie: (String) -> Unit) {
                     cm.setAcceptThirdPartyCookies(this, true)
                     webViewClient = object : WebViewClient() {
                         var done = false
+                        override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                            if (url != null && ("/signin/rejected" in url || "disallowed_useragent" in url)) blocked = true
+                        }
                         override fun onPageFinished(view: WebView, url: String?) {
+                            if (url != null && ("/signin/rejected" in url || "disallowed_useragent" in url)) blocked = true
                             if (done || url == null || !url.startsWith("https://music.youtube.com")) return
                             val c = cm.getCookie("https://music.youtube.com") ?: return
                             if ("SAPISID=" in c) {
@@ -695,14 +715,35 @@ private fun YtLoginWeb(email: String, onCookie: (String) -> Unit) {
                         }
                     }
                     // The picked account goes straight in, so Google skips the "Email or phone" step.
-                    loadUrl(
-                        if (email.isBlank()) YT_LOGIN_URL
-                        else YT_LOGIN_URL + "&Email=" + java.net.URLEncoder.encode(email, "UTF-8") +
-                            "&login_hint=" + java.net.URLEncoder.encode(email, "UTF-8"),
-                    )
+                    loadUrl(startUrl)
                 }
             },
-            onRelease = { it.destroy() },
+            onRelease = { it.destroy(); web = null },
         )
+        if (blocked) {
+            // Explain it plainly instead of leaving Google's scary page up.
+            Column(
+                Modifier.fillMaxSize().background(Color(0xFF0A0B10)).padding(28.dp),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                GText("Google didn't accept this sign-in", 22, weight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                GText(
+                    "Sometimes Google is extra careful with sign-in screens inside apps. Your account is safe: " +
+                        "Glasswave only keeps the sign-in on this phone to load your music. Trying again usually works, " +
+                        "especially after a minute or on Wi-Fi.",
+                    15, Dim,
+                )
+                Spacer(Modifier.height(22.dp))
+                Box(
+                    Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp)).background(Color.White)
+                        .pressable(0.97f) {
+                            blocked = false
+                            CookieManager.getInstance().removeAllCookies { web?.loadUrl(startUrl) }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) { GText("Try again", 16, Color(0xFF1F1F1F), FontWeight.SemiBold, 1) }
+            }
+        }
     }
 }

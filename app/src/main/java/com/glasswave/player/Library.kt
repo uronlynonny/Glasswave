@@ -223,7 +223,12 @@ object Library {
     fun isLiked(url: String) = url in liked
 
     fun toggleLike(t: Track) {
-        if (isLiked(t.url)) remove(LIKED_ID, t.url) else add(LIKED_ID, t)
+        val like = !isLiked(t.url)
+        if (like) add(LIKED_ID, t) else remove(LIKED_ID, t.url)
+        // Signed in to YouTube Music: like it there too (quietly; Glasswave's own list is what counts).
+        if (Accounts.ytSignedIn) Thread {
+            runCatching { YtRepo.videoIdFor(t.url)?.let { YtMusicApi.rate(it, like) } }
+        }.start()
     }
 
     @Synchronized

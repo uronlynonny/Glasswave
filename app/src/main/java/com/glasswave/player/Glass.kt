@@ -62,7 +62,8 @@ import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-val Accent = Color(0xFFFF4D6D)
+/** The highlight colour everywhere (shuffle and repeat, the playing song, buttons): taken from the cover. */
+val Accent: Color get() = CoverTint.accent
 val Dim = Color.White.copy(alpha = 0.6f)
 val Faint = Color.White.copy(alpha = 0.4f)
 

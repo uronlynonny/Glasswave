@@ -39,6 +39,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Sync
@@ -391,5 +392,41 @@ fun BoxScope.WhatsNewCard(page: Backdrop) {
                 }
             }
         }
+    }
+}
+
+/* ---------------- Player: the like button ---------------- */
+
+/**
+ * The heart next to the song title: adds the song to Liked songs (and likes it on YouTube Music
+ * when you're signed in). It pops when you tap it and fills in the cover's colour.
+ */
+@Composable
+fun LikeButton(ps: PlayerState, accent: Color) {
+    val id = ps.currentId
+    val liked = id != null && Library.isLiked(id)
+    val pop = remember { androidx.compose.animation.core.Animatable(1f) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    Box(
+        Modifier
+            .size(44.dp)
+            .graphicsLayer { scaleX = pop.value; scaleY = pop.value }
+            .pressable(0.86f) {
+                val t = ps.currentTrack() ?: return@pressable
+                val nowLiked = !Library.isLiked(t.url)
+                Library.toggleLike(t)
+                Menus.say(if (nowLiked) "Added to Liked songs" else "Removed from Liked songs")
+                if (nowLiked) scope.launch {
+                    pop.snapTo(0.7f)
+                    pop.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.35f, stiffness = 500f))
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Ico(
+            if (liked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+            if (liked) accent else Color.White.copy(alpha = 0.85f),
+            26.dp,
+        )
     }
 }

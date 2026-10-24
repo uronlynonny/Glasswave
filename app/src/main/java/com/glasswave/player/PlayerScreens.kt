@@ -387,6 +387,8 @@ private fun MinimalStyle(ui: PlayerUi) {
                 GText(ui.ps.artist, 18, Color.White.copy(alpha = 0.6f), maxLines = 1)
             }
             Spacer(Modifier.width(10.dp))
+            LikeButton(ui.ps, CoverTint.accent)
+            Spacer(Modifier.width(4.dp))
             LyricsButton(ui.ps.playing, ui.colors.a, ui.onLyrics)
         }
         Spacer(Modifier.weight(1f))
@@ -408,6 +410,8 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
                     GText(ps.artist, if (compact) 16 else 18, Color.White.copy(alpha = 0.62f), maxLines = 1)
                 }
                 Spacer(Modifier.width(10.dp))
+                LikeButton(ps, CoverTint.accent)
+                Spacer(Modifier.width(4.dp))
                 LyricsButton(ps.playing, ui.colors.a, ui.onLyrics)
             }
             Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
