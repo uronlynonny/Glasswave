@@ -121,8 +121,8 @@ fun DeskStatsPage(c: ScreenCtx) {
                     }
                     Ranking("Most played", Modifier.weight(1f)) {
                         val max = d.topSongs.firstOrNull()?.plays ?: 1
-                        val songs = d.topSongs.map { it.track }
-                        d.topSongs.take(8).forEachIndexed { i, r ->
+                        val songs = d.topSongs.take(5).map { it.track }
+                        d.topSongs.take(5).forEachIndexed { i, r ->
                             RankRow(i, r.track.thumb, false, r.track.title, r.track.artist, r.plays.toFloat() / max, accent, "${r.plays}×") {
                                 c.ps.playList(songs, i)
                             }

@@ -242,8 +242,9 @@ fun StatsPage(c: ScreenCtx) {
         }
         // Most played songs, ranked
         item(key = "songsTitle") { SectionTitle("Most played") }
-        val songs = d.topSongs.map { it.track }
-        itemsIndexed(d.topSongs, key = { i, r -> "top$i|${r.track.url}" }) { i, r ->
+        val top5 = d.topSongs.take(5)
+        val songs = top5.map { it.track }
+        itemsIndexed(top5, key = { i, r -> "top$i|${r.track.url}" }) { i, r ->
             Row(Modifier.padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 GText("${i + 1}", 16, if (i < 3) accent else Faint, FontWeight.Bold, modifier = Modifier.width(30.dp))
                 Box(Modifier.weight(1f)) { TrackRow(r.track, r.track.url == c.ps.currentId, c.ps.playing) { c.ps.playList(songs, i) } }
