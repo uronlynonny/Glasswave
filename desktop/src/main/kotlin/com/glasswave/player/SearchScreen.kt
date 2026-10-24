@@ -1,6 +1,11 @@
 // Glasswave · created by nonny dev. Original work; see AUTHORS.md.
 package com.glasswave.player
 
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -184,6 +189,19 @@ private fun Explore(c: ScreenCtx) {
         }
         if (vm.genres.isNotEmpty()) {
             item(key = "genresHead") { SectionTitle("Moods & genres") }
+            if (desktopLayout()) {
+                // On a computer: colour cards, as many per row as fit, each with its cover shown whole.
+                val cols = ((WindowSize.widthDp - RailSpace.value - 32f) / 230f).toInt().coerceIn(3, 7)
+                vm.genres.chunked(cols).forEachIndexed { i, row ->
+                    item(key = "dg$i") {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 7.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            row.forEach { g -> GenreCard(c, g, Modifier.weight(1f)) }
+                            repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                }
+                return@LazyColumn
+            }
             // Two picture tiles per row; each picture comes from that mood's own playlists.
             vm.genres.chunked(2).forEachIndexed { i, row ->
                 item(key = "g$i") {
@@ -243,6 +261,50 @@ private fun GenreTile(c: ScreenCtx, g: YtMusicApi.Genre, modifier: Modifier) {
         // Darken the bottom so the name reads on any picture.
         Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(0.25f to Color.Transparent, 1f to Color(0xD9000000))))
         GText(g.title, 16, weight = FontWeight.Bold, maxLines = 1, modifier = Modifier.align(Alignment.BottomStart).padding(12.dp))
+    }
+}
+
+/**
+ * A Moods & genres card for the computer, like Spotify's: filled with the mood's colour, its name
+ * in the corner, and its cover whole (never cropped into a strip), tilted in the other corner.
+ */
+@Composable
+private fun GenreCard(c: ScreenCtx, g: YtMusicApi.Genre, modifier: Modifier) {
+    LaunchedEffect(g.title) { c.vm.loadGenreArt(g) }
+    val art = c.vm.genreArt[g.title]
+    val base = if (g.item.color != 0L) Color(g.item.color.toInt()).copy(alpha = 1f)
+    else Color.hsv((g.title.hashCode() and 0x7fffffff) % 360f, 0.55f, 0.55f)
+    // Deep enough for white text on any of YouTube's colours.
+    val bg = androidx.compose.ui.graphics.lerp(base, Color.Black, 0.35f)
+    val hover = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val hovered by hover.collectIsHoveredAsState()
+    val tilt by androidx.compose.animation.core.animateFloatAsState(if (hovered) 18f else 25f, androidx.compose.animation.core.tween(180), label = "tilt")
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        modifier
+            .aspectRatio(1.55f)
+            .hoverable(hover)
+            .pressable(0.97f) { c.vm.open(Route.Online(g.item)) }
+            .clip(RoundedCornerShape(14.dp))
+            .background(bg),
+    ) {
+        val cover = maxHeight * 0.62f
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = cover * 0.18f, y = cover * 0.08f)
+                .size(cover)
+                .graphicsLayer { rotationZ = tilt }
+                .shadow(10.dp, RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.Black.copy(alpha = 0.25f)),
+        ) {
+            if (art != null) coil3.compose.AsyncImage(
+                model = art, contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        GText(g.title, 19, weight = FontWeight.ExtraBold, maxLines = 2, modifier = Modifier.align(Alignment.TopStart).padding(14.dp).fillMaxWidth(0.72f))
     }
 }
 
