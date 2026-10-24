@@ -58,6 +58,14 @@ jobs:
           pl() { [ "$1" -eq 1 ] && echo "$1 $2" || echo "$1 $3"; }
           msg="Last hour: $(pl $v visit visits), $(pl $d download downloads) from the site, $(pl $a 'APK download' 'APK downloads') in total (incl. app updates).
           All time: $(pl $tv visit visits), $(pl $td 'site download' 'site downloads'), $(pl $apk 'APK download' 'APK downloads')."
+          # Which devices came by this hour (top 5), from the alert texts.
+          devices=$(jq -rs --argjson l "$last" '
+            [.[] | select(.event=="message" and .time > $l and .title=="New visitor") | .message
+              | capture("Someone on (?<d>.+) opened").d]
+            | group_by(.) | map({d: .[0], n: length}) | sort_by(-.n) | .[:5]
+            | map(.d + (if .n > 1 then " ×\(.n)" else "" end)) | join("; ")' msgs.jsonl)
+          [ -n "$devices" ] && msg="$msg
+          Devices: $devices"
           prio=$([ $((v + d + a)) -eq 0 ] && echo 2 || echo 3)
           curl -fsS -X POST "https://ntfy.sh/$TOPIC" \
             -H "Title: Glasswave hourly summary" -H "Tags: bar_chart" -H "Priority: $prio" \

@@ -303,6 +303,7 @@ footer .sig{font-family:Syne;font-weight:700;font-size:18px;color:var(--ink);mar
 <footer>
   <div class="sig">Made by nonny dev</div>
   Glasswave is an original app by nonny dev. Not affiliated with YouTube, Google or Spotify.<br>
+  This site counts visits and downloads (device and browser type only, no personal details).<br>
   <a href="https://github.com/uronlynonny/Glasswave" style="color:var(--dim)">github.com/uronlynonny/Glasswave</a>
 </footer>
 
@@ -311,11 +312,84 @@ footer .sig{font-family:Syne;font-weight:700;font-size:18px;color:var(--ink);mar
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // Alerts for nonny dev through ntfy: a ping when someone opens the site (once a day per person)
-  // and when someone taps Download. Only the device type and the site they came from are sent.
+  // and when someone taps Download. Only the device, browser and the site they came from are sent.
   const TOPIC = 'https://ntfy.sh/glasswave-nonny-re7mnsuqhuis';
   const live = location.hostname.endsWith('github.io');
   const ua = navigator.userAgent;
-  const device = /Android/i.test(ua) ? 'an Android phone' : /iPhone|iPad/i.test(ua) ? 'an iPhone' : 'a computer';
+  // What they're on, as exactly as the browser allows: Android phones in Chrome-based browsers
+  // share their model; iPhones don't, so the screen size narrows it to a few models.
+  const samsung = [
+    [/^SM-S93/, 'Galaxy S25'], [/^SM-S92/, 'Galaxy S24'], [/^SM-S91/, 'Galaxy S23'], [/^SM-S90/, 'Galaxy S22'],
+    [/^SM-G99/, 'Galaxy S21'], [/^SM-G98/, 'Galaxy S20'], [/^SM-F9/, 'Galaxy Z Fold'], [/^SM-F7/, 'Galaxy Z Flip'],
+    [/^SM-A(\d\d)/, m => 'Galaxy A' + m[1]], [/^SM-M(\d\d)/, m => 'Galaxy M' + m[1]], [/^SM-N9/, 'Galaxy Note'], [/^SM-X/, 'Galaxy Tab'],
+  ];
+  function niceModel(m) {
+    m = (m || '').replace(/^SAMSUNG\s+/i, '');
+    if (!m || m === 'K') return [''];
+    if (/^SM-/i.test(m)) {
+      for (const [re, name] of samsung) {
+        const hit = m.match(re);
+        if (hit) {
+          let n = typeof name === 'function' ? name(hit) : name;
+          if (/^SM-S9\d8/.test(m)) n += ' Ultra'; else if (/^SM-S9\d6/.test(m)) n += '+';
+          return [`Samsung ${n}`, m];
+        }
+      }
+      return ["Samsung Galaxy", m];
+    }
+    return [m]; // Pixel 8, TECNO KI5, Infinix X6833B, Redmi Note 13 ...
+  }
+  function iphoneGuess() {
+    const w = Math.min(screen.width, screen.height), h = Math.max(screen.width, screen.height), r = devicePixelRatio;
+    const k = `${w}x${h}@${Math.round(r)}`;
+    return ({
+      '440x956@3': 'iPhone 16 Pro Max or newer', '402x874@3': 'iPhone 16 Pro or newer', '430x932@3': 'iPhone 14 Pro Max, 15 Plus/Pro Max or 16 Plus',
+      '393x852@3': 'iPhone 14 Pro, 15, 15 Pro or 16', '428x926@3': 'iPhone 12/13 Pro Max or 14 Plus', '390x844@3': 'iPhone 12, 13 or 14',
+      '375x812@3': 'iPhone X, XS, 11 Pro or 12/13 mini', '414x896@3': 'iPhone XS Max or 11 Pro Max', '414x896@2': 'iPhone XR or 11',
+      '375x667@2': 'iPhone 6/7/8 or SE', '320x568@2': 'iPhone SE (1st gen) or 5s',
+    })[k] || 'iPhone';
+  }
+  function browserName() {
+    if (/BytedanceWebview|musical_ly|trill|TikTok/i.test(ua)) return 'TikTok';
+    if (/Instagram/i.test(ua)) return 'Instagram';
+    if (/Snapchat/i.test(ua)) return 'Snapchat';
+    if (/FBAN|FBAV/i.test(ua)) return 'Facebook';
+    if (/WhatsApp/i.test(ua)) return 'WhatsApp';
+    if (/SamsungBrowser/i.test(ua)) return 'Samsung Internet';
+    if (/EdgA?\//i.test(ua)) return 'Edge';
+    if (/OPR\/|Opera/i.test(ua)) return 'Opera';
+    if (/Firefox|FxiOS/i.test(ua)) return 'Firefox';
+    if (/CriOS|Chrome\//i.test(ua)) return 'Chrome';
+    if (/Safari/i.test(ua)) return 'Safari';
+    return '';
+  }
+  async function describe() {
+    const browser = browserName();
+    const inApp = /TikTok|Instagram|Snapchat|Facebook|WhatsApp/.test(browser) ? `${browser}'s in-app browser` : browser;
+    if (/iPhone/i.test(ua)) {
+      const ios = (ua.match(/OS (\d+)_(\d+)/) || []).slice(1).join('.');
+      return `an ${iphoneGuess()} (${[ios && 'iOS ' + ios, inApp].filter(Boolean).join(', ')})`;
+    }
+    if (/iPad/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1)) return `an iPad (${inApp})`;
+    if (/Android/i.test(ua)) {
+      // Newer Chrome hides the real version behind "Android 10; K", so that one isn't trusted.
+      let model = '', ver = /Android 10; K\)/.test(ua) ? '' : (ua.match(/Android (\d+(\.\d+)?)/) || [])[1] || '';
+      try {
+        const hints = navigator.userAgentData && await Promise.race([
+          navigator.userAgentData.getHighEntropyValues(['model', 'platformVersion']),
+          new Promise(r => setTimeout(() => r(null), 1500)),
+        ]);
+        if (hints) { model = hints.model || ''; if (hints.platformVersion) ver = hints.platformVersion.split('.')[0]; }
+      } catch (e) {}
+      if (!model) model = (ua.match(/Android [\d.]+; ([^;)]+)/) || [])[1] || '';
+      const [name, code] = niceModel(model.trim());
+      const extra = [code, ver && 'Android ' + ver, inApp].filter(Boolean).join(', ');
+      return name ? `a ${name} (${extra})` : `an Android phone (${extra})`;
+    }
+    const os = /Windows/i.test(ua) ? 'Windows' : /Mac OS X/i.test(ua) ? 'Mac' : /CrOS/i.test(ua) ? 'Chromebook' : /Linux/i.test(ua) ? 'Linux' : 'computer';
+    return `a ${os} computer${inApp ? ' (' + inApp + ')' : ''}`;
+  }
+  const deviceP = describe().catch(() => 'a device');
   const from = (() => { try { const h = new URL(document.referrer).hostname.replace(/^www\./, ''); return h && h !== location.hostname ? ' from ' + h : ''; } catch (e) { return ''; } })();
   function ping(title, msg, tag) {
     if (!live) return;
@@ -323,9 +397,9 @@ footer .sig{font-family:Syne;font-weight:700;font-size:18px;color:var(--ink);mar
   }
   let seenToday = false;
   try { seenToday = localStorage.getItem('gw-seen') === new Date().toDateString(); localStorage.setItem('gw-seen', new Date().toDateString()); } catch (e) {}
-  if (!seenToday) ping('New visitor', `Someone on ${device} opened the Glasswave site${from}.`, 'eyes');
+  if (!seenToday) deviceP.then(device => ping('New visitor', `Someone on ${device} opened the Glasswave site${from}.`, 'eyes'));
   document.querySelectorAll('a[href*="releases/latest/download"]').forEach(a =>
-    a.addEventListener('click', () => ping('New download', `Someone on ${device} downloaded Glasswave${from}.`, 'arrow_down')));
+    a.addEventListener('click', () => deviceP.then(device => ping('New download', `Someone on ${device} downloaded Glasswave${from}.`, 'arrow_down'))));
 
   // Marquee
   const words = ['Liquid glass','Synced lyrics','YouTube Music','Spotify sync','Flow DJ','Crossfade','Offline','Music video covers','Listening stats','Voice search','No ads'];
