@@ -86,6 +86,10 @@ fun SearchScreen(c: ScreenCtx) {
                     Ico(Icons.Rounded.Cancel, Faint, 20.dp)
                 }
             }
+            // Voice search: sing or say some lyrics.
+            Box(Modifier.size(40.dp).pressable(0.85f) { vm.voiceOpen = true }, contentAlignment = Alignment.Center) {
+                Ico(androidx.compose.material.icons.Icons.Rounded.Mic, Color.White, 22.dp)
+            }
         }
         // Filters
         LazyRow(

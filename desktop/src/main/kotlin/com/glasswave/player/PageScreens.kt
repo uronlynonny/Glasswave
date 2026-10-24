@@ -162,6 +162,7 @@ fun DownloadsPage(c: ScreenCtx) {
  */
 @Composable
 fun StatsPage(c: ScreenCtx) {
+    if (desktopLayout()) { DeskStatsPage(c); return }
     val list = rememberLazyListState()
     var period by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(Stats.Period.MONTH) }
     var data by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Stats.Summary?>(null) }

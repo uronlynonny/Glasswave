@@ -95,7 +95,7 @@ fun LibraryScreen(c: ScreenCtx) {
             modifier = Modifier.weight(1f),
         ) {
             // Your stats: top songs and artists this month / year, listening history.
-            item(key = "stats", span = { GridItemSpan(maxLineSpan) }) { StatsCard(c) }
+            item(key = "stats", span = { GridItemSpan(maxLineSpan) }) { if (desktopLayout()) StatsBanner(c) else StatsCard(c) }
             // Recently played, as a shelf.
             val recent = History.tracks.take(15)
             if (recent.isNotEmpty()) item(key = "recent", span = { GridItemSpan(maxLineSpan) }) {
@@ -207,9 +207,9 @@ private fun StatsCard(c: ScreenCtx) {
             GText("YOUR STATS · THIS MONTH", 11, accent, FontWeight.Bold)
             Spacer(Modifier.height(4.dp))
             val m = month
-            GText(if (m == null) "…" else " min ·  plays", 22, weight = FontWeight.ExtraBold, maxLines = 1)
+            GText(if (m == null) "…" else "${m.minutes} min · ${m.plays} plays", 22, weight = FontWeight.ExtraBold, maxLines = 1)
             GText(
-                m?.topSongs?.firstOrNull()?.let { "Top song: " } ?: "Top songs, top artists and your history",
+                m?.topSongs?.firstOrNull()?.let { "Top song: ${it.track.title}" } ?: "Top songs, top artists and your history",
                 13, Dim, maxLines = 1,
             )
         }

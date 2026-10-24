@@ -222,6 +222,19 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
 
         if (vm.showYtLogin) YtLogin(onCookie = vm::onYtCookie, onClose = { vm.showYtLogin = false })
 
+        // Voice search: sing or say some lyrics.
+        if (vm.voiceOpen) {
+            VoiceSearch(
+                onResult = { text ->
+                    vm.voiceOpen = false
+                    full = false
+                    vm.selectTab(Tab.SEARCH)
+                    vm.pickRecent(text)
+                },
+                onClose = { vm.voiceOpen = false },
+            )
+        }
+
 
         // Song menu, playlist menu, name box and short notes, above everything.
         MenuLayer(ps, page) { item ->

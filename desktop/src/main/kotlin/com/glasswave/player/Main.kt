@@ -60,21 +60,23 @@ object AppVolume {
     private val prefs by lazy { AppContext.getSharedPreferences("volume", 0) }
     var level by mutableFloatStateOf(1f)
         private set
+    @Volatile private var curve = 1f
+    /** Turned down while voice search listens, so the mic hears you, not the song. */
+    @Volatile var duck = 1f
     /** What the audio is multiplied by: a curve, so the slider feels even to the ear. */
-    @Volatile var gain = 1f
-        private set
+    val gain: Float get() = curve * duck
 
     fun init() {
         level = prefs.getFloat("level", 1f).coerceIn(0f, 1f)
-        gain = level * level
+        curve = level * level
     }
 
     /** Silent playback for automated checks (not saved). */
-    fun muteForChecks() { gain = 0f }
+    fun muteForChecks() { curve = 0f }
 
     fun set(v: Float) {
         level = v.coerceIn(0f, 1f)
-        gain = level * level
+        curve = level * level
         prefs.edit().putFloat("level", level).apply()
     }
 }

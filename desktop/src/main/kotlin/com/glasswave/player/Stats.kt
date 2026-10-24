@@ -29,7 +29,12 @@ object Stats {
         val topSongs: List<Ranked>,
         val topArtists: List<Artist>,
         val history: List<Play>,
+        /** Minutes listened per day (this month), per month (this year), or per month for the last year (all time). */
+        val activity: List<Bar> = emptyList(),
+        val artists: Int = 0,
     )
+
+    data class Bar(val label: String, val minutes: Long)
 
     enum class Period(val label: String) { MONTH("This month"), YEAR("This year"), ALL("All time") }
 
@@ -113,6 +118,38 @@ object Stats {
         return c.timeInMillis
     }
 
+    private fun activity(p: Period, plays: List<Play>): List<Bar> {
+        val now = Calendar.getInstance()
+        val cal = Calendar.getInstance()
+        val months = java.text.DateFormatSymbols.getInstance().shortMonths
+        return when (p) {
+            Period.MONTH -> {
+                val days = now.get(Calendar.DAY_OF_MONTH)
+                val ms = LongArray(days)
+                plays.forEach { cal.timeInMillis = it.at; val d = cal.get(Calendar.DAY_OF_MONTH) - 1; if (d in 0 until days) ms[d] += it.ms }
+                (0 until days).map { Bar("${it + 1}", ms[it] / 60_000) }
+            }
+            Period.YEAR -> {
+                val n = now.get(Calendar.MONTH) + 1
+                val ms = LongArray(n)
+                plays.forEach { cal.timeInMillis = it.at; val m = cal.get(Calendar.MONTH); if (m in 0 until n) ms[m] += it.ms }
+                (0 until n).map { Bar(months[it], ms[it] / 60_000) }
+            }
+            Period.ALL -> {
+                // The last 12 months, oldest first.
+                val key = { y: Int, m: Int -> y * 12 + m }
+                val nowKey = key(now.get(Calendar.YEAR), now.get(Calendar.MONTH))
+                val ms = LongArray(12)
+                plays.forEach {
+                    cal.timeInMillis = it.at
+                    val back = nowKey - key(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH))
+                    if (back in 0..11) ms[11 - back] += it.ms
+                }
+                (0..11).map { i -> Bar(months[((nowKey - (11 - i)) % 12 + 12) % 12], ms[i] / 60_000) }
+            }
+        }
+    }
+
     suspend fun summary(p: Period): Summary = withContext(Dispatchers.IO) {
         val from = startOf(p)
         val plays = readAll().filter { it.at >= from }
@@ -134,6 +171,8 @@ object Stats {
             topSongs = bySong.take(50),
             topArtists = byArtist.take(20),
             history = plays.sortedByDescending { it.at }.take(300),
+            activity = activity(p, plays),
+            artists = byArtist.size,
         )
     }
 }

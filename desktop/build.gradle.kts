@@ -10,7 +10,7 @@ plugins {
 val appBuild = file("../app/build.gradle.kts").readText()
 // Glasswave for Windows has its own version number, separate from the phone app.
 // Raise it for every Windows release: installed copies update themselves to a higher number.
-val appVersion = "1.0.2"
+val appVersion = "1.0.3"
 val newPipe = Regex("NewPipeExtractor:(v?[0-9][0-9.]*)").find(appBuild)?.groupValues?.get(1)
     ?: error("Couldn't find the NewPipeExtractor version in app/build.gradle.kts")
 
@@ -43,6 +43,8 @@ dependencies {
 
     // Talks to Windows directly, for the dark title bar.
     implementation("net.java.dev.jna:jna-platform:5.14.0")
+    // Voice search: Whisper speech recognition, run on this PC.
+    implementation("io.github.givimad:whisper-jni:1.7.1")
 }
 
 // The version number, readable by the app (Settings and the update check show it).
@@ -60,6 +62,15 @@ tasks.register<JavaExec>("deckCheck") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("com.glasswave.player.DeckCheckKt")
     (project.findProperty("song") as String?)?.let { args(it) }
+}
+
+// For checks only: transcribes a WAV file with voice search's recogniser.
+// ./gradlew -p desktop voiceCheck -Pwav=path/to/file.wav
+tasks.register<JavaExec>("voiceCheck") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.VoiceCheckKt")
+    (project.findProperty("wav") as String?)?.let { args(it) }
+    (project.findProperty("voiceModel") as String?)?.let { systemProperty("gw.voiceModel", it) }
 }
 
 kotlin {
@@ -114,6 +125,7 @@ tasks.register<JavaExec>("screenCheck") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("com.glasswave.player.DevScriptKt")
     (project.findProperty("gwscript") as String?)?.let { args(it) }
+    (project.findProperty("voiceWav") as String?)?.let { systemProperty("gw.voiceTestWav", it) }
 }
 
 // Remakes icons/glasswave.ico from the icon design (see IconMaker.kt).
