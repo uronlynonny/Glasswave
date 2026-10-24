@@ -159,11 +159,13 @@ fun HomeScreen(c: ScreenCtx) {
                 is Load.Loading -> item(key = "loading") { HomeSkeleton() }
                 is Load.Failed -> item(key = "error") { ErrorBox(h.message, c.bg) { vm.loadHome() } }
                 is Load.Done -> {
-                    if (h.value.isEmpty()) item(key = "empty") { Centered("Nothing here right now. Pull down to refresh.") }
+                    // Songs you marked "Not interested" stay off Home.
+                    val sections = NotInterested.hide(h.value)
+                    if (sections.isEmpty()) item(key = "empty") { Centered("Nothing here right now. Pull down to refresh.") }
                     // The first section of albums or playlists becomes a big swipeable showcase.
-                    val heroIndex = h.value.indexOfFirst { s -> s.items.size >= 3 && s.items.count { it !is SongItem } * 2 > s.items.size }
+                    val heroIndex = sections.indexOfFirst { s -> s.items.size >= 3 && s.items.count { it !is SongItem } * 2 > s.items.size }
                     val recent = History.tracks.take(15)
-                    h.value.forEachIndexed { i, s ->
+                    sections.forEachIndexed { i, s ->
                         item(key = "s$i-${s.title}") {
                             Column(Modifier) {
                                 SectionTitle(s.title.ifEmpty { "For you" })
@@ -173,7 +175,7 @@ fun HomeScreen(c: ScreenCtx) {
                         // After the first shelf: Made for you (Flow and your mixes).
                         if (i == 0 && vm.homeChip == null) {
                             item(key = "madeForYou") {
-                                val seeds = h.value.flatMap { it.items }.filterIsInstance<SongItem>().map { it.track }
+                                val seeds = sections.flatMap { it.items }.filterIsInstance<SongItem>().map { it.track }
                                 MadeForYou(c, seeds)
                             }
                         }

@@ -15,6 +15,7 @@ class GlassApp : Application(), ImageLoaderFactory {
         Library.init(this)
         History.init(this)
         Downloads.init(this)
+        NotInterested.init(this)
         GenreArt.init(this)
         LyricsRepo.init(this)
         Loudness.init(this)

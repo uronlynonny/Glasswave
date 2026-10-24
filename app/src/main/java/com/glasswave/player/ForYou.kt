@@ -32,7 +32,7 @@ object ForYou {
         val artistSeed = artist?.let { a -> favourites.filter { it.artist.startsWith(a) }.randomOrNull() }
 
         suspend fun radio(t: Track?): List<Track> = if (t == null) emptyList() else withContext(Dispatchers.IO) {
-            runCatching { YtRepo.videoIdFor(t.url)?.let { YtMusicApi.radio(it) } ?: emptyList() }.getOrDefault(emptyList())
+            runCatching { YtRepo.videoIdFor(t.url)?.let { NotInterested.thin(YtMusicApi.radio(it)) } ?: emptyList() }.getOrDefault(emptyList())
         }
         val radios = seeds.map { s -> async { radio(s) } }
         val artistRadio = async { radio(artistSeed) }

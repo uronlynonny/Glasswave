@@ -645,7 +645,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         worker.execute {
             val tracks = try {
                 val id = YtRepo.videoIdFor(current) ?: return@execute
-                YtMusicApi.radio(id)
+                NotInterested.thin(YtMusicApi.radio(id))
             } catch (e: Exception) {
                 android.util.Log.w("Glasswave", "Autoplay lookup failed", e)
                 main.post { if (autoplayFor == current) autoplayFor = null }

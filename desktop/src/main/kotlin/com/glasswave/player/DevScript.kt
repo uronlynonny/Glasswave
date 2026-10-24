@@ -109,6 +109,18 @@ fun main(args: Array<String>) {
                 "fakephone" -> Sync.testHeard(Sync.Device("fake-phone", "Nonny's Phone", "phone", true,
                     Track("https://music.youtube.com/watch?v=x", "Calm Down", "Rema", 239, "https://i.ytimg.com/vi/WcIcVapfqXw/hqdefault.jpg"), 61_000, 239_000, System.currentTimeMillis()))
                 "devices" -> onUi { Sync.panelOpen = !Sync.panelOpen }
+                // notint: marks the first song on Home "Not interested" and reports what happened.
+                // songmenu: opens the ••• menu for the first song on Home.
+                "notint", "songmenu" -> onUi {
+                    val home = (vm.home as? Load.Done)?.value.orEmpty()
+                    val t = home.flatMap { it.items }.filterIsInstance<SongItem>().firstOrNull()?.track
+                    if (t == null) { System.err.println("GW notint: no songs on Home"); return@onUi }
+                    if (parts[0] == "songmenu") { Menus.openSong(t); return@onUi }
+                    NotInterested.toggle(t)
+                    val still = NotInterested.hide(home).flatMap { it.items }.filterIsInstance<SongItem>().any { it.track.url == t.url }
+                    val kept = (1..10_000).count { NotInterested.thin(listOf(t)).isNotEmpty() }
+                    System.err.println("GW notint '${t.title}': still on Home=$still, kept by Autoplay in ${kept / 100.0}% of 10,000 tries")
+                }
                 "style" -> onUi { Settings.updatePlayerStyle(PlayerStyle.valueOf(arg)) }
                 "key" -> onUi { if (arg == "ESCAPE") androidx.activity.compose.BackDispatcher.back() }
                 "size" -> {

@@ -50,6 +50,8 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.ThumbUp
 import androidx.compose.runtime.Composable
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.runtime.LaunchedEffect
@@ -276,6 +278,15 @@ private fun SongMenuBody(target: Menus.SongTarget, ps: PlayerState, open: (Music
                             Icons.Rounded.Person, "Go to artist",
                             trailing = if (looking == "artist") ({ Spinner() }) else null,
                         ) { goTo("artist") }
+                        val notInterested = NotInterested.version.let { NotInterested.has(t) }
+                        MenuRow(
+                            if (notInterested) Icons.Rounded.ThumbUp else Icons.Rounded.Block,
+                            if (notInterested) "Interested again" else "Not interested",
+                        ) {
+                            val on = NotInterested.toggle(t)
+                            Menus.say(if (on) "Got it. It's off Home and will rarely play by itself." else "OK, it can come up again.")
+                            Menus.closeSong()
+                        }
                         MenuRow(Icons.Rounded.Share, "Share") {
                             val link = if (t.url.startsWith("gwmatch")) {
                                 "https://music.youtube.com/search?q=" + android.net.Uri.encode("${t.title} ${t.artist}")

@@ -155,6 +155,7 @@ internal fun startUp() {
     Library.init(ctx)
     History.init(ctx)
     Downloads.init(ctx)
+    NotInterested.init(ctx)
     GenreArt.init(ctx)
     LyricsRepo.init(ctx)
     Loudness.init(ctx)

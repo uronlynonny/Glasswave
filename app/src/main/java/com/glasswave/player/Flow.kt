@@ -122,7 +122,7 @@ object Flow {
     private suspend fun radioOf(t: Track?): List<Track> = if (t == null) emptyList() else withContext(Dispatchers.IO) {
         runCatching {
             val id = YtRepo.videoIdFor(t.url) ?: return@runCatching emptyList()
-            YtMusicApi.radio(id)
+            NotInterested.thin(YtMusicApi.radio(id))
         }.getOrDefault(emptyList())
     }
 
