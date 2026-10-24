@@ -405,6 +405,7 @@ class MainViewModel : ViewModel() {
         loadHome() // personalized now
         syncAll(spotify = false)
         Profile.refresh()
+        Sync.start() // find this account's other devices
     }
 
     /** The profile sheet opened from your picture on Home. */
@@ -419,6 +420,7 @@ class MainViewModel : ViewModel() {
     }
 
     fun signOutYt() {
+        Sync.stop()
         Accounts.ytCookie = null
         YtSignIn.forget() // the sign-in window's Google session too, so the next sign-in starts fresh
         ytSignedIn = false

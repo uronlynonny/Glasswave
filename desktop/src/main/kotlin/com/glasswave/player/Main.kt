@@ -160,6 +160,7 @@ internal fun startUp() {
     Loudness.init(ctx)
     GlassTier.init(ctx)
     Stats.init(ctx)
+    Sync.init(ctx)
     Updater.init(ctx)
     Profile.init(ctx)
     Profile.refresh()
@@ -205,6 +206,8 @@ fun main() {
         val state = rememberWindowState(size = startSize(), position = WindowPosition(androidx.compose.ui.Alignment.Center))
         Window(
             onCloseRequest = {
+                // Tell your phone this PC stopped playing (a second at most).
+                Thread { Sync.goodbye() }.apply { isDaemon = true; start() }.join(1500)
                 // A downloaded update installs quietly as the app closes.
                 Discord.shutdown()
                 Updater.installOnExit()

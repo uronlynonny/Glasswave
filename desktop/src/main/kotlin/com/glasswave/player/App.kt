@@ -92,7 +92,16 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
             kotlinx.coroutines.delay(20 * 60_000L)
             Updater.checkIfDue()
             Active.checkIn()
+            Sync.start() // reconnects if it dropped
         }
+    }
+
+    // Phone and PC on the same YouTube Music account (see Sync): let them control this player,
+    // and tell them when the song or play/pause changes.
+    LaunchedEffect(ps) { Sync.remote = syncRemote(ps); Sync.start() }
+    LaunchedEffect(ps.currentId, ps.playing) {
+        kotlinx.coroutines.delay(1200)
+        Sync.publishState()
     }
 
     // Your Discord status ("Listening to Glasswave"), kept in step with the player.
@@ -193,6 +202,11 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
             ) {
                 PlayerBar(ps, page, onOpen = { full = true })
             }
+            RemoteStrip(
+                ps.playing,
+                Modifier.align(Alignment.BottomCenter).padding(bottom = if (ps.hasItem) PlayerBarSpace - 4.dp else 16.dp)
+                    .widthIn(max = 520.dp).padding(horizontal = 16.dp),
+            )
             // The icon rail, floating over the page as glass (it opens over it on hover).
             Sidebar(
                 vm, page,
@@ -200,6 +214,7 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
                     .padding(bottom = if (ps.hasItem) PlayerBarSpace - 12.dp else 0.dp),
             )
         } else Column(Modifier.align(Alignment.BottomCenter).drawWithContent { if (!covered) drawContent() }.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).widthIn(max = 560.dp)) {
+            RemoteStrip(ps.playing, Modifier.padding(bottom = 10.dp))
             AnimatedVisibility(
                 visible = ps.hasItem,
                 enter = slideInVertically(smooth(220)) { it } + fadeIn(smooth(200)),
@@ -226,6 +241,9 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
         androidx.activity.compose.BackHandler(enabled = vm.profileOpen) { vm.profileOpen = false }
 
         if (vm.showYtLogin) YtLogin(onCookie = vm::onYtCookie, onClose = { vm.showYtLogin = false })
+
+        // Your other devices on this YouTube Music account.
+        DevicesPanel(ps.currentTrack(), ps.playing)
 
         // Voice search: sing or say some lyrics.
         if (vm.voiceOpen) {

@@ -356,6 +356,15 @@ private fun AccountsPage(c: ScreenCtx) {
             else GlassButton("Sign in", c.bg, accent = true) { vm.showYtLogin = true }
         }
     }
+    if (vm.ytSignedIn) {
+        Group("Your devices") {
+            SwitchRow(
+                "Sync with your phone and PC",
+                "Glasswave on your other devices, signed in to this YouTube Music account, shares listening stats and can play, pause and move music between them.",
+                Settings.syncDevices,
+            ) { Settings.updateSyncDevices(it) }
+        }
+    }
     // Way 1: no account, no key. Paste a link, get the playlist.
     Group("Spotify · quick import") {
         Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {

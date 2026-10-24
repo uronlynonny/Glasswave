@@ -430,6 +430,7 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
             Box(Modifier.size(44.dp).pressable(0.85f, onClick = ui.onQueue), contentAlignment = Alignment.Center) {
                 Ico(Icons.AutoMirrored.Rounded.QueueMusic, Color.White.copy(alpha = 0.85f), 24.dp)
             }
+            DevicesButton()
 
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                 Badge(Settings.quality.label.uppercase())

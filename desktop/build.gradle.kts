@@ -13,7 +13,7 @@ plugins {
 val appBuild = file("../app/build.gradle.kts").readText()
 // Glasswave for Windows has its own version number, separate from the phone app.
 // Raise it for every Windows release: installed copies update themselves to a higher number.
-val appVersion = "1.0.8"
+val appVersion = "1.0.9"
 val newPipe = Regex("NewPipeExtractor:(v?[0-9][0-9.]*)").find(appBuild)?.groupValues?.get(1)
     ?: error("Couldn't find the NewPipeExtractor version in app/build.gradle.kts")
 
@@ -175,6 +175,19 @@ val signInHelper by tasks.registering {
 }
 tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(signInHelper) }
 
+// Checks (screenCheck, deckCheck, voiceCheck…) never touch your real Glasswave: unless a check
+// picks its own folder, it keeps its library, history, listening stats and cache in build/check-data.
+// (Only "run", the real app, uses your own data.)
+tasks.withType<JavaExec>().configureEach {
+    if (name == "run") return@configureEach
+    val data = layout.buildDirectory.dir("check-data")
+    doFirst {
+        val dir = data.get().asFile.apply { mkdirs() }
+        if (environment["APPDATA"] == System.getenv("APPDATA")) environment("APPDATA", File(dir, "roaming").absolutePath)
+        if (environment["LOCALAPPDATA"] == System.getenv("LOCALAPPDATA")) environment("LOCALAPPDATA", File(dir, "local").absolutePath)
+    }
+}
+
 // On Windows, build outside OneDrive (it locks build files mid-build).
 System.getenv("LOCALAPPDATA")?.let { layout.buildDirectory.set(File(it, "GlasswaveBuild/desktop")) }
 
@@ -187,6 +200,8 @@ tasks.register<JavaExec>("screenCheck") {
     if (project.hasProperty("testDrop")) systemProperty("gw.testDrop", "1")
     // -Poffline: cuts the app off from the internet (everything goes to a proxy that isn't there).
     if (project.hasProperty("offline")) { systemProperty("socksProxyHost", "127.0.0.1"); systemProperty("socksProxyPort", "9") }
+    // -PsyncTest: signed in to a made-up account as far as phone/PC sync goes (for pictures of Devices).
+    if (project.hasProperty("syncTest")) { systemProperty("gw.syncTestAccount", "screen-test-account"); systemProperty("gw.noCheckIn", "1") }
     // -PsignInTest=<folder>: the YouTube Music sign-in window hands back signed-out cookies (no
     // account needed), and the app keeps its data in that folder instead of yours.
     (project.findProperty("signInTest") as String?)?.let { dir ->
@@ -200,6 +215,23 @@ tasks.register<JavaExec>("screenCheck") {
 }
 
 // Remakes the website's link preview picture, docs/og.png (see OgImage.kt).
+// Downloads the live update as an older copy would, with the connection dropping partway
+// (-Pdir: a sandbox folder for its files).
+tasks.register<JavaExec>("updateCheck") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.UpdateCheckKt")
+    (project.findProperty("dir") as String?)?.let { environment("LOCALAPPDATA", it); environment("APPDATA", it) }
+    systemProperty("gw.testAppVersion", "1.0.0")
+    systemProperty("gw.testUpdateDrop", "3000000")
+}
+
+// Two pretend devices on a made-up account talk through the relay (sync between phone and PC).
+tasks.register<JavaExec>("syncCheck") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.SyncCheckKt")
+    systemProperty("gw.syncDir", layout.buildDirectory.dir("check-data/sync").get().asFile.absolutePath)
+}
+
 // Checks that a second launch hands over to the open copy (-Pdir: a sandbox folder for its files).
 tasks.register<JavaExec>("instanceCheck") {
     classpath = sourceSets.main.get().runtimeClasspath

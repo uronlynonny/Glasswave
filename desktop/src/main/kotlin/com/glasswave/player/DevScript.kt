@@ -105,6 +105,10 @@ fun main(args: Array<String>) {
                     System.err.println("GW account: signedIn=${vm.ytSignedIn} cookies=$names signinData=${File(android.content.AppDirs.cache, "signin").exists()}")
                 }
                 "ytsignout" -> onUi { vm.signOutYt() }
+                // fakephone: a pretend phone on the account, playing a song. devices: opens the Devices panel.
+                "fakephone" -> Sync.testHeard(Sync.Device("fake-phone", "Nonny's Phone", "phone", true,
+                    Track("https://music.youtube.com/watch?v=x", "Calm Down", "Rema", 239, "https://i.ytimg.com/vi/WcIcVapfqXw/hqdefault.jpg"), 61_000, 239_000, System.currentTimeMillis()))
+                "devices" -> onUi { Sync.panelOpen = !Sync.panelOpen }
                 "style" -> onUi { Settings.updatePlayerStyle(PlayerStyle.valueOf(arg)) }
                 "key" -> onUi { if (arg == "ESCAPE") androidx.activity.compose.BackDispatcher.back() }
                 "size" -> {

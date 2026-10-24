@@ -62,6 +62,8 @@ object Settings {
     var volumeLeveling by mutableStateOf(true); private set
     /** Tell nonny dev when a song won't play (song, error, phone model, app version). On by default. */
     var reportProblems by mutableStateOf(true); private set
+    /** Phone and PC on the same YouTube Music account share listening stats and can control each other. On by default. */
+    var syncDevices by mutableStateOf(true); private set
     /** Count this phone in the daily active-user numbers (a random id, nothing else). On by default. */
     var countMe by mutableStateOf(true); private set
     /** Automix: the end of one song plays under the start of the next, like a DJ blending them. Off by default. */
@@ -97,6 +99,7 @@ object Settings {
         skipSilence = prefs.getBoolean("skip_silence", false)
         volumeLeveling = prefs.getBoolean("volume_leveling", true)
         reportProblems = prefs.getBoolean("report_problems", true)
+        syncDevices = prefs.getBoolean("sync_devices", true)
         countMe = prefs.getBoolean("count_me", true)
         automix = prefs.getBoolean("automix", false)
         mixSeconds = prefs.getInt("mix_seconds", 8)
@@ -141,6 +144,12 @@ object Settings {
     }
 
     fun updateCountMe(on: Boolean) { countMe = on; prefs.edit { putBoolean("count_me", on) } }
+
+    fun updateSyncDevices(on: Boolean) {
+        syncDevices = on
+        prefs.edit { putBoolean("sync_devices", on) }
+        if (on) Sync.start() else Sync.stop()
+    }
 
     fun updateReportProblems(on: Boolean) {
         reportProblems = on

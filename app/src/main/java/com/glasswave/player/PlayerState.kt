@@ -188,7 +188,7 @@ class PlayerState(private val context: Context) {
         controller?.addMediaItems(tracks.map { it.toMediaItem() })
     }
 
-    fun playList(tracks: List<Track>, index: Int, shuffle: Boolean = false, fromFlow: Boolean = false) {
+    fun playList(tracks: List<Track>, index: Int, shuffle: Boolean = false, fromFlow: Boolean = false, startMs: Long = 0) {
         val c = controller ?: return
         if (tracks.isEmpty()) return
         error = null
@@ -197,7 +197,7 @@ class PlayerState(private val context: Context) {
         if (!fromFlow) Flow.stop()
         c.shuffleModeEnabled = shuffle
         val start = if (shuffle) tracks.indices.random() else index
-        c.setMediaItems(tracks.map { it.toMediaItem() }, start, 0L)
+        c.setMediaItems(tracks.map { it.toMediaItem() }, start, startMs)
         c.prepare()
         c.play()
     }
@@ -221,6 +221,9 @@ class PlayerState(private val context: Context) {
         val c = controller ?: return
         if (c.isPlaying) c.pause() else c.play()
     }
+
+    fun play() { controller?.play() }
+    fun pause() { controller?.pause() }
 
     fun next() { controller?.seekToNextMediaItem() }
 

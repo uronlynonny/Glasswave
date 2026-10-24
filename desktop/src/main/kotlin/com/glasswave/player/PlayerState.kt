@@ -175,7 +175,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         changed()
     }
 
-    fun playList(tracks: List<Track>, index: Int, shuffle: Boolean = false, fromFlow: Boolean = false) {
+    fun playList(tracks: List<Track>, index: Int, shuffle: Boolean = false, fromFlow: Boolean = false, startMs: Long = 0) {
         if (tracks.isEmpty()) return
         error = null
         Autoplay.added.clear()
@@ -189,7 +189,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         shuf += listOf(start) + tracks.indices.filter { it != start }.shuffled()
         this.shuffle = shuffle
         spare.stop()
-        moveTo(start, play = true, auto = false)
+        moveTo(start, play = true, auto = false, startMs = startMs)
         changed()
     }
 
@@ -328,7 +328,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     private var recoveries = 0
 
     /** Makes song [i] the current one, and starts it (or the deck that already has it ready). */
-    private fun moveTo(i: Int, play: Boolean, auto: Boolean) {
+    private fun moveTo(i: Int, play: Boolean, auto: Boolean, startMs: Long = 0) {
         if (i !in items.indices) return
         if (!(auto && mixing)) {
             if (mixing) endMix()
@@ -342,7 +342,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         title = t.title
         artist = t.artist
         art = t.thumb
-        positionMs = 0
+        positionMs = startMs
         durationMs = t.seconds * 1000
         if (t.title.isNotBlank()) History.add(t.copy(seconds = 0))
         val changedSong = currentId != t.url
@@ -352,7 +352,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         recoveries = 0
         val req = ++request
 
-        if (spare.tag == i && spare.ready && !mixing) {
+        if (spare.tag == i && spare.ready && !mixing && startMs == 0L) {
             // The next song is already loaded on the other deck: swap over, no wait.
             val old = deck
             deck = spare
@@ -368,7 +368,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
             deck.stop()
             buffering = true
             markPlaying(play)
-            load(deck, t, i, req, play)
+            load(deck, t, i, req, play, startMs)
         }
 
         if (auto) SleepTimer.onSongEnded(this)

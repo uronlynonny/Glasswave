@@ -20,6 +20,8 @@ class GlassApp : Application(), ImageLoaderFactory {
         Loudness.init(this)
         GlassTier.init(this)
         Stats.init(this)
+        Sync.init(this)
+        SyncPlatform.init(this)
         Updater.init(this)
         Active.init(this)
         Profile.init(this)

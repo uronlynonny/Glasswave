@@ -98,7 +98,8 @@ object Updater {
 
     /** The version this copy was built as (the Windows app's own version number). */
     fun currentVersion(): String =
-        Updater::class.java.getResource("/glasswave-version.txt")?.readText()?.trim() ?: "0"
+        System.getProperty("gw.testAppVersion") // automated checks only: pretend to be an older copy
+            ?: Updater::class.java.getResource("/glasswave-version.txt")?.readText()?.trim() ?: "0"
 
     private fun parts(v: String) = v.removePrefix("v").split('.').map { it.filter(Char::isDigit).toIntOrNull() ?: 0 }
 
@@ -160,7 +161,22 @@ object Updater {
         return null
     }
 
-    /** Downloads the new installer in the background (once), showing progress on the Update button. */
+    /**
+     * For updates only: waits up to a minute when the connection pauses (the normal client gives up
+     * after 20 seconds, which a big download on a shaky connection kept hitting).
+     */
+    private val downloadClient by lazy {
+        YtRepo.http.newBuilder()
+            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
+
+    /**
+     * Downloads the new installer in the background (once), showing progress on the Update button.
+     * If the connection drops it keeps what it already has and carries on from there: a few quick
+     * retries now, and the next check (or the Update button) picks up where it stopped.
+     */
     private fun download(r: Release) {
         val final = fileFor(r)
         if (final.exists() && (r.size <= 0 || final.length() == r.size)) { ready = final; return }
@@ -170,35 +186,65 @@ object Updater {
             try {
                 withContext(Dispatchers.IO) {
                     val part = File(dir, final.name + ".part")
-                    val req = Request.Builder().url(r.apkUrl).header("User-Agent", "Glasswave").build()
-                    YtRepo.http.newCall(req).execute().use { resp ->
-                        if (!resp.isSuccessful) throw IOException("Download failed (${resp.code})")
-                        val body = resp.body ?: throw IOException("Empty download")
-                        val total = body.contentLength().takeIf { it > 0 } ?: r.size
-                        var done = 0L
-                        body.byteStream().use { input ->
-                            part.outputStream().use { out ->
-                                val buf = ByteArray(256 * 1024)
-                                while (true) {
-                                    val n = input.read(buf)
-                                    if (n < 0) break
-                                    out.write(buf, 0, n)
-                                    done += n
-                                    if (total > 0) withContext(Dispatchers.Main) { progress = (done.toFloat() / total).coerceIn(0f, 1f) }
-                                }
-                            }
+                    val waits = listOf(2L, 5L, 10L, 20L, 30L)
+                    var attempt = 0
+                    while (true) {
+                        try {
+                            fetchInto(part, r) { p -> scope.launch { progress = p } }
+                            break
+                        } catch (e: IOException) {
+                            if (attempt >= waits.size) throw e
+                            android.util.Log.w("Glasswave", "Update download paused (${e.message}); trying again", e)
+                            kotlinx.coroutines.delay(waits[attempt++] * 1000)
                         }
                     }
+                    if (r.size > 0 && part.length() != r.size) { part.delete(); throw IOException("The download didn't match the update") }
                     final.delete()
                     if (!part.renameTo(final)) throw IOException("Couldn't save the update")
                 }
                 ready = final
+                status = null
             } catch (e: Exception) {
                 android.util.Log.w("Glasswave", "Update download failed", e)
-                status = "Couldn't download the update. It'll try again later."
+                status = "Couldn't finish downloading the update. It'll carry on from where it stopped."
             } finally {
                 progress = null
             }
+        }
+    }
+
+    /** One go at downloading into [part], continuing after whatever it already holds. */
+    private fun fetchInto(part: File, r: Release, onProgress: (Float) -> Unit) {
+        var have = if (part.exists()) part.length() else 0L
+        if (r.size > 0 && have >= r.size) { if (have > r.size) { part.delete(); have = 0 } else return }
+        val req = Request.Builder().url(r.apkUrl).header("User-Agent", "Glasswave")
+            .apply { if (have > 0) header("Range", "bytes=$have-") }
+            .build()
+        downloadClient.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) throw IOException("Download failed (${resp.code})")
+            // 206: the server sent the rest. 200: it sent the whole file, so start again.
+            val append = have > 0 && resp.code == 206
+            if (!append) have = 0
+            val body = resp.body ?: throw IOException("Empty download")
+            val total = r.size.takeIf { it > 0 } ?: (body.contentLength().takeIf { it > 0 }?.plus(have) ?: -1L)
+            var done = have
+            // Automated checks only: pretend the connection drops after this many bytes, once.
+            val dropAt = System.getProperty("gw.testUpdateDrop")?.toLongOrNull()?.also { System.clearProperty("gw.testUpdateDrop") }
+            body.byteStream().use { input ->
+                java.io.FileOutputStream(part, append).use { out ->
+                    val buf = ByteArray(256 * 1024)
+                    var lastShown = 0L
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                        done += n
+                        if (dropAt != null && done - have >= dropAt) throw IOException("test: connection dropped")
+                        if (total > 0 && done - lastShown > 512 * 1024) { lastShown = done; onProgress((done.toFloat() / total).coerceIn(0f, 1f)) }
+                    }
+                }
+            }
+            if (r.size > 0 && done < r.size) throw IOException("The download stopped early")
         }
     }
 
@@ -206,7 +252,7 @@ object Updater {
     fun install(@Suppress("UNUSED_PARAMETER") activity: Any?) {
         when {
             ready != null -> restartToUpdate()
-            progress != null -> Unit
+            progress != null -> status = "Still downloading the update (${((progress ?: 0f) * 100).toInt()}%). It'll be ready to install when it's done."
             else -> check(tell = true)
         }
     }

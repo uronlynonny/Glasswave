@@ -66,6 +66,7 @@ object Stats {
                 }
             }
             android.os.Handler(android.os.Looper.getMainLooper()).post { version++ }
+            Sync.onPlayRecorded() // share it with this account's other devices
         }
     }
 
@@ -89,11 +90,20 @@ object Stats {
     }
 
     fun clear() {
-        writer.execute { runCatching { file.delete() } }
+        writer.execute { runCatching { file.delete(); Sync.syncedPlaysFile()?.delete() } }
         version++
     }
 
-    private fun readAll(): List<Play> = runCatching {
+    /** Refresh open stats (plays arrived from another device). */
+    fun bump() { android.os.Handler(android.os.Looper.getMainLooper()).post { version++ } }
+
+    /** This device's own plays after [after] (ms), oldest first: what gets shared with other devices. */
+    fun ownPlaysAfter(after: Long): List<Play> = readFile(file).filter { it.at > after }.sortedBy { it.at }
+
+    /** This device's plays, plus (when signed in to YouTube Music) those from the account's other devices. */
+    private fun readAll(): List<Play> = readFile(file) + (Sync.syncedPlaysFile()?.let { readFile(it) } ?: emptyList())
+
+    private fun readFile(file: File): List<Play> = runCatching {
         if (!file.exists()) return emptyList()
         file.readLines().mapNotNull { l ->
             runCatching {

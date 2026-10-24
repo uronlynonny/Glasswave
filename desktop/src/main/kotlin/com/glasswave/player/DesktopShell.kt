@@ -353,6 +353,7 @@ fun PlayerBar(ps: PlayerState, page: Backdrop, onOpen: () -> Unit, modifier: Mod
 
         // Lyrics, queue, volume, full screen
         Row(Modifier.weight(0.3f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            DevicesButton(36.dp, 20.dp, Dim)
             BarButton(Icons.Rounded.Lyrics, if (PlayerView.lyrics) accent else Dim, 20.dp) {
                 PlayerView.lyrics = true
                 onOpen()
