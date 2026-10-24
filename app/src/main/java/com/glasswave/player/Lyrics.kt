@@ -44,8 +44,12 @@ object LyricsRepo {
         if (url in none) return@withContext null
         val t = cleanTitle(title)
         val a = mainArtist(artist)
-        val found = runCatching { lrclib(t, a, seconds) }.getOrNull()
+        // Synced lyrics from anywhere beat unsynced ones; unsynced are the last resort.
+        val fromLrclib = runCatching { lrclib(t, a, seconds) }.getOrNull()
+        val found = fromLrclib?.takeIf { it.synced }
             ?: runCatching { kugou(t, a, seconds) }.getOrNull()
+                ?.takeIf { k -> seconds <= 0 || (k.lines.lastOrNull()?.ms ?: 0) / 1000 <= seconds + 3 }
+            ?: fromLrclib
             ?: runCatching { youtube(url) }.getOrNull()
         val clean = found?.let { ly -> ly.copy(lines = ly.lines.map { it.copy(text = uncensor(it.text)) }) }
         if (clean != null && clean.lines.isNotEmpty()) cache[url] = clean else none += url
@@ -79,7 +83,16 @@ object LyricsRepo {
 
     private fun fetch(u: String): String? {
         val req = Request.Builder().url(u).header("User-Agent", UA).build()
-        return YtRepo.http.newCall(req).execute().use { r -> if (r.isSuccessful) r.body?.string() else null }
+        // LRCLIB answers "busy" now and then; wait a moment and ask again rather than giving up.
+        repeat(3) { attempt ->
+            val busy = YtRepo.http.newCall(req).execute().use { r ->
+                if (r.isSuccessful) return r.body?.string()
+                r.code == 503 || r.code == 429
+            }
+            if (!busy) return null
+            Thread.sleep(600L * (attempt + 1))
+        }
+        return null
     }
 
     /* ---------------- LRCLIB ---------------- */
@@ -90,21 +103,36 @@ object LyricsRepo {
         val exact = fetch(
             "https://lrclib.net/api/get?track_name=${enc(title)}&artist_name=${enc(artist)}" +
                 if (seconds > 0) "&duration=$seconds" else "",
-        )?.let { JSONObject(it) }
-        exact?.let { fromLrclib(it) }?.let { return it }
+        )?.let { runCatching { JSONObject(it) }.getOrNull() }
+        exact?.takeIf { believable(it, seconds) }?.let { fromLrclib(it) }?.takeIf { it.synced }?.let { return it }
         val hits = mutableListOf<JSONObject>()
+        fun gap(o: JSONObject) = if (seconds <= 0) 0.0 else abs(o.optDouble("duration", 0.0) - seconds)
+        fun hasSynced(o: JSONObject) = o.optString("syncedLyrics").let { s -> s.isNotBlank() && s != "null" }
         for (q in listOf("track_name=${enc(title)}&artist_name=${enc(artist)}", "q=${enc("$artist $title")}")) {
             val arr = fetch("https://lrclib.net/api/search?$q")?.let { runCatching { JSONArray(it) }.getOrNull() } ?: continue
             hits += (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }
-            if (hits.any { seconds <= 0 || abs(it.optDouble("duration", 0.0) - seconds) <= 3 }) break
+            // Only stop early once there's a believable synced match of the right length.
+            if (hits.any { hasSynced(it) && gap(it) <= 3 && believable(it, seconds) }) break
         }
-        fun gap(o: JSONObject) = if (seconds <= 0) 0.0 else abs(o.optDouble("duration", 0.0) - seconds)
         // Closest length first; between equally close ones, the uncensored version.
-        val synced = hits.filter { it.optString("syncedLyrics").let { s -> s.isNotBlank() && s != "null" } && gap(it) <= 12 }
+        val synced = hits.filter { hasSynced(it) && gap(it) <= 12 && believable(it, seconds) }
             .sortedWith(compareBy({ Math.round(gap(it)) }, { if (isCensored(it.optString("syncedLyrics"))) 1 else 0 }))
         synced.firstOrNull()?.let { fromLrclib(it) }?.let { return it }
         val plain = hits.filter { it.optString("plainLyrics").let { s -> s.isNotBlank() && s != "null" } }.minByOrNull { gap(it) }
         return plain?.let { fromLrclib(it) }
+    }
+
+    /**
+     * Throws out made-up timings. LRCLIB has many uploads (Ravyn Lenae's "Love Me Not" is one)
+     * where someone spread the words out evenly from 0:00, so the lines keep going after the song
+     * has ended. Real timings end before the song does.
+     */
+    private fun believable(o: JSONObject, songSec: Long): Boolean {
+        val raw = o.optString("syncedLyrics").takeIf { it.isNotBlank() && it != "null" } ?: return true
+        val lines = parseLrc(raw).filter { it.text.isNotBlank() }
+        if (lines.size < 4) return true
+        val limit = listOf(o.optDouble("duration", 0.0), songSec.toDouble()).filter { it > 0 }.minOrNull()
+        return limit == null || lines.last().ms / 1000.0 <= limit + 3
     }
 
     private fun fromLrclib(o: JSONObject): Lyrics? {

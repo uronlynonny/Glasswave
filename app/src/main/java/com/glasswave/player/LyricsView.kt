@@ -284,15 +284,9 @@ private fun SyncedLyrics(ps: PlayerState, ly: Lyrics, fancy: Boolean, accent: Co
     val n = lines.size
     val url = ps.currentId ?: ""
 
-    // Lyrics timed to a different cut of the song: stretch their clock to this recording.
-    val songSec = ps.durationMs / 1000f
-    val stretch = remember(ly, ps.durationMs) {
-        val d = ly.durationSec
-        if (d <= 0 || songSec <= 0f) 1f else {
-            val r = songSec / d
-            if (r in 0.9f..1.1f && abs(r - 1f) > 0.004f) 1f / r else 1f
-        }
-    }
+    // No stretching: lyric sites often list the wrong length for correctly timed lyrics, and
+    // stretching to that length pushed lines seconds off by the end of the song.
+    val stretch = 1f
     val nudge = 0L
 
     // The song position (on the lyrics' clock), read every frame while this is open (cheap: it only feeds drawing).
