@@ -6,6 +6,7 @@ import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 import org.json.JSONArray
@@ -22,7 +23,8 @@ data class Lyrics(val lines: List<LyricLine>, val synced: Boolean, val source: S
  * 1. LRCLIB, a free open lyrics library with time-synced lyrics,
  * 2. KuGou, a big lyrics catalogue (synced) that many open-source players use as a backup,
  * 3. YouTube Music's own lyrics (not timed).
- * Results are remembered for the session.
+ * Results are remembered for the session, and kept on the phone for downloaded songs so their
+ * lyrics show offline too.
  */
 object LyricsRepo {
     private val cache = ConcurrentHashMap<String, Lyrics>()
@@ -41,6 +43,7 @@ object LyricsRepo {
 
     suspend fun get(url: String, title: String, artist: String, seconds: Long): Lyrics? = withContext(Dispatchers.IO) {
         cache[url]?.let { return@withContext it }
+        readSaved(url)?.let { cache[url] = it; return@withContext it }
         if (url in none) return@withContext null
         val t = cleanTitle(title)
         val a = mainArtist(artist)
@@ -52,8 +55,58 @@ object LyricsRepo {
             ?: fromLrclib
             ?: runCatching { youtube(url) }.getOrNull()
         val clean = found?.let { ly -> ly.copy(lines = ly.lines.map { it.copy(text = uncensor(it.text)) }) }
-        if (clean != null && clean.lines.isNotEmpty()) cache[url] = clean else none += url
+        if (clean != null && clean.lines.isNotEmpty()) {
+            cache[url] = clean
+            if (Downloads.isDownloaded(url)) writeSaved(url, clean)
+        } else {
+            none += url
+        }
         clean
+    }
+
+    /* ---------------- Kept with downloads ---------------- */
+
+    private var savedDir: java.io.File? = null
+
+    private fun savedFile(url: String): java.io.File? = savedDir?.let { d ->
+        val name = java.security.MessageDigest.getInstance("SHA-1").digest(url.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        java.io.File(d, "$name.json")
+    }
+
+    private fun readSaved(url: String): Lyrics? = runCatching {
+        val f = savedFile(url)?.takeIf { it.exists() } ?: return null
+        val o = JSONObject(f.readText())
+        val arr = o.getJSONArray("l")
+        val lines = (0 until arr.length()).map { i -> arr.getJSONArray(i).let { LyricLine(it.getLong(0), it.getString(1)) } }
+        Lyrics(lines, o.optBoolean("s"), o.optString("src"), o.optInt("d"))
+    }.getOrNull()?.takeIf { it.lines.isNotEmpty() }
+
+    private fun writeSaved(url: String, ly: Lyrics) {
+        runCatching {
+            val f = savedFile(url) ?: return
+            val arr = JSONArray()
+            ly.lines.forEach { arr.put(JSONArray().put(it.ms).put(it.text)) }
+            val o = JSONObject().put("s", ly.synced).put("src", ly.source).put("d", ly.durationSec).put("l", arr)
+            val tmp = java.io.File(f.path + ".tmp")
+            tmp.writeText(o.toString())
+            tmp.renameTo(f)
+        }
+    }
+
+    /** Finds a downloaded song's lyrics and keeps them on the phone, so they show offline. */
+    suspend fun keepFor(t: Track) {
+        if (savedFile(t.url)?.exists() == true) return
+        get(t.url, t.title, t.artist, t.seconds)?.let { writeSaved(t.url, it) }
+    }
+
+    /** A download was removed: its lyrics go too. */
+    fun forget(url: String) {
+        savedFile(url)?.delete()
+    }
+
+    fun forgetAll() {
+        savedDir?.listFiles()?.forEach { it.delete() }
     }
 
     /* ---------------- No censoring ---------------- */
@@ -172,7 +225,16 @@ object LyricsRepo {
     /* ---------------- Per-song nudge ---------------- */
 
     private var prefs: android.content.SharedPreferences? = null
-    fun init(context: android.content.Context) { prefs = context.getSharedPreferences("lyrics_offset", android.content.Context.MODE_PRIVATE) }
+    fun init(context: android.content.Context) {
+        prefs = context.getSharedPreferences("lyrics_offset", android.content.Context.MODE_PRIVATE)
+        savedDir = java.io.File(context.filesDir, "lyrics").apply { mkdirs() }
+        // Songs downloaded before lyrics were kept with them: fetch theirs quietly in the background.
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO).launch {
+            kotlinx.coroutines.delay(8_000)
+            val songs = withContext(Dispatchers.Main) { Downloads.tracks.toList() }
+            for (t in songs) runCatching { keepFor(t) }
+        }
+    }
 
     /** How many milliseconds earlier (+) or later (−) this song's lyrics should show. Saved per song. */
     fun offset(url: String): Long = prefs?.getLong(url, 0L) ?: 0L
