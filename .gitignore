@@ -6,8 +6,3 @@ local.properties
 apk/
 .kotlin/
 
-# The YouTube Music watchdog
-monitor/.gradle/
-monitor/.kotlin/
-monitor/build/
-monitor-out/
