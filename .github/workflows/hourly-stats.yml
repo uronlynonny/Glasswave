@@ -48,8 +48,14 @@ jobs:
           a=$([ -n "$prevApk" ] && echo $((apk - prevApk)) || echo 0)
           [ "$a" -lt 0 ] && a=0
 
-          jq --argjson t "$now" --argjson last "$newLast" --argjson v "$v" --argjson d "$d" --argjson a "$a" --argjson apk "$apk" '
+          # Songs that wouldn't play for someone (reported by the app), kept for fixing later.
+          jq -s --argjson l "$last" '[.[] | select(.event=="message" and .time > $l and .title=="Song failed") | {t: .time, m: .message}]' msgs.jsonl > failed.json
+          f=$(jq 'length' failed.json)
+
+          jq --argjson t "$now" --argjson last "$newLast" --argjson v "$v" --argjson d "$d" --argjson a "$a" --argjson apk "$apk" \
+             --slurpfile failed failed.json '
             .updated = $t | .lastTime = $last
+            | .failedSongs = (((.failedSongs // []) + $failed[0]) | .[-500:])
             # Our own running total: old releases can be deleted (taking their counts with them).
             | .totals.apk = ((.totals.apk // .apkTotal // 0) + $a)
             | .apkTotal = $apk
@@ -69,7 +75,12 @@ jobs:
             | map(.d + (if .n > 1 then " ×\(.n)" else "" end)) | join("; ")' msgs.jsonl)
           [ -n "$devices" ] && msg="$msg
           Devices: $devices"
-          prio=$([ $((v + d + a)) -eq 0 ] && echo 2 || echo 3)
+          if [ "$f" -gt 0 ]; then
+            songs=$(jq -r '[.[].m | capture("^\"(?<s>[^\"]+)\"").s] | unique | .[:5] | join(", ")' failed.json)
+            msg="$msg
+          Songs that wouldn't play: $(pl $f report reports) ($songs)"
+          fi
+          prio=$([ $((v + d + a + f)) -eq 0 ] && echo 2 || echo 3)
           curl -fsS -X POST "https://ntfy.sh/$TOPIC" \
             -H "Title: Glasswave hourly summary" -H "Tags: bar_chart" -H "Priority: $prio" \
             -H "Click: https://uronlynonny.github.io/Glasswave/stats.html" \

@@ -11,6 +11,7 @@ import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
@@ -89,6 +90,88 @@ private class LocalFirstDataSource(private val online: DataSource, private val f
     override fun getResponseHeaders(): Map<String, List<String>> = active?.responseHeaders ?: emptyMap()
     override fun close() {
         try { active?.close() } finally { active = null }
+    }
+}
+
+/**
+ * YouTube slows a song down to playing speed when it's fetched in one long request, and sometimes
+ * cuts it off partway, so the song stops. Fetched in 2 MB pieces it comes at full speed (a whole song
+ * in about 3 seconds instead of 2 minutes). Only YouTube's audio servers are fetched this way.
+ */
+@OptIn(UnstableApi::class)
+private class ChunkedDataSource(private val upstream: DataSource) : DataSource {
+    private val unset = C.LENGTH_UNSET.toLong()
+    private var spec: DataSpec? = null
+    private var pos = 0L
+    /** Where this read ends (exclusive), or unset when not known. */
+    private var stop = unset
+    /** Bytes still to come from the open piece. */
+    private var left = 0L
+    private var readInPiece = 0L
+    /** The open piece reaches the end. */
+    private var last = false
+    private var direct = false
+
+    override fun addTransferListener(listener: TransferListener) = upstream.addTransferListener(listener)
+
+    override fun open(dataSpec: DataSpec): Long {
+        direct = dataSpec.uri.host?.endsWith("googlevideo.com") != true
+        if (direct) return upstream.open(dataSpec)
+        spec = dataSpec
+        pos = dataSpec.position
+        val songBytes = dataSpec.uri.getQueryParameter("clen")?.toLongOrNull()
+        stop = when {
+            dataSpec.length != unset -> dataSpec.position + dataSpec.length
+            songBytes != null && songBytes > pos -> songBytes
+            else -> unset
+        }
+        openPiece()
+        return if (stop != unset) stop - dataSpec.position else unset
+    }
+
+    private fun openPiece() {
+        val s = spec ?: throw IOException("Not open")
+        val want = if (stop != unset) minOf(PIECE, stop - pos) else PIECE
+        val got = upstream.open(s.subrange(pos - s.position, want))
+        left = if (got != unset) minOf(got, want) else want
+        last = (stop != unset && pos + want >= stop) || (got != unset && got < want)
+        readInPiece = 0
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        if (direct) return upstream.read(buffer, offset, length)
+        if (length == 0) return 0
+        if (left == 0L) {
+            if (last) return C.RESULT_END_OF_INPUT
+            upstream.close()
+            openPiece()
+        }
+        val n = upstream.read(buffer, offset, minOf(length.toLong(), left).toInt())
+        if (n == C.RESULT_END_OF_INPUT) {
+            // The piece ended early: carry on with the next one (unless nothing came at all).
+            if (last || stop == unset) return C.RESULT_END_OF_INPUT
+            if (readInPiece == 0L) throw IOException("YouTube sent an empty piece at byte $pos")
+            left = 0
+            return read(buffer, offset, length)
+        }
+        pos += n
+        left -= n
+        readInPiece += n
+        return n
+    }
+
+    override fun getUri(): Uri? = upstream.uri
+    override fun getResponseHeaders(): Map<String, List<String>> = upstream.responseHeaders
+    override fun close() {
+        try { upstream.close() } finally { spec = null }
+    }
+
+    class Factory(private val upstream: DataSource.Factory) : DataSource.Factory {
+        override fun createDataSource(): DataSource = ChunkedDataSource(upstream.createDataSource())
+    }
+
+    companion object {
+        const val PIECE = 2L * 1024 * 1024
     }
 }
 
@@ -181,7 +264,7 @@ class PlaybackService : MediaSessionService() {
             .setConnectTimeoutMs(8_000)
             .setReadTimeoutMs(15_000)
             .setAllowCrossProtocolRedirects(true)
-        val resolving = ResolvingDataSource.Factory(http, Resolver())
+        val resolving = ResolvingDataSource.Factory(ChunkedDataSource.Factory(http), Resolver())
         val cached = CacheDataSource.Factory()
             .setCache(AudioCache.get(this))
             .setUpstreamDataSourceFactory(resolving)
@@ -255,6 +338,8 @@ class PlaybackService : MediaSessionService() {
                     playingSince = 0
                 }
             }
+
+            override fun onPlayerError(error: PlaybackException) = recover(player, error)
 
             override fun onShuffleModeEnabledChanged(shuffle: Boolean) = maybeAutoplay(player)
             override fun onRepeatModeChanged(mode: Int) = maybeAutoplay(player)
@@ -380,6 +465,44 @@ class PlaybackService : MediaSessionService() {
         }
         Autoplay.added.clear()
         autoplayFor = null
+    }
+
+    /** The song that last stopped with an error, and how many times it's been picked back up. */
+    private var recoveringFor: String? = null
+    private var recoveries = 0
+
+    /**
+     * A song stopped with an error (usually YouTube dropping the connection). Look its audio up again
+     * and carry on from the same spot. If it still won't play after a few tries, tell nonny dev
+     * (see [Problems]) and move on to the next song.
+     */
+    private fun recover(p: ExoPlayer, error: PlaybackException) {
+        val item = p.currentMediaItem ?: return
+        if (recoveringFor != item.mediaId) {
+            recoveringFor = item.mediaId
+            recoveries = 0
+        }
+        if (!Problems.online(this)) {
+            Menus.say("No internet connection")
+            return
+        }
+        YtRepo.forgetStreamUrls()
+        if (recoveries < 3) {
+            recoveries++
+            main.postDelayed({
+                if (p.currentMediaItem?.mediaId == item.mediaId && p.playbackState == Player.STATE_IDLE) p.prepare()
+            }, 700L * recoveries)
+            return
+        }
+        Problems.songFailed(this, item, error, recoveries)
+        val title = item.mediaMetadata.title?.toString() ?: "this song"
+        if (p.hasNextMediaItem()) {
+            Menus.say("Couldn't play \"$title\", so it was skipped")
+            p.seekToNextMediaItem()
+            p.prepare()
+        } else {
+            Menus.say("Couldn't play \"$title\"")
+        }
     }
 
     private fun maybeAutoplay(p: Player) {

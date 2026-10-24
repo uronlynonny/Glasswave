@@ -12,8 +12,8 @@ android {
         applicationId = "com.glasswave.player"
         minSdk = 26
         targetSdk = 35
-        versionCode = 29
-        versionName = "0.16.3"
+        versionCode = 30
+        versionName = "0.16.4"
         // Only English text from libraries; keeps the APK small.
         resourceConfigurations += "en"
     }

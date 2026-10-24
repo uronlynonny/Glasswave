@@ -60,6 +60,8 @@ object Settings {
     var quality by mutableStateOf(Quality.HIGH); private set
     var skipSilence by mutableStateOf(false); private set
     var volumeLeveling by mutableStateOf(true); private set
+    /** Tell nonny dev when a song won't play (song, error, phone model, app version). On by default. */
+    var reportProblems by mutableStateOf(true); private set
     /** Automix: the end of one song plays under the start of the next, like a DJ blending them. Off by default. */
     var automix by mutableStateOf(false); private set
     /** How long two songs overlap when mixing, in seconds. */
@@ -92,6 +94,7 @@ object Settings {
         quality = enumPref("quality", Quality.HIGH)
         skipSilence = prefs.getBoolean("skip_silence", false)
         volumeLeveling = prefs.getBoolean("volume_leveling", true)
+        reportProblems = prefs.getBoolean("report_problems", true)
         automix = prefs.getBoolean("automix", false)
         mixSeconds = prefs.getInt("mix_seconds", 8)
         animations = prefs.getBoolean("animations", true)
@@ -131,6 +134,12 @@ object Settings {
     fun updateSkipSilence(on: Boolean) {
         skipSilence = on
         prefs.edit { putBoolean("skip_silence", on) }
+        listeners.forEach { it() }
+    }
+
+    fun updateReportProblems(on: Boolean) {
+        reportProblems = on
+        prefs.edit { putBoolean("report_problems", on) }
         listeners.forEach { it() }
     }
 
