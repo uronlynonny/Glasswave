@@ -126,7 +126,11 @@ fun HomeScreen(c: ScreenCtx) {
                     val ctx = androidx.compose.ui.platform.LocalContext.current
                     val p = Updater.progress
                     GText(
-                        if (p != null) "Downloading Glasswave ${r.version}… ${(p * 100).toInt()}%" else "Glasswave ${r.version} is ready · tap the glowing button to update",
+                        when {
+                            p != null -> "Downloading Glasswave ${r.version}… ${(p * 100).toInt()}%"
+                            Updater.ready != null -> "Glasswave ${r.version} is downloaded · tap to install"
+                            else -> "Glasswave ${r.version} is out · getting it ready…"
+                        },
                         13, CoverTint.accent, FontWeight.SemiBold, 1,
                         Modifier.padding(start = 20.dp, end = 16.dp, bottom = 6.dp).pressable(0.98f) { Updater.install(ctx) },
                     )

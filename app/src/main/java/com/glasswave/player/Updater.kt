@@ -47,11 +47,40 @@ object Updater {
     private lateinit var app: Context
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    /** The new version, already downloaded in the background and waiting to be installed. */
+    var ready by mutableStateOf<File?>(null)
+        private set
+    private var prefetching = false
+
     fun init(context: Context) {
         app = context.applicationContext
         lastChecked = app.getSharedPreferences("updater", Context.MODE_PRIVATE).getLong("last", 0L)
-        // Leftover installer files from last time.
-        File(app.cacheDir, "updates").listFiles()?.forEach { it.delete() }
+        // Installer files for versions that are now installed (or older) aren't needed any more.
+        File(app.cacheDir, "updates").listFiles()?.forEach { f ->
+            val v = f.name.removePrefix("Glasswave-").removeSuffix(".apk")
+            if (!f.name.endsWith(".apk") || !newer(v)) f.delete()
+        }
+    }
+
+    private fun fileFor(r: Release) = File(File(app.cacheDir, "updates"), "Glasswave-${r.version}.apk")
+
+    /** A complete download of [r], if there is one. */
+    private fun downloaded(r: Release): File? = fileFor(r).takeIf { it.exists() && it.length() > 0 && (r.size <= 0 || it.length() == r.size) }
+
+    /** Fetches the new version quietly as soon as it's found, so updating is a single tap. */
+    private fun prefetch(r: Release) {
+        downloaded(r)?.let { ready = it; return }
+        if (prefetching || progress != null) return
+        prefetching = true
+        scope.launch {
+            try {
+                ready = withContext(Dispatchers.IO) { download(r, showProgress = false) }
+            } catch (e: Exception) {
+                android.util.Log.w("Glasswave", "Background update download failed", e)
+            } finally {
+                prefetching = false
+            }
+        }
     }
 
     fun currentVersion(): String =
@@ -83,6 +112,7 @@ object Updater {
                 app.getSharedPreferences("updater", Context.MODE_PRIVATE).edit().putLong("last", lastChecked).apply()
                 if (r != null && newer(r.version)) {
                     available = r
+                    prefetch(r)
                 } else {
                     available = null
                     if (tell) status = "You're on the latest version (${currentVersion()})."
@@ -96,9 +126,9 @@ object Updater {
         }
     }
 
-    /** Checks at most every six hours, on launch. */
+    /** Checks at most every three hours, on launch. */
     fun checkIfDue() {
-        if (System.currentTimeMillis() - lastChecked > 6 * 3600_000L) check()
+        if (System.currentTimeMillis() - lastChecked > 3 * 3600_000L) check()
     }
 
     private fun fetchLatest(): Release? {
@@ -118,7 +148,20 @@ object Updater {
         return Release(json.optString("tag_name").removePrefix("v"), json.optString("body"), url, apk.optLong("size"))
     }
 
-    /** Downloads the update and opens Android's installer. Needs the "install unknown apps" permission once. */
+    private fun openInstaller(activity: Context, file: File) {
+        val uri = FileProvider.getUriForFile(app, app.packageName + ".files", file)
+        activity.startActivity(
+            Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+
+    /**
+     * Opens Android's installer for the new version: straight away when it was already downloaded
+     * in the background, otherwise after downloading it (with progress). Needs the "install unknown
+     * apps" permission once.
+     */
     fun install(activity: Context) {
         val r = available ?: return
         if (progress != null) return
@@ -132,17 +175,19 @@ object Updater {
             }
             return
         }
-        progress = 0f
         status = null
+        // Already downloaded in the background: one tap, straight to Install.
+        downloaded(r)?.let { f ->
+            ready = f
+            runCatching { openInstaller(activity, f) }.onFailure { status = "Couldn't open the installer. Try again." }
+            return
+        }
+        progress = 0f
         scope.launch {
             try {
                 val file = withContext(Dispatchers.IO) { download(r) }
-                val uri = FileProvider.getUriForFile(app, app.packageName + ".files", file)
-                activity.startActivity(
-                    Intent(Intent.ACTION_VIEW)
-                        .setDataAndType(uri, "application/vnd.android.package-archive")
-                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
+                ready = file
+                openInstaller(activity, file)
             } catch (e: Exception) {
                 android.util.Log.w("Glasswave", "Update failed", e)
                 status = "Couldn't download the update. Try again later."
@@ -152,9 +197,11 @@ object Updater {
         }
     }
 
-    private fun download(r: Release): File {
-        val dir = File(app.cacheDir, "updates").apply { mkdirs() }
-        val out = File(dir, "Glasswave-${r.version}.apk")
+    /** Downloads to a temporary file and only then names it, so a cut-off download is never installed. */
+    private fun download(r: Release, showProgress: Boolean = true): File {
+        val final = fileFor(r)
+        final.parentFile?.mkdirs()
+        val out = File(final.parentFile, final.name + ".part")
         val req = Request.Builder().url(r.apkUrl).header("User-Agent", "Glasswave").build()
         YtRepo.http.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) throw IOException("Download failed (${resp.code})")
@@ -169,14 +216,17 @@ object Updater {
                         if (n < 0) break
                         output.write(buf, 0, n)
                         done += n
-                        if (total != null) {
+                        if (showProgress && total != null) {
                             val p = done.toFloat() / total
                             scope.launch { progress = p }
                         }
                     }
                 }
             }
+            if (total != null && done != total) { out.delete(); throw IOException("Download cut off") }
         }
-        return out
+        final.delete()
+        if (!out.renameTo(final)) throw IOException("Couldn't save the update")
+        return final
     }
 }
