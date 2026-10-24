@@ -1,0 +1,53 @@
+# Every 30 minutes: the YouTube Music watchdog (monitor/) makes the same requests the app makes and
+# checks the replies still have what the app reads. Results go to status.json on the "monitor"
+# branch (shown on the site's status page). When something breaks or gets fixed, nonny dev gets an
+# ntfy alert with what users would notice and where the fix goes.
+name: YouTube Music monitor
+
+on:
+  schedule:
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: youtube-monitor
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NTFY_TOPIC: glasswave-nonny-re7mnsuqhuis
+      RUNNER: GitHub
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get the last results
+        run: |
+          git clone -q --depth 1 --branch monitor \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data \
+          || (mkdir data && cd data && git init -q -b monitor \
+              && git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git")
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.10.2
+
+      - name: Run the checks
+        run: gradle -p monitor run --no-daemon -q --console=plain --args="--prev data/status.json --out data/status.json"
+
+      - name: Save the results
+        run: |
+          cd data
+          git config user.name "glasswave-monitor"
+          git config user.email "glasswave-monitor@users.noreply.github.com"
+          git add status.json
+          git commit -qm "Checked $(date -u +'%Y-%m-%d %H:%M') UTC" && git push -q origin monitor
