@@ -3,12 +3,57 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Glasswave</title>
-<meta name="description" content="Glasswave: a light Android music player with a liquid glass look. Plays YouTube Music, syncs your YouTube Music and Spotify playlists, synced lyrics, Flow DJ. Made by nonny dev.">
+<title>Glasswave Music Player: free liquid glass music app for Android</title>
+<meta name="description" content="Glasswave is a free Android music player with a liquid glass design. Stream YouTube Music, sync your Spotify and YouTube Music playlists, synced lyrics, Automix and the Flow DJ. No ads. Made by nonny dev.">
+<meta name="keywords" content="Glasswave, Glasswave music player, Glasswave app, liquid glass music player, Android music player, YouTube Music player, Spotify playlist sync, synced lyrics, free music app, nonny dev">
+<meta name="author" content="nonny dev">
 <meta name="theme-color" content="#040604">
-<meta property="og:title" content="Glasswave: music, behind glass">
-<meta property="og:description" content="A light Android music player with a liquid glass look. Made by nonny dev.">
+<link rel="canonical" href="https://uronlynonny.github.io/Glasswave/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Glasswave">
+<meta property="og:url" content="https://uronlynonny.github.io/Glasswave/">
+<meta property="og:title" content="Glasswave: the liquid glass music player for Android">
+<meta property="og:description" content="Free. YouTube Music, Spotify playlist sync, synced lyrics, Automix. Made by nonny dev.">
+<meta property="og:image" content="https://uronlynonny.github.io/Glasswave/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Glasswave: the liquid glass music player for Android">
+<meta name="twitter:description" content="Free. YouTube Music, Spotify playlist sync, synced lyrics, Automix. Made by nonny dev.">
+<meta name="twitter:image" content="https://uronlynonny.github.io/Glasswave/og.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<!-- Tells search engines exactly what this is: a free Android music app by nonny dev. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Glasswave",
+      "alternateName": "Glasswave Music Player",
+      "description": "A free Android music player with a liquid glass design. Streams YouTube Music, syncs Spotify and YouTube Music playlists, shows synced lyrics, and blends songs with Automix.",
+      "applicationCategory": "MultimediaApplication",
+      "applicationSubCategory": "Music player",
+      "operatingSystem": "Android 8.0 or newer",
+      "url": "https://uronlynonny.github.io/Glasswave/",
+      "downloadUrl": "https://github.com/uronlynonny/Glasswave/releases/latest/download/Glasswave.apk",
+      "image": "https://uronlynonny.github.io/Glasswave/og.png",
+      "fileSize": "3.4 MB",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "author": { "@type": "Person", "name": "nonny dev", "url": "https://github.com/uronlynonny" }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        { "@type": "Question", "name": "Is Glasswave free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Glasswave is free, with no ads and no account needed to start listening." } },
+        { "@type": "Question", "name": "Can Glasswave play my Spotify playlists?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Sign in to Spotify or paste a playlist link, and Glasswave plays each song from YouTube Music." } },
+        { "@type": "Question", "name": "Which phones does Glasswave work on?", "acceptedAnswer": { "@type": "Answer", "text": "Any Android phone or tablet on Android 8.0 or newer. The download is about 3 MB." } },
+        { "@type": "Question", "name": "Who made Glasswave?", "acceptedAnswer": { "@type": "Answer", "text": "Glasswave is made by nonny dev." } }
+      ]
+    }
+  ]
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -179,6 +224,14 @@ footer .sig{font-family:Syne;font-weight:700;font-size:18px;color:var(--ink);mar
 .hero h1 span:nth-child(2){animation-delay:.12s}
 @keyframes rise{to{opacity:1;transform:none}}
 
+/* ---------- FAQ ---------- */
+.faq details{border-radius:20px;margin-top:12px;padding:0 22px}
+.faq summary{cursor:pointer;list-style:none;padding:20px 0;font-weight:600;font-size:17px;display:flex;justify-content:space-between;gap:12px}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";color:var(--cyan);font-size:22px;line-height:1;transition:transform .3s}
+.faq details[open] summary::after{transform:rotate(45deg)}
+.faq details p{color:var(--dim);padding:0 0 20px;max-width:640px}
+
 /* ---------- Phones ---------- */
 @media (max-width:720px){
   section{padding:68px 18px}
@@ -322,6 +375,17 @@ footer .sig{font-family:Syne;font-weight:700;font-size:18px;color:var(--ink);mar
     <div class="stat glass rv"><b data-count="1312">0</b><small>plays</small></div>
     <div class="stat glass rv"><b data-count="87">0</b><small>artists discovered</small></div>
   </div>
+</section>
+
+<section id="faq" class="faq">
+  <div class="rv">
+    <span class="kicker">Questions</span>
+    <h2>Good to <span class="grad">know.</span></h2>
+  </div>
+  <details class="glass rv"><summary>Is Glasswave free?</summary><p>Yes. Glasswave is free, with no ads and no account needed to start listening.</p></details>
+  <details class="glass rv"><summary>Can Glasswave play my Spotify playlists?</summary><p>Yes. Sign in to Spotify or paste a playlist link, and Glasswave plays each song from YouTube Music.</p></details>
+  <details class="glass rv"><summary>Which phones does Glasswave work on?</summary><p>Any Android phone or tablet on Android 8.0 or newer. The download is about 3 MB.</p></details>
+  <details class="glass rv"><summary>Who made Glasswave?</summary><p>Glasswave is made by nonny dev.</p></details>
 </section>
 
 <section id="download">

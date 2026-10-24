@@ -1,7 +1,10 @@
-# Glasswave
+# Glasswave Music Player
 
-A light Android music player with a liquid glass look. It plays from YouTube Music
-and syncs your playlists from YouTube Music and Spotify. Built with Kotlin, Jetpack Compose and Media3.
+![Glasswave, the liquid glass music player for Android](docs/og.png)
+
+**Glasswave** is a free Android music player with a liquid glass look. It plays from YouTube Music,
+syncs your playlists from YouTube Music and Spotify, shows synced lyrics, and blends songs with Automix.
+No ads. Built with Kotlin, Jetpack Compose and Media3.
 
 **[Download the latest APK](https://github.com/uronlynonny/Glasswave/releases/latest/download/Glasswave.apk)** ·
 **[Website](https://uronlynonny.github.io/Glasswave/)** · Android 8.0+

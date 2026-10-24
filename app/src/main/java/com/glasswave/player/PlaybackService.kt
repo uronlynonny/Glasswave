@@ -58,6 +58,11 @@ object Autoplay {
     val added: MutableSet<String> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
 }
 
+/** Songs you queued yourself ("Play next", "Add to queue"). Automix never reorders these. */
+object Queued {
+    val ids: MutableSet<String> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
+}
+
 /** Reads a downloaded song from its file; everything else goes through the cache and the internet. */
 @OptIn(UnstableApi::class)
 private class LocalFirstDataSource(private val online: DataSource, private val file: FileDataSource) : DataSource {
@@ -219,6 +224,8 @@ class PlaybackService : MediaSessionService() {
                 if (mixing && !mixOwnTransition) endMix(player)
                 mixOwnTransition = false
                 if (!mixing) mixPreparedFor = null
+                mediaItem?.mediaId?.let { Queued.ids.remove(it) }
+                if (Settings.automix) pickNextForMix(player)
                 logPlay(player)
                 listening = mediaItem
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) SleepTimer.onSongEnded(player)
@@ -404,7 +411,10 @@ class PlaybackService : MediaSessionService() {
                 }
                 val fresh = tracks
                     .filter { it.url !in queued && keys.add(YtRepo.songKey(it.title, it.artist)) }
-                    .take(25).map { it.toMediaItem() }
+                    .take(25)
+                    // With Automix on, the similar songs come in a fresh order each time.
+                    .let { if (Settings.automix) it.shuffled() else it }
+                    .map { it.toMediaItem() }
                 if (fresh.isNotEmpty() && Settings.autoplay) {
                     Autoplay.added += fresh.map { it.mediaId }
                     p.addMediaItems(fresh)
@@ -521,6 +531,27 @@ class PlaybackService : MediaSessionService() {
             return true
         }
         return false
+    }
+
+    /**
+     * With Automix on, the next song isn't simply the next one in the list: like a DJ, it's picked
+     * at random from the next few, preferring a different artist from the one playing. Everything
+     * still gets played, just not in an order you can see coming. Songs you queued yourself, and
+     * shuffle (already random), are left alone.
+     */
+    private fun pickNextForMix(p: Player) {
+        if (p.shuffleModeEnabled || p.repeatMode == Player.REPEAT_MODE_ONE) return
+        val next = p.currentMediaItemIndex + 1
+        val count = p.mediaItemCount
+        if (next >= count - 1) return
+        if (p.getMediaItemAt(next).mediaId in Queued.ids) return
+        fun artist(i: Int) = p.getMediaItemAt(i).mediaMetadata.artist?.toString()?.substringBefore(",")?.trim()?.lowercase() ?: ""
+        val now = artist(p.currentMediaItemIndex)
+        val window = (next until minOf(count, next + 8)).filter { p.getMediaItemAt(it).mediaId !in Queued.ids }
+        if (window.size < 2) return
+        val pool = window.filter { artist(it) != now }.ifEmpty { window }
+        val pick = pool.random()
+        if (pick != next) p.moveMediaItem(pick, next)
     }
 
     private fun endMix(p: Player) {

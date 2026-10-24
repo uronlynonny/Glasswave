@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /stats.html
+
+Sitemap: https://uronlynonny.github.io/Glasswave/sitemap.xml

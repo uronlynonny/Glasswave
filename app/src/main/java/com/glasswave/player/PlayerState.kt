@@ -161,6 +161,7 @@ class PlayerState(private val context: Context) {
     fun addToQueue(t: Track) {
         val c = controller ?: return
         if (c.mediaItemCount == 0) return playList(listOf(t), 0)
+        Queued.ids += t.url
         c.addMediaItem(queueEnd(c), t.toMediaItem())
     }
 
@@ -168,6 +169,7 @@ class PlayerState(private val context: Context) {
     fun playNextTrack(t: Track) {
         val c = controller ?: return
         if (c.mediaItemCount == 0) return playList(listOf(t), 0)
+        Queued.ids += t.url
         c.addMediaItem(c.currentMediaItemIndex + 1, t.toMediaItem())
     }
 
@@ -191,6 +193,7 @@ class PlayerState(private val context: Context) {
         if (tracks.isEmpty()) return
         error = null
         Autoplay.added.clear()
+        Queued.ids.clear()
         if (!fromFlow) Flow.stop()
         c.shuffleModeEnabled = shuffle
         val start = if (shuffle) tracks.indices.random() else index
