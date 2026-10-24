@@ -304,7 +304,8 @@ private fun ago(t: Long): String {
 fun LyricsButton(playing: Boolean, accent: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val fill = if (playing && Settings.animations) {
         val t = rememberInfiniteTransition(label = "lyricsBtn")
-        t.animateFloat(0f, 1f, infiniteRepeatable(tween(1800), RepeatMode.Restart), label = "fill")
+        // 0..1 fills the line, 1..1.2 fades the filled part away, so it never snaps back to empty.
+        t.animateFloat(0f, 1.2f, infiniteRepeatable(tween(2200, easing = androidx.compose.animation.core.LinearEasing), RepeatMode.Restart), label = "fill")
     } else null
     Box(
         modifier
@@ -324,13 +325,15 @@ fun LyricsButton(playing: Boolean, accent: Color, onClick: () -> Unit, modifier:
                     val end = androidx.compose.ui.geometry.Offset(left + w * len, h * y)
                     drawLine(Color.White.copy(alpha = if (i == 0) 0.45f else 0.8f), start, end, stroke, androidx.compose.ui.graphics.StrokeCap.Round)
                     if (i == 0) {
-                        val k = fill?.value ?: 1f
-                        drawLine(accent, start, androidx.compose.ui.geometry.Offset(left + w * len * k, h * y), stroke, androidx.compose.ui.graphics.StrokeCap.Round)
+                        val v = fill?.value ?: 1f
+                        // Ease the fill so it starts and lands softly.
+                        val k = v.coerceAtMost(1f).let { it * it * (3 - 2 * it) }
+                        val fade = if (v > 1f) 1f - (v - 1f) / 0.2f else 1f
+                        if (k > 0.01f && fade > 0f) {
+                            drawLine(accent.copy(alpha = accent.alpha * fade), start, androidx.compose.ui.geometry.Offset(left + w * len * k, h * y), stroke, androidx.compose.ui.graphics.StrokeCap.Round)
+                        }
                     }
                 }
-                // A small note at the end of the last line.
-                drawCircle(accent, h * 0.07f, androidx.compose.ui.geometry.Offset(left + w * 0.38f, h * 0.66f))
-                drawLine(accent, androidx.compose.ui.geometry.Offset(left + w * 0.38f + h * 0.06f, h * 0.66f), androidx.compose.ui.geometry.Offset(left + w * 0.38f + h * 0.06f, h * 0.44f), stroke * 0.8f, androidx.compose.ui.graphics.StrokeCap.Round)
             },
     )
 }
