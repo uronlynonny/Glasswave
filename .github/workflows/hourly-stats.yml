@@ -55,8 +55,9 @@ jobs:
           ' "$F" > tmp.json && mv tmp.json "$F"
 
           tv=$(jq '.totals.visits' "$F"); td=$(jq '.totals.siteDownloads' "$F")
-          msg="Last hour: $v visits, $d downloads from the site, $a APK downloads in total (incl. app updates).
-          All time: $tv visits, $td site downloads, $apk APK downloads."
+          pl() { [ "$1" -eq 1 ] && echo "$1 $2" || echo "$1 $3"; }
+          msg="Last hour: $(pl $v visit visits), $(pl $d download downloads) from the site, $(pl $a 'APK download' 'APK downloads') in total (incl. app updates).
+          All time: $(pl $tv visit visits), $(pl $td 'site download' 'site downloads'), $(pl $apk 'APK download' 'APK downloads')."
           prio=$([ $((v + d + a)) -eq 0 ] && echo 2 || echo 3)
           curl -fsS -X POST "https://ntfy.sh/$TOPIC" \
             -H "Title: Glasswave hourly summary" -H "Tags: bar_chart" -H "Priority: $prio" \
