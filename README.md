@@ -9,9 +9,6 @@ No ads. Built with Kotlin, Jetpack Compose and Media3.
 **[Download the latest APK](https://github.com/uronlynonny/Glasswave/releases/latest/download/Glasswave.apk)** ·
 **[Website](https://uronlynonny.github.io/Glasswave/)** · Android 8.0+
 
-**Windows:** [Download Glasswave for Windows](https://github.com/uronlynonny/Glasswave/releases/download/windows/Glasswave-Windows.msi)
-(Windows 10 and 11). Install once: it updates itself after that.
-
 Glasswave is made by **nonny dev**. Only builds from this repository's Releases are official: copies that
 have been changed or re-signed by someone else won't run.
 
@@ -32,17 +29,6 @@ have been changed or re-signed by someone else won't run.
 - Background playback with notification and lock-screen controls, shuffle and repeat.
 - **Liquid glass**: the floating tab bar, mini player and buttons bend and blur what's behind them, with a
   bright rim. Full effect on Android 13+, blur only on Android 12, plain frosted glass on older phones.
-
-## Glasswave for Windows
-A desktop version built from the same code with Compose for Desktop (in `desktop/`, see its README).
-- **Updates itself**: new versions download in the background from the `windows` release and install
-  when you restart or close the app. It installs for your user only, so there's no admin prompt.
-- **Made for a mouse**: an icon sidebar that opens on hover, a player bar along the bottom, a see-through
-  glass queue on the right, song menus that open where you click, and hover-to-play on songs and cards.
-- **Big lyrics**: Apple Music-style, with the cover large beside them.
-- **Keyboard**: Space plays and pauses, Ctrl+arrows skip, media keys work, Esc goes back.
-- **Player styles**: Card or Glass panel.
-- **Light**: about 300 MB of memory, and the window only redraws when something moves.
 
 ## Kept light on memory
 - Release build is shrunk and optimized (R8).
