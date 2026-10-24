@@ -179,6 +179,43 @@ footer .sig{font-family:Syne;font-weight:700;font-size:18px;color:var(--ink);mar
 .hero h1 span:nth-child(2){animation-delay:.12s}
 @keyframes rise{to{opacity:1;transform:none}}
 
+/* ---------- Phones ---------- */
+@media (max-width:720px){
+  section{padding:68px 18px}
+  .hero{min-height:auto;padding-top:100px;gap:30px}
+  .hero h1{font-size:clamp(60px,20vw,96px)}
+  .hero .sub{font-size:16px;margin:18px auto 24px}
+  .btns{flex-direction:column;align-items:stretch;max-width:320px;margin:0 auto}
+  .btn{justify-content:center;padding:15px 22px}
+  .meta{margin-top:16px}
+  /* The phone stands up straight, smaller, with the chips in two neat rows under it. */
+  .stage{display:grid;grid-template-columns:1fr 1fr;justify-items:center;gap:8px;perspective:none}
+  .phone{grid-column:1/-1;width:min(236px,64vw);transform:none!important;border-radius:40px;padding:9px;margin-bottom:10px}
+  .screen{border-radius:32px}
+  .screen .ui{padding:34px 15px 16px}
+  .track{margin-top:14px}.track b{font-size:17px}.track small{font-size:12px}
+  .ctrls .play{width:52px;height:52px}
+  .chip{position:static;animation:none;font-size:12px;padding:9px 12px;border-radius:14px;width:100%;justify-content:center;white-space:normal;text-align:center}
+  .marquee{padding:16px 0}
+  .marquee span{font-size:24px}
+  h2{font-size:clamp(34px,10.5vw,48px);margin:12px 0 14px}
+  .lead{font-size:16px}
+  .lyrics{gap:28px}
+  .lyr-box{padding:26px 22px;min-height:300px;border-radius:24px}
+  .line{font-size:clamp(20px,6.2vw,26px);margin:10px 0}
+  .grid{margin-top:32px;gap:12px}
+  .card{min-height:0;padding:22px;border-radius:22px}
+  .card h3{font-size:20px;margin:16px 0 6px}
+  .orb{width:min(230px,60vw);margin-top:36px}
+  .pills{margin-top:30px;gap:8px}.pills span{padding:8px 14px;font-size:13px}
+  .stats{margin-top:30px;gap:12px}.stat{padding:22px}
+  .cta{padding:52px 20px;border-radius:30px;margin-top:10px}
+  .cta::after{border-radius:28px}
+  .steps{flex-direction:column;align-items:center;gap:8px}
+  footer{padding:50px 18px 40px}
+  .cursor{display:none}
+}
+
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
   .rv,.hero h1 span{opacity:1;transform:none}
@@ -411,7 +448,8 @@ footer .sig{font-family:Syne;font-weight:700;font-size:18px;color:var(--ink);mar
   let tx = innerWidth / 2, ty = innerHeight / 2, x = tx, y = ty;
   addEventListener('pointermove', e => {
     tx = e.clientX; ty = e.clientY;
-    if (phone && !still) {
+    // Tilting follows a mouse only; on a touch screen it just made the phone wobble while scrolling.
+    if (phone && !still && e.pointerType === 'mouse' && innerWidth > 720) {
       const r = phone.getBoundingClientRect();
       const dx = (e.clientX - (r.left + r.width / 2)) / innerWidth, dy = (e.clientY - (r.top + r.height / 2)) / innerHeight;
       phone.style.transform = `rotateY(${-14 + dx * 22}deg) rotateX(${6 - dy * 16}deg)`;
@@ -424,7 +462,7 @@ footer .sig{font-family:Syne;font-weight:700;font-size:18px;color:var(--ink);mar
     c.addEventListener('pointermove', e => {
       const r = c.getBoundingClientRect(), px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
       c.style.setProperty('--mx', px * 100 + '%'); c.style.setProperty('--my', py * 100 + '%');
-      if (!still) c.style.transform = `perspective(900px) rotateX(${(.5 - py) * 7}deg) rotateY(${(px - .5) * 9}deg) translateY(-4px)`;
+      if (!still && e.pointerType === 'mouse') c.style.transform = `perspective(900px) rotateX(${(.5 - py) * 7}deg) rotateY(${(px - .5) * 9}deg) translateY(-4px)`;
     });
     c.addEventListener('pointerleave', () => c.style.transform = '');
   });
