@@ -182,7 +182,12 @@ a{color:var(--lime)}
     render();
   }));
 
-  fetch(SRC + '?t=' + Date.now()).then(r => r.json()).then(j => { data = j; render(); })
+  // GitHub's API gives the newest copy straight away; the raw file link can lag a few minutes.
+  const API = 'https://api.github.com/repos/uronlynonny/Glasswave/contents/stats.json?ref=stats';
+  fetch(API, { headers: { Accept: 'application/vnd.github.raw+json' } })
+    .then(r => { if (!r.ok) throw 0; return r.json(); })
+    .catch(() => fetch(SRC).then(r => r.json()))
+    .then(j => { data = j; render(); })
     .catch(() => { $('updated').textContent = "Couldn't load the stats right now. Try again in a minute."; });
 })();
 </script>
