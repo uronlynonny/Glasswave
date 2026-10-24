@@ -90,8 +90,8 @@ fun Modifier.pressable(scale: Float = 0.94f, enabled: Boolean = true, onClick: (
         .clickable(interactionSource = null, indication = PressScale(1f - (1f - maxOf(scale, 0.95f)) * 0.5f), enabled = enabled, onClick = onClick)
 
 /**
- * Feedback for anything you can click: a soft highlight while the mouse is over it, and a quick,
- * small press. Round for small square buttons, softly rounded for rows and cards.
+ * Feedback for anything you can click: a quick, small press. No glow on hover (the hand cursor
+ * shows it's clickable).
  */
 private data class PressScale(val scale: Float) : androidx.compose.foundation.IndicationNodeFactory {
     override fun create(interactionSource: androidx.compose.foundation.interaction.InteractionSource): androidx.compose.ui.node.DelegatableNode =
@@ -103,7 +103,6 @@ private class PressScaleNode(
     private val target: Float,
 ) : Modifier.Node(), androidx.compose.ui.node.DrawModifierNode {
     private val s = androidx.compose.animation.core.Animatable(1f)
-    private val hover = androidx.compose.animation.core.Animatable(0f)
 
     override fun onAttach() {
         coroutineScope.launch {
@@ -114,22 +113,12 @@ private class PressScaleNode(
                     is androidx.compose.foundation.interaction.PressInteraction.Release,
                     is androidx.compose.foundation.interaction.PressInteraction.Cancel ->
                         launch { if (Settings.animations) s.animateTo(1f, tween(110, easing = Motion.ease)) else s.snapTo(1f) }
-                    is androidx.compose.foundation.interaction.HoverInteraction.Enter ->
-                        launch { hover.animateTo(1f, tween(90)) }
-                    is androidx.compose.foundation.interaction.HoverInteraction.Exit ->
-                        launch { hover.animateTo(0f, tween(160)) }
                 }
             }
         }
     }
 
     override fun androidx.compose.ui.graphics.drawscope.ContentDrawScope.draw() {
-        val h = hover.value
-        if (h > 0.001f) {
-            val small = size.minDimension < 72.dp.toPx() && kotlin.math.abs(size.width - size.height) < 8.dp.toPx()
-            val r = if (small) size.minDimension / 2 else minOf(12.dp.toPx(), size.minDimension / 2)
-            drawRoundRect(Color.White.copy(alpha = 0.08f * h), cornerRadius = androidx.compose.ui.geometry.CornerRadius(r))
-        }
         val v = s.value
         if (v == 1f) {
             drawContent()

@@ -75,7 +75,7 @@ import kotlinx.coroutines.withContext
 private enum class SettingsPage(val title: String, val subtitle: String, val icon: ImageVector, val color: Color) {
     LOOK("Look", "Player style, buttons, music videos, glass", Icons.Rounded.Palette, Color(0xFFAF52DE)),
     AUDIO("Player & audio", "Quality, crossfade, autoplay, equalizer", Icons.Rounded.MusicNote, Color(0xFFFF375F)),
-    ACCOUNTS("Accounts", "YouTube Music and Spotify", Icons.Rounded.AccountCircle, Color(0xFF0A84FF)),
+    ACCOUNTS("Accounts", "YouTube Music, Spotify and Discord", Icons.Rounded.AccountCircle, Color(0xFF0A84FF)),
     SYNC("Sync", "Bring your playlists in", Icons.Rounded.Sync, Color(0xFF30D158)),
     STORAGE("Storage & privacy", "Downloads, saved songs, history", Icons.Rounded.Storage, Color(0xFFFF9F0A)),
     ABOUT("About", "Version and credits", Icons.Rounded.Info, Color(0xFF8E8E93)),
@@ -319,6 +319,15 @@ private fun Audio(c: ScreenCtx) {
 @Composable
 private fun AccountsPage(c: ScreenCtx) {
     val vm = c.vm
+    if (Discord.available) {
+        Group("Discord") {
+            SwitchRow(
+                "Show what you're listening to",
+                "Your Discord profile shows the song, artist and cover while you play, like Spotify. Needs the Discord app open on this PC.",
+                Settings.discord,
+            ) { Settings.updateDiscord(it) }
+        }
+    }
     Group("YouTube Music") {
         Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
             GText(

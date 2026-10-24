@@ -83,6 +83,9 @@ object Settings {
     var frameRate by mutableStateOf(FrameRate.OFF); private set
     /** Smoother everything at the cost of battery: every-frame motion, more preloading, sustained CPU. */
     var highPerformance by mutableStateOf(false); private set
+    /** Show what's playing on your Discord profile. */
+    var discord by mutableStateOf(true); private set
+    fun updateDiscord(on: Boolean) { discord = on; prefs.edit { putBoolean("discord", on) } }
 
     private inline fun <reified E : Enum<E>> enumPref(key: String, def: E): E =
         runCatching { enumValueOf<E>(prefs.getString(key, null) ?: def.name) }.getOrDefault(def)
@@ -111,6 +114,7 @@ object Settings {
         frameRate = enumPref("frame_rate", FrameRate.OFF)
         // No performance mode on PC: it always runs the efficient way.
         highPerformance = false
+        discord = prefs.getBoolean("discord", true)
     }
 
     fun updateFrameRate(f: FrameRate) { frameRate = f; prefs.edit { putString("frame_rate", f.name) } }

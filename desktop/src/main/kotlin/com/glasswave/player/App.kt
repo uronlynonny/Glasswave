@@ -93,6 +93,14 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
         }
     }
 
+    // Your Discord status ("Listening to Glasswave"), kept in step with the player.
+    LaunchedEffect(Unit) {
+        while (true) {
+            Discord.update(ps)
+            kotlinx.coroutines.delay(2000)
+        }
+    }
+
     // Keep the progress bars moving while a song plays.
     LaunchedEffect(ps.playing) {
         while (ps.playing) {

@@ -158,12 +158,13 @@ fun main() {
         val ps = remember { PlayerState().also { it.connect() } }
         val vm = remember { MainViewModel() }
         val quit = ::exitApplication
-        remember { Updater.exitApp = { ps.release(); quit() } }
+        remember { Updater.exitApp = { Discord.shutdown(); ps.release(); quit() } }
         // Open centred, and small enough to sit above the taskbar on any screen.
         val state = rememberWindowState(size = startSize(), position = WindowPosition(androidx.compose.ui.Alignment.Center))
         Window(
             onCloseRequest = {
                 // A downloaded update installs quietly as the app closes.
+                Discord.shutdown()
                 Updater.installOnExit()
                 ps.release()
                 exitApplication()
