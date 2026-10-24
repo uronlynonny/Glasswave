@@ -5,6 +5,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -348,13 +350,14 @@ private fun TabBar(vm: MainViewModel, page: Backdrop) {
         val w = maxWidth / tabs.size
         // The highlight pill slides to the selected tab.
         val x by animateDpAsState(w * vm.tab.ordinal, smooth(200), label = "pill")
+        val pill by animateColorAsState(tabShade(CoverTint.accent).copy(alpha = 0.17f), tween(450), label = "pillColor")
         Box(
             Modifier
                 .offset(x = x)
                 .width(w)
                 .fillMaxHeight()
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.13f)),
+                .background(pill),
         )
         Row(Modifier.fillMaxSize()) {
             tabs.forEach { t -> TabItem(t, vm.tab == t) { vm.selectTab(t) } }
@@ -362,9 +365,25 @@ private fun TabBar(vm: MainViewModel, page: Backdrop) {
     }
 }
 
+/** The cover colour, adjusted for the tab bar: lighter if it's dark, a touch darker if it's glaring. */
+private fun tabShade(c: Color): Color {
+    val l = c.luminance()
+    return when {
+        l < 0.35f -> readable(c)
+        l > 0.8f -> androidx.compose.ui.graphics.lerp(c, Color.Black, 0.2f)
+        else -> c
+    }
+}
+
 @Composable
 private fun RowScope.TabItem(tab: Tab, selected: Boolean, onClick: () -> Unit) {
-    val color by animateColorAsState(if (selected) Accent else Color.White.copy(alpha = 0.7f), smooth(200), label = "tabColor")
+    // The selected tab takes the cover's colour: lifted when the cover is dark, deepened when it's
+    // very bright, so it always reads on the glass. The others get a faint hint of it.
+    val tint = tabShade(CoverTint.accent)
+    val color by animateColorAsState(
+        if (selected) tint else androidx.compose.ui.graphics.lerp(Color.White, tint, 0.25f).copy(alpha = 0.72f),
+        tween(450), label = "tabColor",
+    )
    val icon = when (tab) {
         Tab.HOME -> if (selected) Icons.Rounded.Home else Icons.Outlined.Home
         Tab.SEARCH -> Icons.Rounded.Search
