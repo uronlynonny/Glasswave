@@ -1,11 +1,11 @@
 {
-  "lastTime": 1792832531,
+  "lastTime": 1792836686,
   "totals": {
-    "visits": 35,
-    "siteDownloads": 13,
-    "apk": 27
+    "visits": 46,
+    "siteDownloads": 19,
+    "apk": 38
   },
-  "apkTotal": 0,
+  "apkTotal": 11,
   "hours": [
     {
       "t": 1792763089,
@@ -144,7 +144,13 @@
       "v": 1,
       "d": 0,
       "a": 0
+    },
+    {
+      "t": 1792837503,
+      "v": 11,
+      "d": 6,
+      "a": 11
     }
   ],
-  "updated": 1792833952
+  "updated": 1792837503
 }
