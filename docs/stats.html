@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glasswave Stats</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#040604">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#040604; --panel:#0b100a; --line:rgba(243,248,236,.1); --grid:rgba(243,248,236,.07);
+  --ink:#f3f8ec; --dim:rgba(243,248,236,.64); --faint:rgba(243,248,236,.4);
+  --lime:#c6f432; --green:#2fd27a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;line-height:1.45;min-height:100vh;
+  background-image:radial-gradient(60vmax 40vmax at 10% -10%,rgba(198,244,50,.12),transparent 60%),radial-gradient(50vmax 40vmax at 100% 0,rgba(47,210,122,.1),transparent 60%)}
+main{max-width:1000px;margin:0 auto;padding:40px 16px 70px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+header img{width:40px;height:40px;border-radius:12px}
+h1{font-family:Syne;font-weight:800;font-size:clamp(28px,5vw,40px);letter-spacing:-.02em}
+.sub{color:var(--dim);font-size:14px;margin-bottom:28px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:18px}
+.tile b{display:block;font-family:Syne;font-weight:800;font-size:clamp(30px,5vw,44px);line-height:1.05}
+.tile span{color:var(--dim);font-size:13px}
+.tile small{display:block;color:var(--faint);font-size:12px;margin-top:6px}
+@media (max-width:720px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:20px 18px 14px;margin-bottom:16px;position:relative}
+.card h2{font-size:16px;font-weight:600}
+.card p{color:var(--faint);font-size:12px;margin:2px 0 12px}
+.row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.seg{display:flex;gap:4px;background:rgba(243,248,236,.06);border-radius:999px;padding:3px}
+.seg button{border:0;background:none;color:var(--dim);font:500 13px Inter;padding:6px 12px;border-radius:999px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--lime);color:#071006}
+svg{display:block;width:100%;height:auto;overflow:visible}
+.axis{fill:var(--faint);font-size:11px}
+.tip{position:absolute;pointer-events:none;background:#141c12;border:1px solid var(--line);border-radius:10px;padding:7px 10px;font-size:12px;color:var(--ink);white-space:nowrap;opacity:0;transition:opacity .12s;transform:translate(-50%,-110%)}
+.tip b{font-weight:600}
+details{margin-top:6px}
+summary{cursor:pointer;color:var(--dim);font-size:13px;padding:6px 0}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+th,td{text-align:right;padding:6px 8px;border-bottom:1px solid var(--grid)}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--faint);font-weight:500}
+.note{color:var(--faint);font-size:12px;margin-top:22px}
+.empty{color:var(--dim);padding:30px 0;text-align:center}
+a{color:var(--lime)}
+</style>
+</head>
+<body>
+<main>
+  <header><img src="icon.svg" alt=""><h1>Glasswave stats</h1></header>
+  <p class="sub" id="updated">Loading…</p>
+
+  <div class="tiles">
+    <div class="tile"><b id="tVisits">–</b><span>site visits</span><small id="tVisits24"></small></div>
+    <div class="tile"><b id="tSite">–</b><span>downloads from the site</span><small id="tSite24"></small></div>
+    <div class="tile"><b id="tApk">–</b><span>APK downloads in total</span><small id="tApk24"></small></div>
+    <div class="tile"><b id="tRate">–</b><span>visitors who downloaded</span><small>site downloads ÷ visits</small></div>
+  </div>
+
+  <div class="row" style="margin-bottom:12px">
+    <div></div>
+    <div class="seg" role="group" aria-label="Time range">
+      <button data-h="24" aria-pressed="true">24 hours</button>
+      <button data-h="168" aria-pressed="false">7 days</button>
+      <button data-h="720" aria-pressed="false">30 days</button>
+    </div>
+  </div>
+
+  <div class="card"><h2>Visits</h2><p id="visitsNote">People opening the website, per hour</p><div id="cVisits"></div><div class="tip"></div></div>
+  <div class="card"><h2>Downloads</h2><p>All APK downloads, per hour (site button, releases page and in-app updates)</p><div id="cDownloads"></div><div class="tip"></div></div>
+
+  <details>
+    <summary>Show as a table</summary>
+    <table><thead><tr><th>Hour</th><th>Visits</th><th>Site downloads</th><th>All APK downloads</th></tr></thead><tbody id="tbl"></tbody></table>
+  </details>
+
+  <p class="note">Updated every hour. Visits count each person once a day. Totals start from when stats began.
+    <a href="./">Back to Glasswave</a></p>
+</main>
+
+<script>
+(() => {
+  const SRC = 'https://raw.githubusercontent.com/uronlynonny/Glasswave/stats/stats.json';
+  let data = null, range = 24;
+  const $ = id => document.getElementById(id);
+  const fmt = n => n.toLocaleString();
+  const hourLabel = t => new Date(t * 1000).toLocaleString([], { weekday: 'short', hour: 'numeric' });
+
+  // Hourly rows grouped into bars: hours for 24h, 6-hour blocks for 7 days, days for 30 days.
+  function buckets(hours, h) {
+    const now = Date.now() / 1000, from = now - h * 3600;
+    const size = h <= 24 ? 3600 : h <= 168 ? 6 * 3600 : 86400;
+    const out = [];
+    for (let s = Math.floor(from / size) * size; s <= now; s += size) out.push({ t: s, v: 0, d: 0, a: 0 });
+    for (const r of hours) {
+      if (r.t < from) continue;
+      const i = Math.min(out.length - 1, Math.floor((r.t - out[0].t) / size));
+      if (i >= 0) { out[i].v += r.v; out[i].d += r.d; out[i].a += r.a; }
+    }
+    return { rows: out, size };
+  }
+
+  function chart(el, rows, key, color, label, size) {
+    const W = 900, H = 220, L = 30, B = 24, T = 8;
+    const max = Math.max(1, ...rows.map(r => r[key]));
+    const step = Math.max(1, Math.ceil(max / 4));
+    const top = step * 4;
+    const bw = (W - L) / rows.length;
+    const y = v => T + (H - T - B) * (1 - v / top);
+    let g = '';
+    for (let k = 0; k <= 4; k++) {
+      const v = k * step, yy = y(v);
+      g += `<line x1="${L}" x2="${W}" y1="${yy}" y2="${yy}" stroke="var(--grid)"/>` +
+           `<text class="axis" x="${L - 6}" y="${yy + 4}" text-anchor="end">${v}</text>`;
+    }
+    const every = Math.ceil(rows.length / 6);
+    let bars = '';
+    rows.forEach((r, i) => {
+      const x = L + i * bw, val = r[key];
+      const h = Math.max(0, y(0) - y(val));
+      const w = Math.max(2, bw - 2);
+      if (val > 0) {
+        const rad = Math.min(4, w / 2, h);
+        bars += `<path d="M${x + 1},${y(0)} v${-(h - rad)} q0,${-rad} ${rad},${-rad} h${w - 2 * rad} q${rad},0 ${rad},${rad} v${h - rad} z" fill="${color}"/>`;
+      }
+      bars += `<rect class="hit" data-i="${i}" x="${x}" y="${T}" width="${bw}" height="${H - T - B}" fill="transparent"/>`;
+      if (i % every === 0) {
+        const d = new Date(r.t * 1000);
+        const lab = size >= 86400 ? d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+          : size > 3600 ? d.toLocaleDateString([], { weekday: 'short' }) : d.toLocaleTimeString([], { hour: 'numeric' });
+        bars += `<text class="axis" x="${x + bw / 2}" y="${H - 6}" text-anchor="middle">${lab}</text>`;
+      }
+    });
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${label}">${g}${bars}</svg>`;
+    const tip = el.parentElement.querySelector('.tip');
+    el.querySelectorAll('.hit').forEach(rc => {
+      rc.addEventListener('pointerenter', () => {
+        const r = rows[+rc.dataset.i];
+        const when = size >= 86400 ? new Date(r.t * 1000).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) : hourLabel(r.t);
+        tip.innerHTML = `${when}<br><b>${fmt(r[key])}</b> ${label.toLowerCase()}` + (key === 'a' ? ` · ${fmt(r.d)} from the site` : '');
+        const box = el.getBoundingClientRect(), b = rc.getBoundingClientRect(), card = el.parentElement.getBoundingClientRect();
+        tip.style.left = (b.left - card.left + b.width / 2) + 'px';
+        tip.style.top = (box.top - card.top + 20) + 'px';
+        tip.style.opacity = 1;
+      });
+      rc.addEventListener('pointerleave', () => tip.style.opacity = 0);
+    });
+  }
+
+  function render() {
+    if (!data) return;
+    const hours = data.hours || [];
+    const last24 = hours.filter(r => r.t > Date.now() / 1000 - 86400);
+    const sum = (a, k) => a.reduce((s, r) => s + (r[k] || 0), 0);
+    $('tVisits').textContent = fmt(data.totals.visits);
+    $('tSite').textContent = fmt(data.totals.siteDownloads);
+    $('tApk').textContent = fmt(data.apkTotal || 0);
+    $('tRate').textContent = data.totals.visits ? Math.round(100 * data.totals.siteDownloads / data.totals.visits) + '%' : '–';
+    $('tVisits24').textContent = `+${fmt(sum(last24, 'v'))} in the last 24 hours`;
+    $('tSite24').textContent = `+${fmt(sum(last24, 'd'))} in the last 24 hours`;
+    $('tApk24').textContent = `+${fmt(sum(last24, 'a'))} in the last 24 hours`;
+    $('updated').textContent = data.updated ? `Last updated ${new Date(data.updated * 1000).toLocaleString()}` : 'No hourly update yet. The first one arrives within the hour.';
+
+    const { rows, size } = buckets(hours, range);
+    chart($('cVisits'), rows, 'v', 'var(--lime)', 'Visits', size);
+    chart($('cDownloads'), rows, 'a', 'var(--green)', 'Downloads', size);
+    $('tbl').innerHTML = rows.slice().reverse().filter(r => r.v || r.d || r.a).map(r =>
+      `<tr><td>${size >= 86400 ? new Date(r.t * 1000).toLocaleDateString() : hourLabel(r.t)}</td><td>${r.v}</td><td>${r.d}</td><td>${r.a}</td></tr>`).join('')
+      || '<tr><td colspan="4" class="empty">Nothing yet in this range.</td></tr>';
+  }
+
+  document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+    range = +b.dataset.h;
+    document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    render();
+  }));
+
+  fetch(SRC + '?t=' + Date.now()).then(r => r.json()).then(j => { data = j; render(); })
+    .catch(() => { $('updated').textContent = "Couldn't load the stats right now. Try again in a minute."; });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+# Every hour: counts the website's visits and downloads (from the ntfy alerts the site sends),
+# reads GitHub's own download counter for the APK, sends nonny dev a summary on ntfy and keeps
+# running totals in stats.json on the "stats" branch (shown on the site's stats page).
+name: Hourly stats
+
+on:
+  schedule:
+    - cron: "5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: hourly-stats
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    env:
+      TOPIC: glasswave-nonny-re7mnsuqhuis
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stats
+          path: data
+
+      - name: Count and send the summary
+        run: |
+          set -euo pipefail
+          F=data/stats.json
+          [ -f "$F" ] || echo '{"lastTime":0,"totals":{"visits":0,"siteDownloads":0},"apkTotal":null,"hours":[]}' > "$F"
+          last=$(jq -r '.lastTime // 0' "$F")
+          now=$(date +%s)
+
+          # Alerts since the last run (ntfy keeps them for 12 hours).
+          since=$([ "$last" -gt 0 ] && echo "$last" || echo all)
+          curl -fsS "https://ntfy.sh/$TOPIC/json?poll=1&since=$since" > msgs.jsonl || : > msgs.jsonl
+          v=$(jq -s --argjson l "$last" '[.[] | select(.event=="message" and .time > $l and .title=="New visitor")] | length' msgs.jsonl)
+          d=$(jq -s --argjson l "$last" '[.[] | select(.event=="message" and .time > $l and .title=="New download")] | length' msgs.jsonl)
+          newLast=$(jq -s --argjson l "$last" '[.[] | select(.event=="message") | .time] + [$l] | max' msgs.jsonl)
+
+          # Every APK download GitHub has counted (site button, releases page and in-app updates).
+          apk=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$REPO/releases?per_page=100" \
+            | jq '[.[].assets[] | select(.name | endswith(".apk")) | .download_count] | add // 0')
+          prevApk=$(jq -r '.apkTotal // empty' "$F")
+          a=$([ -n "$prevApk" ] && echo $((apk - prevApk)) || echo 0)
+          [ "$a" -lt 0 ] && a=0
+
+          jq --argjson t "$now" --argjson last "$newLast" --argjson v "$v" --argjson d "$d" --argjson a "$a" --argjson apk "$apk" '
+            .updated = $t | .lastTime = $last | .apkTotal = $apk
+            | .totals.visits += $v | .totals.siteDownloads += $d
+            | .hours = ((.hours + [{t: $t, v: $v, d: $d, a: $a}]) | .[-2160:])
+          ' "$F" > tmp.json && mv tmp.json "$F"
+
+          tv=$(jq '.totals.visits' "$F"); td=$(jq '.totals.siteDownloads' "$F")
+          msg="Last hour: $v visits, $d downloads from the site, $a APK downloads in total (incl. app updates).
+          All time: $tv visits, $td site downloads, $apk APK downloads."
+          prio=$([ $((v + d + a)) -eq 0 ] && echo 2 || echo 3)
+          curl -fsS -X POST "https://ntfy.sh/$TOPIC" \
+            -H "Title: Glasswave hourly summary" -H "Tags: bar_chart" -H "Priority: $prio" \
+            -H "Click: https://uronlynonny.github.io/Glasswave/stats.html" \
+            --data-binary "$msg" > /dev/null
+
+          cd data
+          git config user.name "glasswave-stats"
+          git config user.email "glasswave-stats@users.noreply.github.com"
+          git add stats.json
+          git commit -qm "Stats for $(date -u +'%Y-%m-%d %H:00') UTC" && git push -q
