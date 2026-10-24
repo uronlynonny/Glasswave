@@ -597,8 +597,16 @@ fun main(args: Array<String>) {
             .put("since", since).put("alertedAt", alertedAt).put("h", h))
     }
 
+    // If YouTube keeps the test server from playing anything, playback is untested: say so (rarely).
+    val playing = results.filter { it.check.group == "Playing songs" && it.check.critical }
+    val blindSince = if (playing.isNotEmpty() && playing.all { it.status == "blocked" }) prev?.optLong("blindSince")?.takeIf { it > 0 } ?: now else 0L
+    var blindAlertAt = prev?.optLong("blindAlertAt") ?: 0L
+    val sayBlind = blindSince > 0 && now - blindSince >= 6 * 3600 && now - blindAlertAt >= 24 * 3600
+    if (sayBlind) blindAlertAt = now
+
     val status = JSONObject()
         .put("updated", now).put("runner", runner)
+        .put("blindSince", blindSince).put("blindAlertAt", blindAlertAt)
         .put("app", JSONObject().put("newpipe", NEWPIPE).put("clientVersion", CLIENT_VERSION).put("iosVersion", IOS_VERSION))
         .put("runs", JSONArray(keptRuns)).put("checks", out)
     outFile?.let { it.parentFile?.mkdirs(); it.writeText(status.toString(1)) }
@@ -624,6 +632,11 @@ fun main(args: Array<String>) {
         title = "Glasswave: working again",
         body = fixed.joinToString("\n") { "• ${it.check.name}: ${it.detail}" },
         priority = 3, tags = "white_check_mark")
+    if (sayBlind) notify(topic, statusUrl,
+        title = "Glasswave: playback untested",
+        body = "For 6+ hours YouTube has asked GitHub's server to prove it isn't a bot, so playing songs couldn't be tested. " +
+            "This is about the test server, not your users. Run monitor\\check-now.cmd on your PC to test from home.",
+        priority = 2, tags = "grey_question")
     if (newWarn.isNotEmpty()) notify(topic, statusUrl,
         title = "Glasswave: heads-up",
         body = newWarn.joinToString("\n") { "• ${it.check.name}: ${it.detail}\n  ${it.check.fix}" },
