@@ -21,6 +21,7 @@ class GlassApp : Application(), ImageLoaderFactory {
         GlassTier.init(this)
         Stats.init(this)
         Updater.init(this)
+        Active.init(this)
         Profile.init(this)
         Profile.refresh()
         YtRepo.initMatches(this)

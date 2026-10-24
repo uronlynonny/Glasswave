@@ -1,4 +1,7 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import java.net.URI
+import java.security.MessageDigest
+import java.util.zip.ZipFile
 
 plugins {
     kotlin("jvm") version "2.0.21"
@@ -10,7 +13,7 @@ plugins {
 val appBuild = file("../app/build.gradle.kts").readText()
 // Glasswave for Windows has its own version number, separate from the phone app.
 // Raise it for every Windows release: installed copies update themselves to a higher number.
-val appVersion = "1.0.7"
+val appVersion = "1.0.8"
 val newPipe = Regex("NewPipeExtractor:(v?[0-9][0-9.]*)").find(appBuild)?.groupValues?.get(1)
     ?: error("Couldn't find the NewPipeExtractor version in app/build.gradle.kts")
 
@@ -97,6 +100,8 @@ compose.desktop {
             "-Dsun.java2d.uiScale.enabled=true",
         )
         nativeDistributions {
+            // Files shipped beside the app: the YouTube Music sign-in window (see signInHelper).
+            appResourcesRootDir.set(layout.buildDirectory.dir("appres"))
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "Glasswave"
             packageVersion = appVersion
@@ -118,6 +123,58 @@ compose.desktop {
     }
 }
 
+// The YouTube Music sign-in window (signin/SignIn.cs): a small Windows program that shows Google's
+// sign-in page in Microsoft's WebView2 (Edge, built into Windows 11). It is compiled with the C#
+// compiler that comes with Windows, against Microsoft's WebView2 SDK from NuGet (checked by hash),
+// and shipped next to the app with the SDK's files and license.
+val webView2Version = "1.0.4191.47"
+val webView2Sha256 = "f492bbf547d0da329553b6727435b677579b1e9f91cc9e4a1ad029366d5f23d0"
+val signInHelper by tasks.registering {
+    val src = file("signin")
+    val icon = file("icons/glasswave.ico")
+    val work = layout.buildDirectory.dir("signin")
+    val out = layout.buildDirectory.dir("appres/windows/signin")
+    inputs.dir(src)
+    inputs.file(icon)
+    inputs.property("webView2", webView2Version)
+    outputs.dir(out)
+    doLast {
+        val w = work.get().asFile.apply { mkdirs() }
+        val o = out.get().asFile.apply { deleteRecursively(); mkdirs() }
+        val pkg = File(w, "webview2-$webView2Version.nupkg")
+        fun sha(f: File) = MessageDigest.getInstance("SHA-256").digest(f.readBytes()).joinToString("") { "%02x".format(it) }
+        if (!pkg.exists() || sha(pkg) != webView2Sha256) {
+            val url = "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/$webView2Version/microsoft.web.webview2.$webView2Version.nupkg"
+            URI(url).toURL().openStream().use { input -> pkg.outputStream().use { input.copyTo(it) } }
+            check(sha(pkg) == webView2Sha256) { "The WebView2 SDK download doesn't match its expected hash" }
+        }
+        val wanted = mapOf(
+            "lib/net462/Microsoft.Web.WebView2.Core.dll" to "Microsoft.Web.WebView2.Core.dll",
+            "lib/net462/Microsoft.Web.WebView2.WinForms.dll" to "Microsoft.Web.WebView2.WinForms.dll",
+            "runtimes/win-x64/native/WebView2Loader.dll" to "WebView2Loader.dll",
+            "LICENSE.txt" to "WebView2-LICENSE.txt",
+        )
+        ZipFile(pkg).use { z ->
+            wanted.forEach { (from, to) -> z.getInputStream(z.getEntry(from)).use { i -> File(o, to).outputStream().use { i.copyTo(it) } } }
+        }
+        val csc = File(System.getenv("WINDIR") ?: "C:\\Windows", "Microsoft.NET/Framework64/v4.0.30319/csc.exe")
+        val cmd = listOf(
+            csc.absolutePath, "-nologo", "-target:winexe", "-platform:x64", "-optimize",
+            "-out:" + File(o, "GlasswaveSignIn.exe").absolutePath,
+            "-win32manifest:" + File(src, "SignIn.manifest").absolutePath,
+            "-win32icon:" + icon.absolutePath,
+            "-r:System.Windows.Forms.dll", "-r:System.Drawing.dll", "-r:System.Core.dll",
+            "-r:" + File(o, "Microsoft.Web.WebView2.Core.dll").absolutePath,
+            "-r:" + File(o, "Microsoft.Web.WebView2.WinForms.dll").absolutePath,
+            File(src, "SignIn.cs").absolutePath,
+        )
+        val p = ProcessBuilder(cmd).redirectErrorStream(true).start()
+        val log = p.inputStream.bufferedReader().readText()
+        check(p.waitFor() == 0) { "Couldn't build the sign-in window: $log" }
+    }
+}
+tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(signInHelper) }
+
 // On Windows, build outside OneDrive (it locks build files mid-build).
 System.getenv("LOCALAPPDATA")?.let { layout.buildDirectory.set(File(it, "GlasswaveBuild/desktop")) }
 
@@ -130,9 +187,25 @@ tasks.register<JavaExec>("screenCheck") {
     if (project.hasProperty("testDrop")) systemProperty("gw.testDrop", "1")
     // -Poffline: cuts the app off from the internet (everything goes to a proxy that isn't there).
     if (project.hasProperty("offline")) { systemProperty("socksProxyHost", "127.0.0.1"); systemProperty("socksProxyPort", "9") }
+    // -PsignInTest=<folder>: the YouTube Music sign-in window hands back signed-out cookies (no
+    // account needed), and the app keeps its data in that folder instead of yours.
+    (project.findProperty("signInTest") as String?)?.let { dir ->
+        dependsOn(signInHelper)
+        environment("GW_SIGNIN_TEST", "1")
+        systemProperty("gw.signInUrl", "https://music.youtube.com/")
+        environment("APPDATA", "$dir/roaming")
+        environment("LOCALAPPDATA", "$dir/local")
+        systemProperty("gw.appResources", layout.buildDirectory.dir("appres/windows").get().asFile.absolutePath)
+    }
 }
 
 // Remakes the website's link preview picture, docs/og.png (see OgImage.kt).
+tasks.register<JavaExec>("titleCheck") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.TitleCheckKt")
+    (project.findProperty("out") as String?)?.let { args(it) }
+}
+
 tasks.register<JavaExec>("makeOg") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("com.glasswave.player.OgImageKt")

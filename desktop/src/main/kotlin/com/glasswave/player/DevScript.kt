@@ -30,6 +30,7 @@ import javax.swing.Timer
 @OptIn(ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
     val file = File(args.firstOrNull() ?: error("Give the script file"))
+    System.setProperty("gw.noCheckIn", "1") // checks aren't people: leave the usage numbers alone
     startUp()
     AppVolume.muteForChecks()
     var w = 1280
@@ -97,6 +98,13 @@ fun main(args: Array<String>) {
                     System.err.println("GW lyrics for '${t?.title}' (downloaded=${t?.let { Downloads.isDownloaded(it.url) }}): " +
                         (ly?.let { "${it.lines.size} lines, synced=${it.synced}, from ${it.source}; first: ${it.lines.firstOrNull { l -> l.text.isNotBlank() }?.text}" } ?: "none"))
                 }
+                // ytlogin: opens YouTube Music sign-in. account: says whether it's signed in. ytsignout: signs out.
+                "ytlogin" -> onUi { vm.showYtLogin = true }
+                "account" -> onUi {
+                    val names = Accounts.ytCookie?.split(";")?.map { it.substringBefore("=").trim() }
+                    System.err.println("GW account: signedIn=${vm.ytSignedIn} cookies=$names signinData=${File(android.content.AppDirs.cache, "signin").exists()}")
+                }
+                "ytsignout" -> onUi { vm.signOutYt() }
                 "style" -> onUi { Settings.updatePlayerStyle(PlayerStyle.valueOf(arg)) }
                 "key" -> onUi { if (arg == "ESCAPE") androidx.activity.compose.BackDispatcher.back() }
                 "size" -> {

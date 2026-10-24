@@ -313,6 +313,7 @@ private fun Audio(c: ScreenCtx) {
         SwitchRow("Skip silence", "Skips quiet gaps at the start and end of songs.", Settings.skipSilence) { Settings.updateSkipSilence(it) }
         SwitchRow("Volume leveling", "Plays every song at the same loudness, so you don't have to keep changing the volume.", Settings.volumeLeveling) { Settings.updateVolumeLeveling(it) }
         SwitchRow("Report songs that won't play", "Sends nonny dev the song, the error, your phone model and the app version so it gets fixed. Nothing about you.", Settings.reportProblems) { Settings.updateReportProblems(it) }
+        SwitchRow("Count me in usage numbers", "Once a day, tells nonny dev this copy of Glasswave was used (a random number, nothing about you), so we know how many people listen.", Settings.countMe) { Settings.updateCountMe(it) }
         Divider()
         SwitchRow("Shuffle & repeat beside controls", "They're always in the player's Up next list too.", Settings.showModeButtons) {
             Settings.updateShowModeButtons(it)

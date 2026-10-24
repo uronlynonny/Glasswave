@@ -50,6 +50,13 @@ th{color:var(--faint);font-weight:500}
 .note{color:var(--faint);font-size:12px;margin-top:22px}
 .empty{color:var(--dim);padding:30px 0;text-align:center}
 a{color:var(--lime)}
+.act{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+.act b{display:block;font-family:Syne;font-weight:800;font-size:clamp(26px,4.5vw,38px);line-height:1.05}
+.act span{color:var(--dim);font-size:13px}
+.act small{display:block;color:var(--faint);font-size:12px;margin-top:4px}
+.legend{display:flex;align-items:center;gap:6px;color:var(--dim);font-size:12px;margin-bottom:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-left:8px}
+.legend i:first-child{margin-left:0}
 </style>
 </head>
 <body>
@@ -62,6 +69,18 @@ a{color:var(--lime)}
     <div class="tile"><b id="tSite">–</b><span>downloads from the site</span><small id="tSite24"></small></div>
     <div class="tile"><b id="tApk">–</b><span>APK downloads in total</span><small id="tApk24"></small></div>
     <div class="tile"><b id="tRate">–</b><span>visitors who downloaded</span><small>site downloads ÷ visits</small></div>
+  </div>
+
+  <div class="card" id="activeCard">
+    <h2>Active users</h2>
+    <p>People who opened the app (each person once a day), Android and Windows</p>
+    <div class="act">
+      <div><b id="aToday">–</b><span>today</span><small id="aToday2"></small></div>
+      <div><b id="aWeek">–</b><span>last 7 days</span><small id="aWeek2"></small></div>
+      <div><b id="aMonth">–</b><span>last 30 days</span><small id="aMonth2"></small></div>
+    </div>
+    <div class="legend"><i style="background:var(--lime)"></i>Android <i style="background:var(--green)"></i>Windows</div>
+    <div id="cActive"></div><div class="tip"></div>
   </div>
 
   <div class="row" style="margin-bottom:12px">
@@ -154,8 +173,66 @@ a{color:var(--lime)}
     });
   }
 
+  // Active users per day for the last 30 days, Android and Windows stacked.
+  function activeChart(el, daily) {
+    const W = 900, H = 200, L = 30, B = 24, T = 8;
+    const byDay = Object.fromEntries(daily.map(r => [r.d, r]));
+    const rows = [];
+    for (let k = 29; k >= 0; k--) {
+      const d = new Date(Date.now() - k * 86400000).toISOString().slice(0, 10);
+      const r = byDay[d] || {};
+      rows.push({ d, a: r.a || 0, w: r.w || 0 });
+    }
+    const max = Math.max(1, ...rows.map(r => r.a + r.w));
+    const step = Math.max(1, Math.ceil(max / 4)), top = step * 4;
+    const bw = (W - L) / rows.length, w = Math.max(2, bw - 3);
+    const y = v => T + (H - T - B) * (1 - v / top);
+    const label = d => new Date(d + 'T12:00:00Z').toLocaleDateString([], { month: 'short', day: 'numeric' });
+    let s = '';
+    for (let k = 0; k <= 4; k++) {
+      const v = k * step, yy = y(v);
+      s += `<line x1="${L}" x2="${W}" y1="${yy}" y2="${yy}" stroke="var(--grid)"/><text class="axis" x="${L - 6}" y="${yy + 4}" text-anchor="end">${v}</text>`;
+    }
+    rows.forEach((r, i) => {
+      const x = L + i * bw + 1.5;
+      if (r.a) s += `<rect x="${x}" y="${y(r.a)}" width="${w}" height="${y(0) - y(r.a)}" rx="2" fill="var(--lime)"/>`;
+      if (r.w) s += `<rect x="${x}" y="${y(r.a + r.w)}" width="${w}" height="${y(r.a) - y(r.a + r.w)}" rx="2" fill="var(--green)"/>`;
+      s += `<rect class="hit" data-i="${i}" x="${L + i * bw}" y="${T}" width="${bw}" height="${H - T - B}" fill="transparent"/>`;
+      if (i % 5 === 0) s += `<text class="axis" x="${L + i * bw + bw / 2}" y="${H - 6}" text-anchor="middle">${label(r.d)}</text>`;
+    });
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Active users per day">${s}</svg>`;
+    const tip = el.parentElement.querySelector('.tip');
+    el.querySelectorAll('.hit').forEach(rc => {
+      rc.addEventListener('pointerenter', () => {
+        const r = rows[+rc.dataset.i];
+        tip.innerHTML = `${label(r.d)}<br><b>${fmt(r.a + r.w)}</b> active · ${fmt(r.a)} Android, ${fmt(r.w)} Windows`;
+        const box = el.getBoundingClientRect(), b = rc.getBoundingClientRect(), card = el.parentElement.getBoundingClientRect();
+        tip.style.left = (b.left - card.left + b.width / 2) + 'px';
+        tip.style.top = (box.top - card.top + 20) + 'px';
+        tip.style.opacity = 1;
+      });
+      rc.addEventListener('pointerleave', () => tip.style.opacity = 0);
+    });
+  }
+
+  function renderActive() {
+    const a = data.active;
+    if (!a) {
+      $('aToday2').textContent = 'Counting starts once the apps with check-ins are out.';
+      $('cActive').innerHTML = '<p class="empty">No check-ins yet.</p>';
+      return;
+    }
+    const put = (id, v) => {
+      $(id).textContent = fmt(v.a + v.w);
+      $(id + '2').textContent = `${fmt(v.a)} Android · ${fmt(v.w)} Windows`;
+    };
+    put('aToday', a.today); put('aWeek', a.week); put('aMonth', a.month);
+    activeChart($('cActive'), a.daily || []);
+  }
+
   function render() {
     if (!data) return;
+    renderActive();
     const hours = data.hours || [];
     const last24 = hours.filter(r => r.t > Date.now() / 1000 - 86400);
     const sum = (a, k) => a.reduce((s, r) => s + (r[k] || 0), 0);

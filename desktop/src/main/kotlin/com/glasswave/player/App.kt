@@ -86,10 +86,12 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
     LaunchedEffect(Unit) {
         Updater.checkIfDue()
         Updater.checkWhatsNew()
-        // Left open for days? It still finds new versions.
+        Active.checkIn()
+        // Left open for days? It still finds new versions, and counts as in use each day.
         while (true) {
             kotlinx.coroutines.delay(20 * 60_000L)
             Updater.checkIfDue()
+            Active.checkIn()
         }
     }
 

@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TOPIC: glasswave-nonny-re7mnsuqhuis
+      # The apps' anonymous once-a-day "in use" check-ins (a random install id, platform, version).
+      ACTIVE_TOPIC: glasswave-nonny-re7mnsuqhuis-active
       REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -52,6 +54,32 @@ jobs:
           jq -s --argjson l "$last" '[.[] | select(.event=="message" and .time > $l and .title=="Song failed") | {t: .time, m: .message}]' msgs.jsonl > failed.json
           f=$(jq 'length' failed.json)
 
+          # Active users: each app checks in once a day with a random id. Keep who was seen each day
+          # (UTC) for 35 days, and work out daily, 7-day and 30-day counts per platform.
+          lastA=$(jq -r '.lastActiveTime // 0' "$F")
+          sinceA=$([ "$lastA" -gt 0 ] && echo "$lastA" || echo all)
+          curl -fsS "https://ntfy.sh/$ACTIVE_TOPIC/json?poll=1&since=$sinceA" > active.jsonl || : > active.jsonl
+          jq -s --argjson l "$lastA" '[.[] | select(.event=="message" and .time >= $l)
+            | (.message | try fromjson catch null) as $m | select($m != null and ($m.id|type)=="string")
+            | {day: (.time | strftime("%Y-%m-%d")), p: (if $m.p == "windows" then "w" else "a" end), id: $m.id[0:40], t: .time}]' active.jsonl > seen.json
+          newLastA=$(jq --argjson l "$lastA" '[.[].t] + [$l] | max' seen.json)
+          jq --argjson t "$now" --argjson lastA "$newLastA" --slurpfile seen seen.json '
+            def uniq(ids; from; p): [ids | to_entries[] | select(.key >= from) | .value[p] // [] | .[]] | unique | length;
+            .lastActiveTime = $lastA
+            | .activeIds = (reduce $seen[0][] as $s (.activeIds // {};
+                .[$s.day][$s.p] = (((.[$s.day][$s.p] // []) + [$s.id]) | unique)))
+            | .activeIds |= with_entries(select(.key >= (($t - 35*86400) | strftime("%Y-%m-%d"))))
+            | ($t | strftime("%Y-%m-%d")) as $today
+            | (($t - 6*86400) | strftime("%Y-%m-%d")) as $wk
+            | (($t - 29*86400) | strftime("%Y-%m-%d")) as $mo
+            | .active = {
+                today: {a: ((.activeIds[$today].a // []) | length), w: ((.activeIds[$today].w // []) | length)},
+                week: {a: uniq(.activeIds; $wk; "a"), w: uniq(.activeIds; $wk; "w")},
+                month: {a: uniq(.activeIds; $mo; "a"), w: uniq(.activeIds; $mo; "w")},
+                daily: [.activeIds | to_entries | sort_by(.key) | .[-30:][] | {d: .key, a: ((.value.a // []) | length), w: ((.value.w // []) | length)}]
+              }
+          ' "$F" > tmp.json && mv tmp.json "$F"
+
           jq --argjson t "$now" --argjson last "$newLast" --argjson v "$v" --argjson d "$d" --argjson a "$a" --argjson apk "$apk" \
              --slurpfile failed failed.json '
             .updated = $t | .lastTime = $last
@@ -67,6 +95,9 @@ jobs:
           pl() { [ "$1" -eq 1 ] && echo "$1 $2" || echo "$1 $3"; }
           msg="Last hour: $(pl $v visit visits), $(pl $d download downloads) from the site, $(pl $a 'APK download' 'APK downloads') in total (incl. app updates).
           All time: $(pl $tv visit visits), $(pl $td 'site download' 'site downloads'), $(pl $apk 'APK download' 'APK downloads')."
+          at=$(jq '.active.today.a + .active.today.w' "$F"); aw=$(jq '.active.week.a + .active.week.w' "$F"); am=$(jq '.active.month.a + .active.month.w' "$F")
+          msg="$msg
+          Active users: $at today ($(jq '.active.today.a' "$F") Android, $(jq '.active.today.w' "$F") Windows), $aw in the last 7 days, $am in the last 30 days."
           # Which devices came by this hour (top 5), from the alert texts.
           devices=$(jq -rs --argjson l "$last" '
             [.[] | select(.event=="message" and .time > $l and .title=="New visitor") | .message

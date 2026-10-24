@@ -420,6 +420,7 @@ class MainViewModel : ViewModel() {
 
     fun signOutYt() {
         Accounts.ytCookie = null
+        YtSignIn.forget() // the sign-in window's Google session too, so the next sign-in starts fresh
         ytSignedIn = false
         Profile.clear()
         Library.clearSource(Source.YT)

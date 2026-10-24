@@ -85,6 +85,11 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
     LaunchedEffect(Unit) {
         Updater.checkIfDue()
         Updater.checkWhatsNew()
+        // Counted as "in use today" (once a day; see Active).
+        while (true) {
+            Active.checkIn()
+            delay(20 * 60_000L)
+        }
     }
 
     // Keep the progress bars moving while a song plays.

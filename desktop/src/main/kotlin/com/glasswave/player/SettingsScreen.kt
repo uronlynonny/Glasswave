@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -306,6 +307,7 @@ private fun Audio(c: ScreenCtx) {
         SwitchRow("Skip silence", "Skips quiet gaps at the start and end of songs.", Settings.skipSilence) { Settings.updateSkipSilence(it) }
         SwitchRow("Volume leveling", "Plays every song at the same loudness, so you don't have to keep changing the volume.", Settings.volumeLeveling) { Settings.updateVolumeLeveling(it) }
         SwitchRow("Report songs that won't play", "Sends nonny dev the song, the error, your Windows version and the app version so it gets fixed. Nothing about you.", Settings.reportProblems) { Settings.updateReportProblems(it) }
+        SwitchRow("Count me in usage numbers", "Once a day, tells nonny dev this copy of Glasswave was used (a random number, nothing about you), so we know how many people listen.", Settings.countMe) { Settings.updateCountMe(it) }
         Divider()
         SwitchRow("Shuffle & repeat beside controls", "They're always in the player's Up next list too.", Settings.showModeButtons) {
             Settings.updateShowModeButtons(it)
@@ -573,26 +575,60 @@ private const val YT_LOGIN_URL =
         "&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fmusic.youtube.com%252F"
 
 /**
- * Signing in to YouTube Music. First a choice: "Continue with Google" opens Android's own account
- * picker with the Google accounts already on the phone; the picked account is filled into Google's
- * sign-in, which then usually just asks to confirm ("Tap Yes on your phone") or offers the saved
- * password. "Use another account" opens Google's sign-in empty.
+ * Signing in to YouTube Music. Google's sign-in opens in its own small window (see YtSignIn); this
+ * panel waits behind it and says what's happening. The window closes by itself once you're in.
  */
 @Composable
-fun YtLogin(@Suppress("UNUSED_PARAMETER") onCookie: (String) -> Unit, onClose: () -> Unit) {
-    // Desktop: Google sign-in needs a built-in browser the desktop app doesn't have yet.
-    Column(Modifier.fillMaxSize().background(Color(0xFF0A0B10)).padding(28.dp), verticalArrangement = Arrangement.Center) {
-        GText("Sign-in is coming to the desktop app", 22, weight = FontWeight.Bold)
+fun YtLogin(onCookie: (String) -> Unit, onClose: () -> Unit) {
+    var result by remember { mutableStateOf<YtSignIn.Result?>(null) }
+    LaunchedEffect(Unit) {
+        // gw.signInUrl: automated checks start somewhere that needs no account.
+        val r = withContext(Dispatchers.IO) { YtSignIn.run(System.getProperty("gw.signInUrl") ?: YT_LOGIN_URL) }
+        when (r) {
+            is YtSignIn.Result.Cookie -> onCookie(r.value)
+            YtSignIn.Result.Closed -> onClose()
+            else -> result = r
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { YtSignIn.cancel() } }
+
+    val (title, body) = when (result) {
+        null -> "Sign in to YouTube Music" to
+            "Google's sign-in is open in its own window. Sign in there and it closes by itself, then your playlists, " +
+            "Liked Music and a Home made for you come over.\n\nGlasswave never sees your password: you type it into Google's own page."
+        YtSignIn.Result.Blocked -> "Google didn't allow this sign-in" to
+            "Google sometimes refuses sign-ins from windows inside apps. Try again in a little while, or keep using " +
+            "Glasswave without an account: search, Home, albums, artists and your Glasswave playlists all work."
+        YtSignIn.Result.NoRuntime -> "Sign-in needs Microsoft Edge WebView2" to
+            "It comes with Windows 11 and most Windows 10 PCs, but it's missing here. Install it (free, from Microsoft), then try again."
+        else -> "Sign-in isn't available in this copy" to
+            "Update Glasswave or reinstall it from the website, then try again."
+    }
+    Box(Modifier.fillMaxSize().background(Color(0xFF0A0B10)), contentAlignment = Alignment.Center) {
+    Column(Modifier.widthIn(max = 520.dp).padding(28.dp)) {
+        GText(title, 22, weight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
-        GText(
-            "For now, Glasswave for Windows plays YouTube Music without an account. Search, Home, albums, " +
-                "artists, your Glasswave playlists and Spotify links all work.",
-            15, Dim,
-        )
+        GText(body, 15, Dim)
         Spacer(Modifier.height(22.dp))
+        if (result == YtSignIn.Result.NoRuntime) {
+            Box(
+                Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp)).background(Color.White)
+                    .pressable(0.97f) { openInBrowser("https://developer.microsoft.com/microsoft-edge/webview2/") },
+                contentAlignment = Alignment.Center,
+            ) { GText("Get WebView2", 16, Color(0xFF1F1F1F), FontWeight.SemiBold, 1) }
+            Spacer(Modifier.height(10.dp))
+        }
         Box(
-            Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp)).background(Color.White).pressable(0.97f) { onClose() },
+            Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp))
+                .background(if (result == null || result == YtSignIn.Result.NoRuntime) Color.White.copy(alpha = 0.1f) else Color.White)
+                .pressable(0.97f) { YtSignIn.cancel(); onClose() },
             contentAlignment = Alignment.Center,
-        ) { GText("OK", 16, Color(0xFF1F1F1F), FontWeight.SemiBold, 1) }
+        ) {
+            GText(
+                if (result == null) "Cancel" else "OK", 16,
+                if (result == null || result == YtSignIn.Result.NoRuntime) Color.White else Color(0xFF1F1F1F), FontWeight.SemiBold, 1,
+            )
+        }
+    }
     }
 }

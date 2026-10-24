@@ -86,6 +86,9 @@ object Settings {
     /** Tell nonny dev when a song won't play (song, error, Windows version, app version). On by default. */
     var reportProblems by mutableStateOf(true); private set
     fun updateReportProblems(on: Boolean) { reportProblems = on; prefs.edit { putBoolean("report_problems", on) } }
+    /** Count this PC in Glasswave's anonymous active-user numbers (a random id once a day). On by default. */
+    var countMe by mutableStateOf(true); private set
+    fun updateCountMe(on: Boolean) { countMe = on; prefs.edit { putBoolean("count_me", on) } }
     /** Show what's playing on your Discord profile. */
     var discord by mutableStateOf(true); private set
     fun updateDiscord(on: Boolean) { discord = on; prefs.edit { putBoolean("discord", on) } }
@@ -119,6 +122,7 @@ object Settings {
         highPerformance = false
         discord = prefs.getBoolean("discord", true)
         reportProblems = prefs.getBoolean("report_problems", true)
+        countMe = prefs.getBoolean("count_me", true)
     }
 
     fun updateFrameRate(f: FrameRate) { frameRate = f; prefs.edit { putString("frame_rate", f.name) } }

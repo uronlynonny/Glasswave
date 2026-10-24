@@ -95,17 +95,25 @@ private val AppIcon: ImageVector = ImageVector.Builder("Glasswave", 108.dp, 108.
     )
     .build()
 
-/** Asks Windows 11 for a dark title bar that matches the app (does nothing elsewhere). */
+/**
+ * Asks Windows 11 for a see-through, frosted ("acrylic") dark title bar instead of a solid black one,
+ * so the desktop behind shows through softly. Older Windows keeps its normal dark title bar.
+ */
 private interface Dwm : JnaLibrary {
     fun DwmSetWindowAttribute(hwnd: Pointer, attr: Int, value: Pointer, size: Int): Int
 }
 
-private fun darkTitleBar(w: java.awt.Window) {
+/** [backdrop]: 2 Mica (tinted by the wallpaper), 3 Acrylic (frosted glass), 4 Mica Alt. */
+internal fun glassTitleBar(w: java.awt.Window, backdrop: Int = 3) {
     runCatching {
         val dwm = Native.load("dwmapi", Dwm::class.java)
         val hwnd = Native.getWindowPointer(w)
         dwm.DwmSetWindowAttribute(hwnd, 20, IntByReference(1).pointer, 4) // dark mode
-        dwm.DwmSetWindowAttribute(hwnd, 35, IntByReference(0x00080B0A).pointer, 4) // caption colour #0A0B08
+        // The backdrop material behind the title bar (Windows 11 22H2 and later).
+        if (dwm.DwmSetWindowAttribute(hwnd, 38, IntByReference(backdrop).pointer, 4) != 0) {
+            // Not supported: fall back to a dark caption that matches the app.
+            dwm.DwmSetWindowAttribute(hwnd, 35, IntByReference(0x00080B0A).pointer, 4)
+        }
     }
 }
 
@@ -222,7 +230,7 @@ fun main() {
         ) {
             LaunchedEffect(Unit) {
                 window.minimumSize = java.awt.Dimension(420, 640)
-                darkTitleBar(window)
+                glassTitleBar(window)
             }
             val density = LocalDensity.current.density
             val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
