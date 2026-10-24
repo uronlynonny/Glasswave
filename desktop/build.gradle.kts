@@ -10,7 +10,7 @@ plugins {
 val appBuild = file("../app/build.gradle.kts").readText()
 // Glasswave for Windows has its own version number, separate from the phone app.
 // Raise it for every Windows release: installed copies update themselves to a higher number.
-val appVersion = "1.0.6"
+val appVersion = "1.0.7"
 val newPipe = Regex("NewPipeExtractor:(v?[0-9][0-9.]*)").find(appBuild)?.groupValues?.get(1)
     ?: error("Couldn't find the NewPipeExtractor version in app/build.gradle.kts")
 
@@ -128,6 +128,8 @@ tasks.register<JavaExec>("screenCheck") {
     (project.findProperty("gwscript") as String?)?.let { args(it) }
     (project.findProperty("voiceWav") as String?)?.let { systemProperty("gw.voiceTestWav", it) }
     if (project.hasProperty("testDrop")) systemProperty("gw.testDrop", "1")
+    // -Poffline: cuts the app off from the internet (everything goes to a proxy that isn't there).
+    if (project.hasProperty("offline")) { systemProperty("socksProxyHost", "127.0.0.1"); systemProperty("socksProxyPort", "9") }
 }
 
 // Remakes the website's link preview picture, docs/og.png (see OgImage.kt).

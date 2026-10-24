@@ -98,6 +98,8 @@ object Downloads {
                         justDone[t.url] = System.currentTimeMillis()
                         save()
                     }
+                    // Keep the song's lyrics with it, so they show offline too.
+                    LyricsRepo.keepFor(t)
                 } catch (e: Exception) {
                     android.util.Log.w("Glasswave", "Download failed: ${t.title}", e)
                 } finally {
@@ -112,6 +114,7 @@ object Downloads {
 
     fun remove(url: String) {
         files.remove(url)?.delete()
+        LyricsRepo.forget(url)
         tracks.removeAll { it.url == url }
         justDone.remove(url)
         save()
@@ -119,6 +122,7 @@ object Downloads {
 
     fun removeAll() {
         files.values.forEach { it.delete() }
+        LyricsRepo.forgetAll()
         files.clear()
         tracks.clear()
         justDone.clear()

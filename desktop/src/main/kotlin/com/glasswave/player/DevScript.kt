@@ -89,6 +89,14 @@ fun main(args: Array<String>) {
                 }
                 "search" -> onUi { vm.selectTab(Tab.SEARCH); vm.onQuery(arg); vm.submitSearch() }
                 "tab" -> onUi { vm.selectTab(Tab.valueOf(arg)) }
+                // dl: downloads the song that's playing. lyrics: shows what lyrics the app finds for it.
+                "dl" -> onUi { ps.currentTrack()?.let { Downloads.download(it) } }
+                "lyrics" -> {
+                    val t = Downloads.tracks.firstOrNull() ?: ps.currentTrack()
+                    val ly = t?.let { kotlinx.coroutines.runBlocking { LyricsRepo.get(it.url, it.title, it.artist, it.seconds) } }
+                    System.err.println("GW lyrics for '${t?.title}' (downloaded=${t?.let { Downloads.isDownloaded(it.url) }}): " +
+                        (ly?.let { "${it.lines.size} lines, synced=${it.synced}, from ${it.source}; first: ${it.lines.firstOrNull { l -> l.text.isNotBlank() }?.text}" } ?: "none"))
+                }
                 "style" -> onUi { Settings.updatePlayerStyle(PlayerStyle.valueOf(arg)) }
                 "key" -> onUi { if (arg == "ESCAPE") androidx.activity.compose.BackDispatcher.back() }
                 "size" -> {
