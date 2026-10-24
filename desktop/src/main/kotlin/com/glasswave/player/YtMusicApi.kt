@@ -556,26 +556,50 @@ object YtMusicApi {
 
     private val videoTitle = Regex("""\b(official\s+(music\s+)?video|music\s+video|lyric\s+video|official\s+visuali[sz]er|visuali[sz]er|live\s+performance|\(video\)|\[video\])""", RegexOption.IGNORE_CASE)
 
+    private fun radioReply(videoId: String) = call(
+        "next",
+        JSONObject()
+            .put("videoId", videoId)
+            .put("playlistId", "RDAMVM$videoId")
+            .put("isAudioOnly", true)
+            .put("enablePersistentPlaylistPanel", true),
+    )
+
+    /** True for a song, false for a music video or upload, null when YouTube didn't say. */
+    private fun isSong(r: JSONObject): Boolean? =
+        (r.path("navigationEndpoint.watchEndpoint.watchEndpointMusicSupportedConfigs.watchEndpointMusicConfig.musicVideoType") as? String)
+            ?.let { it == "MUSIC_VIDEO_TYPE_ATV" }
+
+    /** The song version of a music video: YouTube Music's own Song/Video switch, else a song search. */
+    private fun songFor(videoId: String, reply: JSONObject): String? {
+        collect(reply, "counterpartRenderer").mapNotNull { it.optJSONObject("playlistPanelVideoRenderer") }
+            .firstOrNull { isSong(it) == true }?.optString("videoId")?.takeIf { it.isNotEmpty() }?.let { return it }
+        val me = collect(reply, "playlistPanelVideoRenderer").firstOrNull { it.optString("videoId") == videoId } ?: return null
+        val title = ytText(me.opt("title")).ifEmpty { return null }
+        val (artist, seconds) = artistAndLength(me.opt("longBylineText") ?: me.opt("shortBylineText"))
+        return YtRepo.findSong(title, artist, seconds)?.let { YtRepo.videoIdFor(it.url) }
+    }
+
+    /**
+     * Songs similar to [videoId] (YouTube Music's "radio" for it), for Autoplay, Automix and Flow.
+     * Songs only: no official music videos, fan uploads or lyric videos (they break the mood and
+     * repeat songs already queued). Started from a music video, YouTube's radio is all videos, so it
+     * starts from that video's song version instead. Leaves out the song itself. Blocking.
+     */
     fun radio(videoId: String): List<Track> {
-        val json = call(
-            "next",
-            JSONObject()
-                .put("videoId", videoId)
-                .put("playlistId", "RDAMVM$videoId")
-                .put("isAudioOnly", true)
-                .put("enablePersistentPlaylistPanel", true),
-        )
+        var json = radioReply(videoId)
+        var seed = videoId
+        val panel = collect(json, "playlistPanelVideoRenderer")
+        if (panel.count { isSong(it) == true } < panel.size / 2) {
+            songFor(videoId, json)?.let { song -> runCatching { radioReply(song) }.getOrNull()?.let { json = it; seed = song } }
+        }
         val out = LinkedHashMap<String, Track>()
         for (r in collect(json, "playlistPanelVideoRenderer")) {
             val id = r.optString("videoId")
-            if (id.isEmpty() || id == videoId) continue
+            if (id.isEmpty() || id == videoId || id == seed) continue
+            if (isSong(r) == false) continue
             val title = ytText(r.opt("title"))
-            if (title.isEmpty()) continue
-            // Songs only: no official music videos, fan uploads or lyric videos sneaking into
-            // Autoplay, Automix or Flow (they break the mood and repeat songs already queued).
-            val type = findString(r, "musicVideoType")
-            if (type != null && type != "MUSIC_VIDEO_TYPE_ATV") continue
-            if (videoTitle.containsMatchIn(title)) continue
+            if (title.isEmpty() || videoTitle.containsMatchIn(title)) continue
             val (artist, _) = artistAndLength(r.opt("longBylineText") ?: r.opt("shortBylineText"))
             val seconds = parseDuration(ytText(r.opt("lengthText")))
             out.putIfAbsent(id, Track(ytWatchUrl(id), title, artist.ifEmpty { ytText(r.opt("shortBylineText")) }, seconds, sized(lastThumb(r.opt("thumbnail")), 226)))

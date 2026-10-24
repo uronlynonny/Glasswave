@@ -14,13 +14,26 @@ fun main(args: Array<String>) {
     val song = kotlinx.coroutines.runBlocking { YtRepo.search(query) }.first()
     say("found ${song.title} · ${song.url}")
     // What Autoplay and Flow would add after this song (songs only, no music videos).
+    // "-Ponly=radio:<videoId>" starts the radio from that video instead (e.g. an official music video).
     runCatching {
-        val radio = YtMusicApi.radio(YtRepo.videoIdFor(song.url) ?: "")
+        val seed = args.getOrNull(1)?.takeIf { it.startsWith("radio:") }?.removePrefix("radio:") ?: YtRepo.videoIdFor(song.url) ?: ""
+        val radio = YtMusicApi.radio(seed)
         say("radio: ${radio.size} songs, e.g. ${radio.take(6).joinToString(" | ") { it.title + " - " + it.artist }}")
     }.onFailure { say("radio failed: $it") }
-    if (args.getOrNull(1) == "radio") System.exit(0)
+    if (args.getOrNull(1)?.startsWith("radio") == true) System.exit(0)
     val stream = YtRepo.streamUrl(song.url)
     say("audio address found (${stream.take(80)}...)")
+    // How long the whole song takes to arrive through the player's reader ("-Ponly=fetch").
+    if (args.getOrNull(1) == "fetch") {
+        val t = System.currentTimeMillis()
+        val input = HttpSeekStream(stream)
+        val buf = ByteArray(64 * 1024)
+        var total = 0L
+        while (true) { val n = input.read(buf, 0, buf.size); if (n < 0) break; total += n }
+        input.close()
+        say("fetched ${total / 1024} KB of ${input.length / 1024} KB in ${System.currentTimeMillis() - t} ms")
+        System.exit(0)
+    }
     // What the decoder hands over: full-precision samples, with sensible levels.
     runCatching {
         val g = org.bytedeco.javacv.FFmpegFrameGrabber(HttpSeekStream(stream), Int.MAX_VALUE - 8)
@@ -60,8 +73,9 @@ fun main(args: Array<String>) {
             st.take(14).forEach { println("      $it") }
         }
     }
-    say("seeking to 60 s")
-    deck.seekTo(60_000)
+    val to = if (args.getOrNull(1) == "end" && deck.durationMs > 0) deck.durationMs * 85 / 100 else 60_000L
+    say("seeking to ${to / 1000} s")
+    deck.seekTo(to)
     repeat(16) { Thread.sleep(500); say("position ${deck.positionMs} ms") }
     deck.stop()
     say("stopped")

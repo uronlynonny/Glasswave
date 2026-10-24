@@ -324,7 +324,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
 
     /** Each song change gets a number, so a slow lookup for a song you've skipped past is ignored. */
     private var request = 0
-    private var retried = false
+    /** How many times the current song has been picked back up after an error (see [recover]). */
+    private var recoveries = 0
 
     /** Makes song [i] the current one, and starts it (or the deck that already has it ready). */
     private fun moveTo(i: Int, play: Boolean, auto: Boolean) {
@@ -348,7 +349,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         currentId = t.url
         if (changedSong) Flow.onTrack(t.url, this)
         Queued.ids.remove(t.url)
-        retried = false
+        recoveries = 0
         val req = ++request
 
         if (spare.tag == i && spare.ready && !mixing) {
@@ -377,19 +378,53 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         changed()
     }
 
-    private fun load(d: AudioDeck, t: Track, i: Int, req: Int, play: Boolean) {
+    private fun load(d: AudioDeck, t: Track, i: Int, req: Int, play: Boolean, startMs: Long = 0) {
         worker.execute {
             val src = try {
                 resolve(t)
             } catch (e: Exception) {
-                main.post { if (req == request) fail(e) }
+                main.post { if (req == request) recover(e) }
                 return@execute
             }
             main.post {
                 if (req != request) return@post
                 d.volume = startVolume()
-                d.load(src, 0, play && playing, i)
+                d.load(src, startMs, play && playing, i)
             }
+        }
+    }
+
+    /**
+     * The song stopped with an error (usually YouTube dropping the connection or its audio address
+     * expiring). Look it up again and carry on from the same spot, up to 3 times. If it still won't
+     * play, report it (see [Problems]) and move on to the next song. Offline: just say so.
+     */
+    private fun recover(e: Exception) {
+        val t = items.getOrNull(cur) ?: return fail(e)
+        if (!Problems.online()) {
+            fail(java.net.UnknownHostException("offline"))
+            return
+        }
+        YtRepo.forgetStreamUrls()
+        if (recoveries < 3) {
+            recoveries++
+            val at = livePosition()
+            val req = request
+            val play = playing
+            buffering = true
+            android.util.Log.w("Glasswave", "Playback error, picking it back up at $at ms (try $recoveries)", e)
+            main.postDelayed({
+                if (req == request && items.getOrNull(cur)?.url == t.url) load(deck, t, cur, req, play, at)
+            }, 700L * recoveries)
+            return
+        }
+        Problems.songFailed(t, e, recoveries)
+        if (nextIndex() != null) {
+            Menus.say("Couldn't play \"${t.title}\", so it was skipped")
+            next()
+        } else {
+            Menus.say("Couldn't play \"${t.title}\"")
+            fail(e)
         }
     }
 
@@ -433,15 +468,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
 
         override fun onError(d: AudioDeck, e: Exception) {
             if (d === spare) { spare.stop(); return }
-            val t = items.getOrNull(cur) ?: return
-            // YouTube's audio addresses expire: look it up afresh, once.
-            if (!retried && e is HttpStatus || (!retried && e.cause is HttpStatus)) {
-                retried = true
-                YtRepo.forgetStreamUrls()
-                load(deck, t, cur, request, true)
-                return
-            }
-            fail(e)
+            recover(e)
         }
     }
 

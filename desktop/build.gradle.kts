@@ -10,7 +10,7 @@ plugins {
 val appBuild = file("../app/build.gradle.kts").readText()
 // Glasswave for Windows has its own version number, separate from the phone app.
 // Raise it for every Windows release: installed copies update themselves to a higher number.
-val appVersion = "1.0.5"
+val appVersion = "1.0.6"
 val newPipe = Regex("NewPipeExtractor:(v?[0-9][0-9.]*)").find(appBuild)?.groupValues?.get(1)
     ?: error("Couldn't find the NewPipeExtractor version in app/build.gradle.kts")
 
@@ -61,8 +61,8 @@ sourceSets.main { resources.srcDir(writeVersion) }
 tasks.register<JavaExec>("deckCheck") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("com.glasswave.player.DeckCheckKt")
-    (project.findProperty("song") as String?)?.let { args(it) }
-    (project.findProperty("only") as String?)?.let { args(project.findProperty("song") ?: "daft punk get lucky", it) }
+    val song = (project.findProperty("song") as String?) ?: "daft punk get lucky"
+    args(listOfNotNull(song, project.findProperty("only") as String?))
 }
 
 // For checks only: transcribes a WAV file with voice search's recogniser.
@@ -127,6 +127,7 @@ tasks.register<JavaExec>("screenCheck") {
     mainClass.set("com.glasswave.player.DevScriptKt")
     (project.findProperty("gwscript") as String?)?.let { args(it) }
     (project.findProperty("voiceWav") as String?)?.let { systemProperty("gw.voiceTestWav", it) }
+    if (project.hasProperty("testDrop")) systemProperty("gw.testDrop", "1")
 }
 
 // Remakes the website's link preview picture, docs/og.png (see OgImage.kt).

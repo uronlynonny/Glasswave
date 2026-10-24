@@ -34,12 +34,27 @@ internal class HttpSeekStream(private val url: String) : InputStream() {
 
     init { open(0) }
 
+    /**
+     * YouTube slows a song to playing speed when it's fetched in one long request (and sometimes
+     * cuts it off partway), so its audio servers are read in 2 MB pieces instead: a whole song
+     * arrives in seconds. Other servers get one request as before.
+     */
+    private val pieces = runCatching { java.net.URI(url).host?.endsWith("googlevideo.com") == true }.getOrDefault(false)
+    /** Where the open piece ends (exclusive). */
+    private var pieceEnd = Long.MAX_VALUE
+
     private fun open(at: Long) {
         closeBody()
+        if (length < 0) {
+            // YouTube puts the song's size in its address ("clen").
+            length = Regex("""[?&]clen=(\d+)""").find(url)?.groupValues?.get(1)?.toLongOrNull() ?: -1
+        }
+        val end = if (pieces) (if (length > 0) minOf(at + PIECE, length) else at + PIECE) else Long.MAX_VALUE
         val req = Request.Builder().url(url)
             .header("User-Agent", YtDownloader.USER_AGENT)
-            .header("Range", "bytes=$at-")
+            .header("Range", if (end == Long.MAX_VALUE) "bytes=$at-" else "bytes=$at-${end - 1}")
             .build()
+        pieceEnd = end
         val r = YtRepo.http.newCall(req).execute()
         if (!r.isSuccessful) {
             r.close()
@@ -47,7 +62,7 @@ internal class HttpSeekStream(private val url: String) : InputStream() {
         }
         if (length < 0) {
             length = r.header("Content-Range")?.substringAfterLast('/')?.toLongOrNull()
-                ?: r.body?.contentLength()?.takeIf { it >= 0 }?.plus(if (r.code == 206) at else 0)
+                ?: r.body?.contentLength()?.takeIf { it >= 0 && !pieces }?.plus(if (r.code == 206) at else 0)
                 ?: -1
         }
         response = r
@@ -80,13 +95,18 @@ internal class HttpSeekStream(private val url: String) : InputStream() {
 
     override fun read(b: ByteArray, off: Int, len: Int): Int {
         if (length in 0..pos) return -1
-        if (body == null || bodyPos != pos) open(pos)
-        val n = try {
+        if (body == null || bodyPos != pos || pos >= pieceEnd) open(pos)
+        var n = try {
             body!!.read(b, off, len)
         } catch (e: IOException) {
             // A dropped connection: pick up where it stopped, once.
             open(pos)
             body!!.read(b, off, len)
+        }
+        // A piece ended (or came up short): carry on with the next one.
+        if (n < 0 && pieces && (length < 0 || pos < length)) {
+            open(pos)
+            n = body!!.read(b, off, len)
         }
         if (n > 0) {
             pos += n
@@ -109,6 +129,8 @@ internal class HttpSeekStream(private val url: String) : InputStream() {
     override fun available() = 0
     override fun close() = closeBody()
 }
+
+private const val PIECE = 2L * 1024 * 1024
 
 class HttpStatus(val code: Int) : IOException("The server answered $code")
 
@@ -311,6 +333,8 @@ class AudioDeck(private val name: String) {
                 lastVol = target
                 val frameStart = if (frame.timestamp > 0) frame.timestamp else playedUs
                 if (seekUs >= 0) continue // a jump came in while decoding: drop this piece
+                // Automated checks only: pretend the connection dropped once, 5 s in.
+                if (testDrop && playedUs > 5_000_000) { testDrop = false; throw IOException("Test: connection dropped") }
                 l.write(bytes, 0, n * 2)
                 playedUs = frameStart + (n / 2) * 1_000_000L / RATE
             }
@@ -328,6 +352,7 @@ class AudioDeck(private val name: String) {
 
     companion object {
         private const val RATE = 48_000
+        @Volatile private var testDrop = System.getProperty("gw.testDrop") != null
         /** Where the limiter holds peaks: just under full scale (about -0.3 dB). */
         private const val CEILING = 0.966f
         private const val BYTES_PER_MS = RATE * 4 / 1000

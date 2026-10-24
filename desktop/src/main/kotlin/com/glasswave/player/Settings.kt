@@ -83,6 +83,9 @@ object Settings {
     var frameRate by mutableStateOf(FrameRate.OFF); private set
     /** Smoother everything at the cost of battery: every-frame motion, more preloading, sustained CPU. */
     var highPerformance by mutableStateOf(false); private set
+    /** Tell nonny dev when a song won't play (song, error, Windows version, app version). On by default. */
+    var reportProblems by mutableStateOf(true); private set
+    fun updateReportProblems(on: Boolean) { reportProblems = on; prefs.edit { putBoolean("report_problems", on) } }
     /** Show what's playing on your Discord profile. */
     var discord by mutableStateOf(true); private set
     fun updateDiscord(on: Boolean) { discord = on; prefs.edit { putBoolean("discord", on) } }
@@ -115,6 +118,7 @@ object Settings {
         // No performance mode on PC: it always runs the efficient way.
         highPerformance = false
         discord = prefs.getBoolean("discord", true)
+        reportProblems = prefs.getBoolean("report_problems", true)
     }
 
     fun updateFrameRate(f: FrameRate) { frameRate = f; prefs.edit { putString("frame_rate", f.name) } }
