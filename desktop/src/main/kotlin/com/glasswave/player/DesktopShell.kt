@@ -184,17 +184,21 @@ fun Sidebar(vm: MainViewModel, page: Backdrop, modifier: Modifier = Modifier) {
                 Modifier.fillMaxWidth().padding(top = 8.dp, start = 8.dp, end = 8.dp).graphicsLayer { alpha = (k - 0.6f) / 0.4f },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                RefreshButton(vm)
-                GText(if (vm.refreshing) "Refreshing…" else "Refresh", 13, Dim, FontWeight.Medium, 1, Modifier.padding(start = 8.dp))
-                Spacer(Modifier.weight(1f))
                 val news = Updater.available
+                // While an update downloads or waits, its status needs the room: Refresh keeps just its icon.
+                val updating = Updater.progress != null || Updater.ready != null || news != null
+                RefreshButton(vm)
+                if (!updating) GText(if (vm.refreshing) "Refreshing…" else "Refresh", 13, Dim, FontWeight.Medium, 1, Modifier.padding(start = 8.dp))
                 val label = when {
                     Updater.progress != null -> "Downloading ${((Updater.progress ?: 0f) * 100).toInt()}%"
                     Updater.ready != null -> "Restart to update"
                     news != null -> "${news.version} is out"
                     else -> "Updates"
                 }
-                GText(label, 13, if (news != null || Updater.ready != null) readable(CoverTint.accent) else Dim, FontWeight.Medium, 1, Modifier.padding(end = 8.dp))
+                // Takes only the space that's left, so it can never push the button out of the sidebar.
+                Box(Modifier.weight(1f).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterEnd) {
+                    GText(label, 13, if (updating) readable(CoverTint.accent) else Dim, FontWeight.Medium, 1)
+                }
                 UpdateButton(40.dp)
             }
         } else {
