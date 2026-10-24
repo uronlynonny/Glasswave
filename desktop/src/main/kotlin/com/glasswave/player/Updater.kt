@@ -224,22 +224,40 @@ object Updater {
 
     /**
      * Starts the installer from a tiny script that outlives the app: it waits for Glasswave to
-     * close, installs quietly (a small progress window, no questions), then reopens it if asked.
+     * close, installs quietly (a small progress window after "Restart to update", nothing at all
+     * when you just close the app), then reopens it only after "Restart to update".
      */
     private fun runInstaller(msi: File, reopen: Boolean): Boolean = try {
         val app = System.getProperty("jpackage.app-path")
         val script = File(dir, "install-update.cmd")
+        // This copy of Glasswave and its launcher: the installer waits until both have closed.
+        val me = ProcessHandle.current()
+        val pids = listOfNotNull(me.pid(), me.parent().orElse(null)?.takeIf { it.info().command().orElse("").endsWith("Glasswave.exe", true) }?.pid())
         script.writeText(
             buildString {
                 appendLine("@echo off")
-                appendLine("timeout /t 2 /nobreak >nul")
+                // (ping is the pause: "timeout" doesn't work without a window.)
+                appendLine("ping -n 3 127.0.0.1 >nul")
+                // Wait (up to a minute) until Glasswave has really closed, so files aren't in use.
+                for (pid in pids) {
+                    appendLine("set n=0")
+                    appendLine(":wait$pid")
+                    appendLine("set /a n+=1")
+                    appendLine("if %n% gtr 60 goto go$pid")
+                    appendLine("tasklist /FI \"PID eq $pid\" /NH | find \" $pid \" >nul && (ping -n 2 127.0.0.1 >nul & goto wait$pid)")
+                    appendLine(":go$pid")
+                }
                 appendLine("msiexec /i \"${msi.absolutePath}\" ${if (reopen) "/passive" else "/qn"} /norestart")
+                // Only when you clicked "Restart to update". Closing the app never reopens it.
                 if (reopen && app != null) appendLine("start \"\" \"$app\"")
                 appendLine("del \"%~f0\"")
             },
         )
-        ProcessBuilder("cmd.exe", "/c", "start", "\"Glasswave update\"", "/min", "cmd.exe", "/c", script.absolutePath)
-            .redirectErrorStream(true)
+        // Runs with no window of its own.
+        ProcessBuilder("cmd.exe", "/c", "start", "\"\"", "/b", "cmd.exe", "/c", script.absolutePath)
+            .redirectInput(ProcessBuilder.Redirect.from(File("NUL")))
+            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+            .redirectError(ProcessBuilder.Redirect.DISCARD)
             .start()
         ready = null
         true

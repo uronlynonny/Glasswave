@@ -200,6 +200,13 @@ tasks.register<JavaExec>("screenCheck") {
 }
 
 // Remakes the website's link preview picture, docs/og.png (see OgImage.kt).
+// Checks that a second launch hands over to the open copy (-Pdir: a sandbox folder for its files).
+tasks.register<JavaExec>("instanceCheck") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.InstanceCheckKt")
+    (project.findProperty("dir") as String?)?.let { environment("APPDATA", it) }
+}
+
 tasks.register<JavaExec>("titleCheck") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("com.glasswave.player.TitleCheckKt")

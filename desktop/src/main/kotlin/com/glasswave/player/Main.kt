@@ -193,6 +193,8 @@ private fun startSize(): DpSize {
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
+    // Already open: that window comes to the front instead of a second copy starting.
+    if (!SingleInstance.claim()) return
     startUp()
     application {
         val ps = remember { PlayerState().also { it.connect() } }
@@ -231,6 +233,13 @@ fun main() {
             LaunchedEffect(Unit) {
                 window.minimumSize = java.awt.Dimension(420, 640)
                 glassTitleBar(window)
+            }
+            // Someone opened Glasswave again while it was already running: show this window.
+            LaunchedEffect(SingleInstance.showRequests) {
+                if (SingleInstance.showRequests == 0) return@LaunchedEffect
+                state.isMinimized = false
+                window.toFront()
+                window.requestFocus()
             }
             val density = LocalDensity.current.density
             val focusManager = androidx.compose.ui.platform.LocalFocusManager.current

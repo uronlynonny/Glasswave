@@ -6,3 +6,6 @@ local.properties
 apk/
 .kotlin/
 
+
+# Things only for nonny dev, never pushed (e.g. the live active-users page).
+private/
