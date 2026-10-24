@@ -291,6 +291,22 @@ private fun Audio(c: ScreenCtx) {
         }
     }
     Note("Each song fades out over its last seconds and the next fades in, so songs blend instead of cutting.")
+    Group("Smooth mixing") {
+        Choices(MixMode.entries, Settings.mixMode, { it.label }, { it.detail }) { Settings.updateMixMode(it) }
+        if (Settings.mixMode != MixMode.OFF) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(4, 6, 8, 10, 12).forEach { s ->
+                    val on = Settings.mixSeconds == s
+                    Box(
+                        Modifier.weight(1f).pressable(0.95f) { Settings.updateMixSeconds(s) }.clip(CircleShape)
+                            .background(if (on) Color.White else Color.White.copy(alpha = 0.08f)).padding(vertical = 9.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { GText("${s}s", 13, if (on) Color.Black else Color.White, FontWeight.SemiBold, 1) }
+                }
+            }
+        }
+    }
+    Note("Like a DJ: the next song starts under the end of this one and they blend for a few seconds. When mixing is on, it takes over from crossfade.")
     Group("Playback") {
         SwitchRow("Autoplay", "When the queue ends, keep playing similar songs.", Settings.autoplay) { Settings.updateAutoplay(it) }
         Divider()

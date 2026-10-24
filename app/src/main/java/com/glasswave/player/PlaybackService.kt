@@ -137,7 +137,7 @@ class PlaybackService : MediaSessionService() {
             }
         }
         // While crossfading the fader sets the volume itself (and uses levelGain).
-        if (Settings.crossfade == 0 || !p.isPlaying) p.volume = levelGain
+        if ((Settings.crossfade == 0 || !p.isPlaying) && !mixing) p.volume = levelGain
     }
 
     private class Resolver : ResolvingDataSource.Resolver {
@@ -184,6 +184,7 @@ class PlaybackService : MediaSessionService() {
             .setCacheKeyFactory { spec -> spec.uri.toString() + "|" + Settings.quality.name }
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
         val sources = DataSource.Factory { LocalFirstDataSource(cached.createDataSource(), FileDataSource()) }
+        mediaSources = sources
 
         // Start making sound after a quarter of a second of audio, then download the rest of the
         // song (and the next one) in the background. Keep what's played so seeking back is instant.
@@ -214,6 +215,10 @@ class PlaybackService : MediaSessionService() {
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                // Skipped or picked another song mid-mix: stop the old song's tail straight away.
+                if (mixing && !mixOwnTransition) endMix(player)
+                mixOwnTransition = false
+                if (!mixing) mixPreparedFor = null
                 logPlay(player)
                 listening = mediaItem
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) SleepTimer.onSongEnded(player)
@@ -229,6 +234,8 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                // Paused (not just loading the next song) in the middle of a mix: let the old song go.
+                if (!isPlaying && mixing && !player.playWhenReady) endMix(player)
                 main.removeCallbacks(fader)
                 if (isPlaying) main.post(fader)
                 // Count only time actually spent playing.
@@ -411,8 +418,12 @@ class PlaybackService : MediaSessionService() {
     private val fader = object : Runnable {
         override fun run() {
             val p = session?.player ?: return
+            if (stepMix(p)) {
+                if (p.isPlaying || mixing) main.postDelayed(this, 40)
+                return
+            }
             val fadeMs = Settings.crossfade * 1000L
-            if (fadeMs > 0 && p.isPlaying) {
+            if (fadeMs > 0 && p.isPlaying && !mixOn(p)) {
                 val pos = p.currentPosition
                 val dur = p.duration
                 var v = 1f
@@ -422,8 +433,103 @@ class PlaybackService : MediaSessionService() {
             } else if (p.volume != levelGain) {
                 p.volume = levelGain
             }
-            if (p.isPlaying) main.postDelayed(this, 80)
+            // Check more often close to a mix point, so the blend starts right on time.
+            if (p.isPlaying) main.postDelayed(this, if (mixOn(p) && p.duration > 0 && p.duration - p.currentPosition < Settings.mixSeconds * 1000L + 3000) 40 else 80)
         }
+    }
+
+    /* ---- Smooth mixing: the end of one song plays under the start of the next ---- */
+
+    private var mediaSources: DataSource.Factory? = null
+    /** A second player that carries the last seconds of the outgoing song while the main player moves on. */
+    private var mixer: ExoPlayer? = null
+    private var mixPreparedFor: String? = null
+    private var mixAt = 0L
+    private var mixing = false
+    private var mixOwnTransition = false
+    private var mixStartAt = 0L
+    private var mixLength = 0L
+    private var mixOutGain = 1f
+
+    private fun mixOn(p: Player): Boolean {
+        val mode = Settings.mixMode
+        val on = mode == MixMode.ALL || (mode == MixMode.FLOW && Flow.active)
+        return on && p.repeatMode != Player.REPEAT_MODE_ONE && !SleepTimer.endOfSong
+    }
+
+    private fun mixerFor(): ExoPlayer? {
+        mixer?.let { return it }
+        val src = mediaSources ?: return null
+        return ExoPlayer.Builder(this)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(src))
+            // Same sound settings as the main player, but it never takes audio focus of its own.
+            .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), false)
+            .build()
+            .also { mixer = it }
+    }
+
+    /**
+     * One step of mixing. About 15 seconds before a song ends, its last part is loaded into the
+     * second player. At the mix point that player takes over the outgoing song's ending, while the
+     * main player (and the notification, lock screen and app) moves to the next song from its
+     * start. Over the overlap the old song fades out and the new one fades in, on an equal-power
+     * curve so the loudness doesn't dip in the middle. Returns true while it's in charge of the volume.
+     */
+    private fun stepMix(p: Player): Boolean {
+        if (mixing) {
+            val m = mixer
+            val k = ((android.os.SystemClock.elapsedRealtime() - mixStartAt).toFloat() / mixLength).coerceIn(0f, 1f)
+            val a = (k * Math.PI / 2).toFloat()
+            m?.volume = kotlin.math.cos(a) * mixOutGain
+            p.volume = kotlin.math.sin(a) * levelGain
+            if (k >= 1f || m == null || m.playbackState == Player.STATE_ENDED || m.playbackState == Player.STATE_IDLE) endMix(p)
+            return true
+        }
+        if (!mixOn(p) || !p.isPlaying) return false
+        val dur = p.duration
+        if (dur == C.TIME_UNSET || dur < 45_000) return false
+        if (p.nextMediaItemIndex == C.INDEX_UNSET) return false
+        val item = p.currentMediaItem ?: return false
+        val len = minOf(Settings.mixSeconds * 1000L, dur / 5)
+        val start = dur - len
+        val pos = p.currentPosition
+        if (pos < start - 15_000) return false
+
+        // Get the ending ready ahead of time (from the cache, so it's quick).
+        if (mixPreparedFor != item.mediaId) {
+            val m = mixerFor() ?: return false
+            m.setMediaItem(item)
+            m.prepare()
+            m.seekTo(start)
+            m.playWhenReady = false
+            m.volume = levelGain
+            mixPreparedFor = item.mediaId
+            mixAt = start
+            return false
+        }
+        // The mix point. Only right at it: after a seek past it, the song just ends normally.
+        if (pos >= mixAt && pos < mixAt + 1_500) {
+            val m = mixer ?: return false
+            if (m.playbackState != Player.STATE_READY) return false // not loaded in time: plain change
+            mixOutGain = levelGain
+            m.volume = levelGain
+            m.play()
+            mixing = true
+            mixOwnTransition = true
+            mixStartAt = android.os.SystemClock.elapsedRealtime()
+            mixLength = dur - mixAt
+            p.volume = 0f
+            p.seekToNextMediaItem()
+            return true
+        }
+        return false
+    }
+
+    private fun endMix(p: Player) {
+        mixing = false
+        mixPreparedFor = null
+        mixer?.let { m -> m.pause(); m.stop(); m.clearMediaItems() }
+        p.volume = levelGain
     }
 
     companion object {
@@ -449,6 +555,8 @@ class PlaybackService : MediaSessionService() {
         session?.player?.let { logPlay(it) }
         runCatching { boost?.release() }
         boost = null
+        runCatching { mixer?.release() }
+        mixer = null
         // The widget keeps the last song but its buttons now open the app.
         session?.player?.let { p ->
             val md = p.currentMediaItem?.mediaMetadata
