@@ -291,9 +291,9 @@ private fun Audio(c: ScreenCtx) {
         }
     }
     Note("Each song fades out over its last seconds and the next fades in, so songs blend instead of cutting.")
-    Group("Smooth mixing") {
-        Choices(MixMode.entries, Settings.mixMode, { it.label }, { it.detail }) { Settings.updateMixMode(it) }
-        if (Settings.mixMode != MixMode.OFF) {
+    Group("Automix") {
+        SwitchRow("Automix", "Blends each song into the next, like a DJ. Also in the player's ••• menu.", Settings.automix) { Settings.updateAutomix(it) }
+        if (Settings.automix) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(4, 6, 8, 10, 12).forEach { s ->
                     val on = Settings.mixSeconds == s
@@ -306,7 +306,7 @@ private fun Audio(c: ScreenCtx) {
             }
         }
     }
-    Note("Like a DJ: the next song starts under the end of this one and they blend for a few seconds. When mixing is on, it takes over from crossfade.")
+    Note("The next song starts under the end of this one and they blend for the length you pick. While Automix is on, it takes over from crossfade.")
     Group("Playback") {
         SwitchRow("Autoplay", "When the queue ends, keep playing similar songs.", Settings.autoplay) { Settings.updateAutoplay(it) }
         Divider()

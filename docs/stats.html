@@ -161,7 +161,7 @@ a{color:var(--lime)}
     const sum = (a, k) => a.reduce((s, r) => s + (r[k] || 0), 0);
     $('tVisits').textContent = fmt(data.totals.visits);
     $('tSite').textContent = fmt(data.totals.siteDownloads);
-    $('tApk').textContent = fmt(data.apkTotal || 0);
+    $('tApk').textContent = fmt((data.totals && data.totals.apk) || data.apkTotal || 0);
     $('tRate').textContent = data.totals.visits ? Math.round(100 * data.totals.siteDownloads / data.totals.visits) + '%' : '–';
     $('tVisits24').textContent = `+${fmt(sum(last24, 'v'))} in the last 24 hours`;
     $('tSite24').textContent = `+${fmt(sum(last24, 'd'))} in the last 24 hours`;

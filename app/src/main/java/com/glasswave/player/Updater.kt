@@ -83,6 +83,48 @@ object Updater {
         }
     }
 
+    /* ---------------- What's new ---------------- */
+
+    /** Shown once after an update: the version and a few short lines about what changed. */
+    class WhatsNew(val version: String, val lines: List<String>)
+
+    var whatsNew by mutableStateOf<WhatsNew?>(null)
+        private set
+
+    /** The short "- ..." lines of a release's notes, without the install instructions. */
+    fun highlights(notes: String, max: Int = 5): List<String> = notes.lines()
+        .map { it.trim() }
+        .filter { it.startsWith("- ") || it.startsWith("* ") }
+        .map { it.drop(2).trim().replace(Regex("\\s*\\(from [\\d.]+\\)"), "") }
+        .filter { it.isNotEmpty() }
+        .take(max)
+
+    /**
+     * On the first launch after an update, fetches that version's release notes and shows them
+     * once. A fresh install shows nothing (there's nothing "new" yet).
+     */
+    fun checkWhatsNew() {
+        val prefs = app.getSharedPreferences("updater", Context.MODE_PRIVATE)
+        val now = currentVersion()
+        val seen = prefs.getString("seen_version", null)
+        if (seen == now) return
+        prefs.edit().putString("seen_version", now).apply()
+        if (seen == null) return
+        scope.launch {
+            val notes = withContext(Dispatchers.IO) {
+                runCatching {
+                    val req = Request.Builder().url("https://api.github.com/repos/$REPO/releases/tags/v$now")
+                        .header("Accept", "application/vnd.github+json").header("User-Agent", "Glasswave").build()
+                    YtRepo.http.newCall(req).execute().use { r -> if (r.isSuccessful) JSONObject(r.body?.string() ?: "{}").optString("body") else null }
+                }.getOrNull()
+            } ?: return@launch
+            val lines = highlights(notes)
+            if (lines.isNotEmpty()) whatsNew = WhatsNew(now, lines)
+        }
+    }
+
+    fun dismissWhatsNew() { whatsNew = null }
+
     fun currentVersion(): String =
         runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "0" }.getOrDefault("0")
 

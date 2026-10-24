@@ -49,12 +49,15 @@ jobs:
           [ "$a" -lt 0 ] && a=0
 
           jq --argjson t "$now" --argjson last "$newLast" --argjson v "$v" --argjson d "$d" --argjson a "$a" --argjson apk "$apk" '
-            .updated = $t | .lastTime = $last | .apkTotal = $apk
+            .updated = $t | .lastTime = $last
+            # Our own running total: old releases can be deleted (taking their counts with them).
+            | .totals.apk = ((.totals.apk // .apkTotal // 0) + $a)
+            | .apkTotal = $apk
             | .totals.visits += $v | .totals.siteDownloads += $d
             | .hours = ((.hours + [{t: $t, v: $v, d: $d, a: $a}]) | .[-2160:])
           ' "$F" > tmp.json && mv tmp.json "$F"
 
-          tv=$(jq '.totals.visits' "$F"); td=$(jq '.totals.siteDownloads' "$F")
+          tv=$(jq '.totals.visits' "$F"); td=$(jq '.totals.siteDownloads' "$F"); apk=$(jq '.totals.apk' "$F")
           pl() { [ "$1" -eq 1 ] && echo "$1 $2" || echo "$1 $3"; }
           msg="Last hour: $(pl $v visit visits), $(pl $d download downloads) from the site, $(pl $a 'APK download' 'APK downloads') in total (incl. app updates).
           All time: $(pl $tv visit visits), $(pl $td 'site download' 'site downloads'), $(pl $apk 'APK download' 'APK downloads')."

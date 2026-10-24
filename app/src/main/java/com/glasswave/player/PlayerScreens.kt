@@ -48,6 +48,7 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeMute
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.MergeType
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Download
@@ -669,6 +670,11 @@ private fun MoreSheet(ps: PlayerState, fp: Backdrop, colors: CoverColors, openEq
                 DownloadTile(ps)
                 SheetTile(Icons.Rounded.Bedtime, "Sleep", SleepTimer.active) { showSleep = !showSleep }
                 SheetTile(Icons.Rounded.Equalizer, "Equalizer", false, openEqualizer)
+                // Automix: blend each song into the next. Off until you switch it on.
+                SheetTile(Icons.Rounded.MergeType, "Automix", Settings.automix) {
+                    Settings.updateAutomix(!Settings.automix)
+                    Menus.say(if (Settings.automix) "Automix on: songs blend into each other" else "Automix off")
+                }
             }
             AnimatedVisibility(showSleep) {
                 Column {

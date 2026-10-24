@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -336,4 +337,59 @@ fun LyricsButton(playing: Boolean, accent: Color, onClick: () -> Unit, modifier:
                 }
             },
     )
+}
+
+/* ---------------- What's new ---------------- */
+
+/**
+ * After an update: a small glass card slides down from the top with what changed, then slides
+ * away on its own after a few seconds (or straight away when tapped). It's shown once per version.
+ */
+@Composable
+fun BoxScope.WhatsNewCard(page: Backdrop) {
+    val news = Updater.whatsNew
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(news) {
+        if (news == null) return@LaunchedEffect
+        kotlinx.coroutines.delay(2600) // after the opening animation
+        shown = true
+        kotlinx.coroutines.delay(9000)
+        shown = false
+        kotlinx.coroutines.delay(400)
+        Updater.dismissWhatsNew()
+    }
+    AnimatedVisibility(
+        shown && news != null,
+        modifier = Modifier.align(Alignment.TopCenter),
+        enter = slideInVertically(bouncy()) { -it } + fadeIn(smooth(200)),
+        exit = slideOutVertically(smooth(220)) { -it } + fadeOut(smooth(180)),
+    ) {
+        var last by remember { mutableStateOf(news) }
+        if (news != null) last = news
+        val n = last ?: return@AnimatedVisibility
+        Column(
+            Modifier
+                .statusBarsPadding()
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .widthIn(max = 520.dp)
+                .fillMaxWidth()
+                .pressable(0.98f) { shown = false }
+                .liquidGlass(page, 22.dp, Color(0xD90E1110), blur = 18.dp, depth = 10.dp, bend = 10.dp, rim = CoverTint.accent)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).clip(CircleShape).background(CoverTint.accent))
+                Spacer(Modifier.width(8.dp))
+                GText("What's new in ${n.version}", 15, weight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+                GText("Got it", 13, CoverTint.accent, FontWeight.SemiBold, 1)
+            }
+            Spacer(Modifier.height(6.dp))
+            n.lines.forEach { line ->
+                Row(Modifier.padding(vertical = 2.dp)) {
+                    GText("•", 13, Dim, maxLines = 1, modifier = Modifier.padding(end = 6.dp))
+                    GText(line, 13, Dim, maxLines = 2)
+                }
+            }
+        }
+    }
 }

@@ -49,13 +49,6 @@ enum class FrameRate(val label: String, val detail: String, val hz: Float) {
     F120("120 Hz", "Smoothest, if your screen supports it. Uses more battery.", 120f),
 }
 
-/** Smooth mixing: the end of one song plays under the start of the next, like a DJ blending them. */
-enum class MixMode(val label: String, val detail: String) {
-    OFF("Off", "Songs play one after another."),
-    FLOW("In Flow", "Flow blends each song into the next, like a DJ set."),
-    ALL("Everywhere", "Flow, playlists and albums all blend from song to song."),
-}
-
 enum class CacheSize(val label: String, val bytes: Long) {
     S256("256 MB", 256L shl 20), S512("512 MB", 512L shl 20), G1("1 GB", 1L shl 30), G2("2 GB", 2L shl 30),
 }
@@ -67,7 +60,8 @@ object Settings {
     var quality by mutableStateOf(Quality.HIGH); private set
     var skipSilence by mutableStateOf(false); private set
     var volumeLeveling by mutableStateOf(true); private set
-    var mixMode by mutableStateOf(MixMode.ALL); private set
+    /** Automix: the end of one song plays under the start of the next, like a DJ blending them. Off by default. */
+    var automix by mutableStateOf(false); private set
     /** How long two songs overlap when mixing, in seconds. */
     var mixSeconds by mutableIntStateOf(8); private set
     var animations by mutableStateOf(true); private set
@@ -98,7 +92,7 @@ object Settings {
         quality = enumPref("quality", Quality.HIGH)
         skipSilence = prefs.getBoolean("skip_silence", false)
         volumeLeveling = prefs.getBoolean("volume_leveling", true)
-        mixMode = enumPref("mix_mode", MixMode.ALL)
+        automix = prefs.getBoolean("automix", false)
         mixSeconds = prefs.getInt("mix_seconds", 8)
         animations = prefs.getBoolean("animations", true)
         glass = prefs.getBoolean("glass", true)
@@ -159,7 +153,7 @@ object Settings {
         prefs.edit { putBoolean("autoplay", on) }
         listeners.forEach { it() } // the player adds or removes Autoplay songs
     }
-    fun updateMixMode(m: MixMode) { mixMode = m; prefs.edit { putString("mix_mode", m.name) } }
+    fun updateAutomix(on: Boolean) { automix = on; prefs.edit { putBoolean("automix", on) } }
     fun updateMixSeconds(sec: Int) { mixSeconds = sec.coerceIn(3, 15); prefs.edit { putInt("mix_seconds", mixSeconds) } }
 
     fun updateCrossfade(sec: Int) { crossfade = sec.coerceIn(0, 12); prefs.edit { putInt("crossfade", crossfade) } }

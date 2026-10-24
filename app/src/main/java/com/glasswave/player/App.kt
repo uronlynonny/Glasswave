@@ -80,8 +80,12 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
         Menus.closePlaylist()
     }
 
-    // Look for a new version when the app opens (at most every six hours).
-    LaunchedEffect(Unit) { Updater.checkIfDue() }
+    // Look for a new version when the app opens (at most every three hours), and after an update
+    // say once what's new.
+    LaunchedEffect(Unit) {
+        Updater.checkIfDue()
+        Updater.checkWhatsNew()
+    }
 
     // Keep the progress bars moving while a song plays.
     LaunchedEffect(ps.playing) {
@@ -190,6 +194,9 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
             full = false
             vm.open(Route.Online(item))
         }
+
+        // "What's new" after an update: a small card at the top, once.
+        WhatsNewCard(page)
 
         // Opening intro, once per launch (not again on rotation).
         var intro by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(true) }

@@ -132,8 +132,16 @@ fun HomeScreen(c: ScreenCtx) {
                             else -> "Glasswave ${r.version} is out · getting it ready…"
                         },
                         13, CoverTint.accent, FontWeight.SemiBold, 1,
-                        Modifier.padding(start = 20.dp, end = 16.dp, bottom = 6.dp).pressable(0.98f) { Updater.install(ctx) },
+                        Modifier.padding(start = 20.dp, end = 16.dp, bottom = 2.dp).pressable(0.98f) { Updater.install(ctx) },
                     )
+                    // A peek at what's in it: the first two lines of its notes.
+                    val peek = Updater.highlights(r.notes, 2)
+                    if (peek.isNotEmpty()) {
+                        GText(
+                            peek.joinToString(" · "), 12, Dim, maxLines = 2,
+                            modifier = Modifier.padding(start = 20.dp, end = 16.dp, bottom = 6.dp).pressable(0.98f) { Updater.install(ctx) },
+                        )
+                    }
                 }
             }
 

@@ -452,9 +452,7 @@ class PlaybackService : MediaSessionService() {
     private var mixOutGain = 1f
 
     private fun mixOn(p: Player): Boolean {
-        val mode = Settings.mixMode
-        val on = mode == MixMode.ALL || (mode == MixMode.FLOW && Flow.active)
-        return on && p.repeatMode != Player.REPEAT_MODE_ONE && !SleepTimer.endOfSong
+        return Settings.automix && p.repeatMode != Player.REPEAT_MODE_ONE && !SleepTimer.endOfSong
     }
 
     private fun mixerFor(): ExoPlayer? {
