@@ -10,7 +10,7 @@ plugins {
 val appBuild = file("../app/build.gradle.kts").readText()
 // Glasswave for Windows has its own version number, separate from the phone app.
 // Raise it for every Windows release: installed copies update themselves to a higher number.
-val appVersion = "1.0.4"
+val appVersion = "1.0.5"
 val newPipe = Regex("NewPipeExtractor:(v?[0-9][0-9.]*)").find(appBuild)?.groupValues?.get(1)
     ?: error("Couldn't find the NewPipeExtractor version in app/build.gradle.kts")
 
@@ -62,6 +62,7 @@ tasks.register<JavaExec>("deckCheck") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("com.glasswave.player.DeckCheckKt")
     (project.findProperty("song") as String?)?.let { args(it) }
+    (project.findProperty("only") as String?)?.let { args(project.findProperty("song") ?: "daft punk get lucky", it) }
 }
 
 // For checks only: transcribes a WAV file with voice search's recogniser.
@@ -86,13 +87,13 @@ compose.desktop {
     application {
         mainClass = "com.glasswave.player.MainKt"
         // ZGC: memory clean-up without pauses, so animations never hitch.
-        // Light on memory: a small starting heap that grows only when needed and is handed back to
-        // Windows when idle, with short garbage-collection pauses so animations don't stutter.
+        // Light on memory: the app's own data is small (about 20-30 MB), so it uses the simple
+        // "Serial" collector, which needs almost no memory of its own (G1 needed ~50 MB just for
+        // bookkeeping), with a small heap that grows only when needed and shrinks back after.
         jvmArgs += listOf(
-            "-Xms64m", "-Xmx768m",
-            "-XX:+UseG1GC", "-XX:MaxGCPauseMillis=10",
-            "-XX:G1PeriodicGCInterval=30000", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=25",
-            "-XX:+UseStringDeduplication", "-XX:ReservedCodeCacheSize=96m",
+            "-Xms24m", "-Xmx512m",
+            "-XX:+UseSerialGC", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=30",
+            "-XX:ReservedCodeCacheSize=64m", "-XX:CICompilerCount=2", "-Xss512k",
             "-Dsun.java2d.uiScale.enabled=true",
         )
         nativeDistributions {
@@ -126,6 +127,13 @@ tasks.register<JavaExec>("screenCheck") {
     mainClass.set("com.glasswave.player.DevScriptKt")
     (project.findProperty("gwscript") as String?)?.let { args(it) }
     (project.findProperty("voiceWav") as String?)?.let { systemProperty("gw.voiceTestWav", it) }
+}
+
+// Remakes the website's link preview picture, docs/og.png (see OgImage.kt).
+tasks.register<JavaExec>("makeOg") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.OgImageKt")
+    args(file("../docs/og.png").absolutePath)
 }
 
 // Remakes icons/glasswave.ico from the icon design (see IconMaker.kt).

@@ -109,6 +109,36 @@ private fun darkTitleBar(w: java.awt.Window) {
     }
 }
 
+/**
+ * Windows 11 slows down apps whose window is minimized or hidden ("power throttling"), which can
+ * make music skip. While a song plays, Glasswave asks to keep full speed; when paused it lets
+ * Windows save power again.
+ */
+private interface Kernel : JnaLibrary {
+    fun GetCurrentProcess(): Pointer
+    fun SetProcessInformation(process: Pointer, infoClass: Int, info: Pointer, size: Int): Boolean
+}
+
+object WinPower {
+    private val kernel by lazy { runCatching { Native.load("kernel32", Kernel::class.java) }.getOrNull() }
+    private var last: Boolean? = null
+
+    fun fullSpeed(on: Boolean) {
+        if (last == on) return
+        last = on
+        runCatching {
+            val k = kernel ?: return
+            // PROCESS_POWER_THROTTLING_STATE: version 1; we decide execution speed (1) and timer
+            // accuracy (4); state 0 means "don't throttle", the same bits mean "throttle as usual".
+            val mem = com.sun.jna.Memory(12)
+            mem.setInt(0, 1)
+            mem.setInt(4, 0x1 or 0x4)
+            mem.setInt(8, if (on) 0 else 0x1 or 0x4)
+            k.SetProcessInformation(k.GetCurrentProcess(), 4, mem, 12)
+        }
+    }
+}
+
 /** Everything the phone app set up when it started. */
 internal fun startUp() {
     val ctx = AppContext
@@ -140,7 +170,7 @@ internal fun startUp() {
     SingletonImageLoader.setSafe { pc ->
         ImageLoader.Builder(pc)
             .components { add(OkHttpNetworkFetcherFactory(callFactory = { YtRepo.http })) }
-            .memoryCache { MemoryCache.Builder().maxSizeBytes(80L * 1024 * 1024).build() }
+            .memoryCache { MemoryCache.Builder().maxSizeBytes(40L * 1024 * 1024).build() }
             .diskCache { DiskCache.Builder().directory(File(AppDirs.cache, "art").toOkioPath()).maxSizeBytes(256L * 1024 * 1024).build() }
             .crossfade(true)
             .build()

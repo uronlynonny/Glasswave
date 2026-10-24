@@ -101,6 +101,9 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
         }
     }
 
+    // Full speed while music plays, even minimized (see WinPower).
+    LaunchedEffect(ps.playing) { WinPower.fullSpeed(ps.playing) }
+
     // Keep the progress bars moving while a song plays.
     LaunchedEffect(ps.playing) {
         while (ps.playing) {

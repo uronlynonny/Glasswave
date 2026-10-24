@@ -554,6 +554,8 @@ object YtMusicApi {
         )
     }
 
+    private val videoTitle = Regex("""\b(official\s+(music\s+)?video|music\s+video|lyric\s+video|official\s+visuali[sz]er|visuali[sz]er|live\s+performance|\(video\)|\[video\])""", RegexOption.IGNORE_CASE)
+
     fun radio(videoId: String): List<Track> {
         val json = call(
             "next",
@@ -569,6 +571,11 @@ object YtMusicApi {
             if (id.isEmpty() || id == videoId) continue
             val title = ytText(r.opt("title"))
             if (title.isEmpty()) continue
+            // Songs only: no official music videos, fan uploads or lyric videos sneaking into
+            // Autoplay, Automix or Flow (they break the mood and repeat songs already queued).
+            val type = findString(r, "musicVideoType")
+            if (type != null && type != "MUSIC_VIDEO_TYPE_ATV") continue
+            if (videoTitle.containsMatchIn(title)) continue
             val (artist, _) = artistAndLength(r.opt("longBylineText") ?: r.opt("shortBylineText"))
             val seconds = parseDuration(ytText(r.opt("lengthText")))
             out.putIfAbsent(id, Track(ytWatchUrl(id), title, artist.ifEmpty { ytText(r.opt("shortBylineText")) }, seconds, sized(lastThumb(r.opt("thumbnail")), 226)))

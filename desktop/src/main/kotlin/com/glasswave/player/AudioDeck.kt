@@ -6,6 +6,7 @@ import java.io.IOException
 import java.io.InputStream
 import javax.sound.sampled.AudioFormat
 import javax.sound.sampled.AudioSystem
+import javax.sound.sampled.FloatControl
 import javax.sound.sampled.SourceDataLine
 import javax.swing.SwingUtilities
 import okhttp3.Request
@@ -23,7 +24,7 @@ sealed interface AudioSource {
  * Reads a song from the internet in a way FFmpeg can jump around in: every jump opens a fresh
  * request starting at that byte. Nothing is downloaded before it's needed.
  */
-private class HttpSeekStream(private val url: String) : InputStream() {
+internal class HttpSeekStream(private val url: String) : InputStream() {
     private var pos = 0L
     private var body: InputStream? = null
     private var response: Response? = null
@@ -166,7 +167,7 @@ class AudioDeck(private val name: String) {
         val gen = generation
         Thread({ run(gen, source, startMs) }, "deck-$name").apply {
             isDaemon = true
-            priority = Thread.MAX_PRIORITY - 1
+            priority = Thread.MAX_PRIORITY
             start()
         }
     }
@@ -212,7 +213,9 @@ class AudioDeck(private val name: String) {
                 is AudioSource.LocalFile -> FFmpegFrameGrabber(source.file)
                 is AudioSource.Remote -> FFmpegFrameGrabber(HttpSeekStream(source.url), Int.MAX_VALUE - 8)
             }
-            grabber.sampleFormat = avutil.AV_SAMPLE_FMT_S16
+            // Decode at full precision; everything is worked on in floating point and only turned
+            // into 16-bit (what Windows' sound output takes from Java) at the very end.
+            grabber.sampleFormat = avutil.AV_SAMPLE_FMT_FLT
             grabber.sampleRate = RATE
             grabber.audioChannels = 2
             grabber.start()
@@ -229,6 +232,16 @@ class AudioDeck(private val name: String) {
 
             var lastVol = volume
             var bytes = ByteArray(0)
+            // Your volume is applied at the speaker when it can be, so the slider still reacts at
+            // once even with a deeper queue of sound ahead. The deck's own level (crossfades,
+            // Automix) stays in the samples, where both decks line up.
+            val master = runCatching { l.getControl(FloatControl.Type.MASTER_GAIN) as FloatControl }.getOrNull()
+            var lastApp = -1f
+            // A smooth limiter: when volume leveling lifts a quiet song, loud peaks are eased
+            // under the ceiling instead of being clipped (which sounds harsh and crunchy).
+            var env = 1f
+            val release = (1.0 - Math.exp(-1.0 / (0.15 * RATE))).toFloat()
+            val rng = java.util.SplittableRandom()
             while (gen == generation) {
                 if (!playWhenReady) {
                     if (l.isRunning) l.stop()
@@ -258,20 +271,42 @@ class AudioDeck(private val name: String) {
                     }
                     break
                 }
-                val buf = frame.samples?.firstOrNull() as? java.nio.ShortBuffer ?: continue
-                val n = buf.remaining()
+                val raw = frame.samples?.firstOrNull() ?: continue
+                val fbuf = raw as? java.nio.FloatBuffer
+                val sbuf = raw as? java.nio.ShortBuffer
+                if (fbuf == null && sbuf == null) continue
+                val n = fbuf?.remaining() ?: sbuf!!.remaining()
                 if (n == 0) continue
                 if (bytes.size < n * 2) bytes = ByteArray(n * 2)
                 // Volume, gliding from the last value to the new one across this piece of audio.
-                val target = volume * AppVolume.gain
+                val app = AppVolume.gain
+                if (master != null && app != lastApp) {
+                    lastApp = app
+                    runCatching {
+                        master.value = if (app <= 0.0001f) master.minimum
+                        else (20f * kotlin.math.log10(app)).coerceIn(master.minimum, master.maximum)
+                    }
+                }
+                val target = volume * (if (master != null) 1f else app)
+                val start = fbuf?.position() ?: sbuf!!.position()
                 var i = 0
-                val start = buf.position()
-                while (i < n) {
+                while (i + 1 < n) {
+                    // One stereo frame at a time, so both sides are limited together.
                     val g = lastVol + (target - lastVol) * i / n
-                    val v = (buf.get(start + i) * g).toInt().coerceIn(-32768, 32767)
-                    bytes[i * 2] = v.toByte()
-                    bytes[i * 2 + 1] = (v shr 8).toByte()
-                    i++
+                    var a = (fbuf?.get(start + i) ?: (sbuf!!.get(start + i) / 32768f)) * g
+                    var b = (fbuf?.get(start + i + 1) ?: (sbuf!!.get(start + i + 1) / 32768f)) * g
+                    val peak = maxOf(kotlin.math.abs(a), kotlin.math.abs(b)) * env
+                    if (peak > CEILING) env *= CEILING / peak else env += (1f - env) * release
+                    a *= env
+                    b *= env
+                    // A whisper of dither (TPDF) so quiet parts and fades stay smooth at 16-bit.
+                    val va = (a * 32767f + (rng.nextDouble() - rng.nextDouble()).toFloat()).toInt().coerceIn(-32768, 32767)
+                    val vb = (b * 32767f + (rng.nextDouble() - rng.nextDouble()).toFloat()).toInt().coerceIn(-32768, 32767)
+                    bytes[i * 2] = va.toByte()
+                    bytes[i * 2 + 1] = (va shr 8).toByte()
+                    bytes[i * 2 + 2] = vb.toByte()
+                    bytes[i * 2 + 3] = (vb shr 8).toByte()
+                    i += 2
                 }
                 lastVol = target
                 val frameStart = if (frame.timestamp > 0) frame.timestamp else playedUs
@@ -293,9 +328,14 @@ class AudioDeck(private val name: String) {
 
     companion object {
         private const val RATE = 48_000
+        /** Where the limiter holds peaks: just under full scale (about -0.3 dB). */
+        private const val CEILING = 0.966f
         private const val BYTES_PER_MS = RATE * 4 / 1000
-        /** A quarter of a second of sound queued up ahead: quick to react, never stutters. */
-        private const val BUFFER_BYTES = RATE * 4 / 4
+        /**
+         * About 0.6 s of sound queued up ahead: enough to ride out a busy moment (like the window
+         * coming back from the taskbar) without a skip, while pausing and seeking stay instant.
+         */
+        private const val BUFFER_BYTES = RATE * 4 * 3 / 5
         private val FORMAT = AudioFormat(RATE.toFloat(), 16, 2, true, false)
 
         init {
