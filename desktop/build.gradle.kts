@@ -4,9 +4,9 @@ import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 plugins {
-    kotlin("jvm") version "2.0.21"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.0.21"
-    id("org.jetbrains.compose") version "1.7.3"
+    kotlin("jvm") version "2.2.21"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.2.21"
+    id("org.jetbrains.compose") version "1.10.3"
 }
 
 // Same version and YouTube library as the phone app, read from its build file so the two stay in step.
@@ -22,11 +22,11 @@ dependencies {
     implementation(compose.foundation)
     implementation(compose.animation)
     implementation(compose.materialIconsExtended)
-    implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
+    implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.9.6")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
 
-    implementation("io.coil-kt.coil3:coil-compose:3.0.4")
-    implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
+    implementation("io.coil-kt.coil3:coil-compose:3.3.0")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.3.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.json:json:20240303")
 
@@ -102,9 +102,9 @@ compose.desktop {
         // "Serial" collector, which needs almost no memory of its own (G1 needed ~50 MB just for
         // bookkeeping), with a small heap that grows only when needed and shrinks back after.
         jvmArgs += listOf(
-            "-Xms24m", "-Xmx512m",
+            "-Xms24m", "-Xmx256m",
             "-XX:+UseSerialGC", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=30",
-            "-XX:ReservedCodeCacheSize=64m", "-XX:CICompilerCount=2", "-Xss512k",
+            "-XX:TieredStopAtLevel=1", "-XX:ReservedCodeCacheSize=32m", "-XX:CICompilerCount=1", "-Xss512k",
             "-Dsun.java2d.uiScale.enabled=true",
         )
         nativeDistributions {
@@ -220,6 +220,18 @@ tasks.register<JavaExec>("screenCheck") {
         environment("LOCALAPPDATA", "$dir/local")
         systemProperty("gw.appResources", layout.buildDirectory.dir("appres/windows").get().asFile.absolutePath)
     }
+}
+
+// Opens the real app (with check data) and runs a script of steps, writing down memory use as it
+// goes (see MemScript.kt):  ./gradlew -p desktop memCheck -Pgwscript=path/to/script.txt
+tasks.register<JavaExec>("memCheck") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.MainKt")
+    jvmArgs(compose.desktop.application.jvmArgs)
+    (project.findProperty("gwscript") as String?)?.let { systemProperty("gw.memScript", it) }
+    systemProperty("gw.noCheckIn", "1")
+    (project.findProperty("renderApi") as String?)?.let { systemProperty("skiko.renderApi", it) }
+    (project.findProperty("extraJvm") as String?)?.let { jvmArgs(it.split(" ")) }
 }
 
 // Remakes the website's link preview picture, docs/og.png (see OgImage.kt).

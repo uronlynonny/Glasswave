@@ -147,6 +147,71 @@ object WinPower {
     }
 }
 
+/**
+ * While the window is minimized, Glasswave hands the memory it isn't using back to Windows (for
+ * games and other apps). The music keeps playing; anything needed again comes back by itself.
+ */
+private interface Psapi : JnaLibrary {
+    fun GetCurrentProcess(): Pointer
+    fun K32EmptyWorkingSet(process: Pointer): Boolean
+}
+
+object WinMemory {
+    private val kernel by lazy { runCatching { Native.load("kernel32", Psapi::class.java) }.getOrNull() }
+
+    fun giveBack() {
+        runCatching {
+            System.gc()
+            // Pictures that were let go are freed once the clean-up above has run.
+            Thread.sleep(300)
+            val k = kernel ?: return
+            k.K32EmptyWorkingSet(k.GetCurrentProcess())
+        }
+    }
+}
+
+/**
+ * The graphics card side of drawing keeps old pictures and scratch space around "in case", up to
+ * 256 MB, and never lets go of them: opening the lyrics once was enough to fill it. This keeps that
+ * store small. (The drawing library doesn't offer it directly, so it's found by name, and nothing
+ * happens if it isn't there.)
+ */
+object GpuMemory {
+    /** What the graphics store may keep between frames. */
+    private const val LIMIT = 32L * 1024 * 1024
+    private var done: Any? = null
+
+    private fun field(o: Any, name: String): Any? {
+        var c: Class<*>? = o.javaClass
+        while (c != null) {
+            runCatching { return c.getDeclaredField(name).apply { isAccessible = true }.get(o) }
+            c = c.superclass
+        }
+        return null
+    }
+
+    fun findLayer(c: java.awt.Component): org.jetbrains.skiko.SkiaLayer? {
+        if (c is org.jetbrains.skiko.SkiaLayer) return c
+        if (c is java.awt.Container) for (k in c.components) findLayer(k)?.let { return it }
+        return null
+    }
+
+    /** Call now and then: the store is made with the first frame, and again if the card resets. */
+    fun limit(window: java.awt.Window) {
+        runCatching {
+            val layer = findLayer(window) ?: return
+            val redrawer = layer.javaClass.methods.firstOrNull { it.name.startsWith("getRedrawer") && it.parameterCount == 0 }
+                ?.invoke(layer) ?: return
+            val handler = field(redrawer, "contextHandler") ?: return
+            val ctx = field(handler, "context") as? org.jetbrains.skia.DirectContext ?: return
+            if (done === ctx) return
+            ctx.resourceCacheLimit = LIMIT
+            android.util.Log.i("Glasswave", "Graphics memory limited to ${LIMIT shr 20} MB")
+            done = ctx
+        }.onFailure { android.util.Log.w("Glasswave", "Couldn't limit graphics memory", it) }
+    }
+}
+
 /** Everything the phone app set up when it started. */
 internal fun startUp() {
     val ctx = AppContext
@@ -183,7 +248,7 @@ internal fun startUp() {
     SingletonImageLoader.setSafe { pc ->
         ImageLoader.Builder(pc)
             .components { add(OkHttpNetworkFetcherFactory(callFactory = { YtRepo.http })) }
-            .memoryCache { MemoryCache.Builder().maxSizeBytes(40L * 1024 * 1024).build() }
+            .memoryCache { MemoryCache.Builder().maxSizeBytes(24L * 1024 * 1024).build() }
             .diskCache { DiskCache.Builder().directory(File(AppDirs.cache, "art").toOkioPath()).maxSizeBytes(256L * 1024 * 1024).build() }
             .crossfade(true)
             .build()
@@ -198,12 +263,17 @@ private fun startSize(): DpSize {
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
+    // Draw with OpenGL: on Windows' default (Direct3D 12) the graphics driver takes memory in
+    // 64 MB blocks and keeps them, which alone pushed the app well past 300 MB. If OpenGL doesn't
+    // work on a PC, the drawing library moves on to another way by itself.
+    if (System.getProperty("skiko.renderApi") == null) System.setProperty("skiko.renderApi", "OPENGL")
     // Already open: that window comes to the front instead of a second copy starting.
     if (!SingleInstance.claim()) return
     startUp()
     application {
         val ps = remember { PlayerState().also { it.connect() } }
         val vm = remember { MainViewModel() }
+        remember { System.getProperty("gw.memScript")?.let { MemScript.start(ps, vm, File(it)) } }
         val quit = ::exitApplication
         remember { Updater.exitApp = { Discord.shutdown(); ps.release(); quit() } }
         // Open centred, and small enough to sit above the taskbar on any screen.
@@ -240,6 +310,21 @@ fun main() {
             LaunchedEffect(Unit) {
                 window.minimumSize = java.awt.Dimension(420, 640)
                 glassTitleBar(window)
+            }
+            LaunchedEffect(Unit) {
+                while (true) {
+                    GpuMemory.limit(window)
+                    kotlinx.coroutines.delay(3_000)
+                }
+            }
+            // Minimized: give memory back now, and again now and then while it stays down.
+            LaunchedEffect(state.isMinimized) {
+                if (!state.isMinimized) return@LaunchedEffect
+                kotlinx.coroutines.delay(2_000)
+                while (true) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { WinMemory.giveBack() }
+                    kotlinx.coroutines.delay(60_000)
+                }
             }
             // Someone opened Glasswave again while it was already running: show this window.
             LaunchedEffect(SingleInstance.showRequests) {

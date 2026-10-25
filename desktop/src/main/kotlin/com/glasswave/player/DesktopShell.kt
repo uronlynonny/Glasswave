@@ -96,6 +96,8 @@ object PlayerView {
     var lyrics by mutableStateOf(false)
     /** Set by the queue button: the full player opens on "Up next". */
     var queue by mutableStateOf(false)
+    /** Opens the full player from outside the app's screens (checks). */
+    var openFull by mutableStateOf(false)
 }
 
 /* ---------------- Sidebar: an icon rail that opens on hover ---------------- */

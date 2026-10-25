@@ -72,6 +72,9 @@ import kotlinx.coroutines.launch
 fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, openEqualizer: () -> Unit) {
     var full by remember { mutableStateOf(false) }
     BackHandler(enabled = full) { full = false }
+    LaunchedEffect(PlayerView.openFull) {
+        if (PlayerView.openFull) { full = true; PlayerView.openFull = false }
+    }
     BackHandler(enabled = !full && vm.showYtLogin) { vm.showYtLogin = false }
     BackHandler(enabled = !full && !vm.showYtLogin && vm.stack.isNotEmpty()) { vm.back() }
     BackHandler(enabled = vm.voiceOpen) { vm.voiceOpen = false }

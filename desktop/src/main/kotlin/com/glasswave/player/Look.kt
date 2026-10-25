@@ -14,14 +14,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import java.io.File
 import org.bytedeco.javacv.FFmpegFrameGrabber
-import org.bytedeco.javacv.Java2DFrameConverter
 
 /** Colours to pick from for the highlight colour (Settings > Look). */
 val AccentSwatches = listOf(
@@ -114,28 +113,42 @@ fun Wallpaper(path: String, modifier: Modifier = Modifier) {
     }
 }
 
+/** One decoded wallpaper frame: BGRA pixels, [w] by [h]. Two of these are reused over and over. */
+private class WallFrame(val w: Int, val h: Int) {
+    val pixels = ByteArray(w * h * 4)
+}
+
 /**
  * A GIF or video, silent and playing round and round, decoded by FFmpeg at a modest size (it sits
  * behind everything, softened, so full size would only cost power).
+ * Memory stays flat: frames go into two buffers that are reused, and each picture made for the
+ * screen is freed straight after it is drawn (making a new one per frame and leaving it for clean-up
+ * later grew the app by hundreds of MB).
  */
 @Composable
 private fun MovingPicture(path: String, modifier: Modifier) {
-    var frame by remember(path) { mutableStateOf<ImageBitmap?>(null) }
+    var frame by remember(path) { mutableStateOf<WallFrame?>(null) }
     DisposableEffect(path) {
         val stop = java.util.concurrent.atomic.AtomicBoolean(false)
         val worker = Thread({
-            runCatching {
-                // Read the size first, then decode scaled down to at most 960 wide.
+            var g: FFmpegFrameGrabber? = null
+            try {
+                // Read the size first, then decode scaled down to at most 640 wide.
                 val probe = FFmpegFrameGrabber(File(path)).apply { start() }
                 val w0 = probe.imageWidth.coerceAtLeast(1)
                 val h0 = probe.imageHeight.coerceAtLeast(1)
                 probe.stop(); probe.release()
-                val scale = minOf(1f, 960f / w0)
-                val g = FFmpegFrameGrabber(File(path))
-                g.imageWidth = (w0 * scale).toInt().coerceAtLeast(2) / 2 * 2
-                g.imageHeight = (h0 * scale).toInt().coerceAtLeast(2) / 2 * 2
-                g.start()
-                val convert = Java2DFrameConverter()
+                val scale = minOf(1f, 640f / w0)
+                val w = (w0 * scale).toInt().coerceAtLeast(2) / 2 * 2
+                val h = (h0 * scale).toInt().coerceAtLeast(2) / 2 * 2
+                g = FFmpegFrameGrabber(File(path)).apply {
+                    imageWidth = w
+                    imageHeight = h
+                    pixelFormat = org.bytedeco.ffmpeg.global.avutil.AV_PIX_FMT_BGRA
+                    start()
+                }
+                val buffers = arrayOf(WallFrame(w, h), WallFrame(w, h))
+                var turn = 0
                 val fps = g.frameRate.takeIf { it in 1.0..60.0 } ?: 24.0
                 var next = System.nanoTime()
                 while (!stop.get()) {
@@ -145,20 +158,45 @@ private fun MovingPicture(path: String, modifier: Modifier) {
                         g.setTimestamp(0)
                         continue
                     }
-                    val img = convert.convert(f) ?: continue
-                    val bmp = img.toComposeImageBitmap()
-                    frame = bmp
+                    val src = f.image?.firstOrNull() as? java.nio.ByteBuffer ?: continue
+                    val out = buffers[turn]
+                    turn = 1 - turn
+                    val row = w * 4
+                    val stride = f.imageStride.takeIf { it >= row } ?: row
+                    for (y in 0 until h) {
+                        src.position(y * stride)
+                        src.get(out.pixels, y * row, row)
+                    }
+                    frame = out
                     next += (1_000_000_000L / fps).toLong()
                     val wait = (next - System.nanoTime()) / 1_000_000
                     if (wait > 0) Thread.sleep(wait) else next = System.nanoTime()
                 }
-                g.stop(); g.release()
-            }.onFailure { android.util.Log.w("Glasswave", "Couldn't play the wallpaper", it) }
+            } catch (_: InterruptedException) {
+                // Closed: nothing to say.
+            } catch (e: Exception) {
+                android.util.Log.w("Glasswave", "Couldn't play the wallpaper", e)
+            } finally {
+                runCatching { g?.stop(); g?.release() }
+            }
         }, "wallpaper").apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
         onDispose {
             stop.set(true)
             worker.interrupt()
         }
     }
-    frame?.let { Image(it, null, modifier, contentScale = ContentScale.Crop) }
+    val f = frame ?: return
+    androidx.compose.foundation.Canvas(modifier) {
+        val info = org.jetbrains.skia.ImageInfo(f.w, f.h, org.jetbrains.skia.ColorType.BGRA_8888, org.jetbrains.skia.ColorAlphaType.OPAQUE)
+        // Fill the space like ContentScale.Crop: scale up to cover it, centred.
+        val k = maxOf(size.width / f.w, size.height / f.h)
+        val dw = f.w * k
+        val dh = f.h * k
+        val dst = org.jetbrains.skia.Rect.makeXYWH((size.width - dw) / 2f, (size.height - dh) / 2f, dw, dh)
+        drawIntoCanvas { c ->
+            org.jetbrains.skia.Image.makeRaster(info, f.pixels, f.w * 4).use { img ->
+                c.nativeCanvas.drawImageRect(img, org.jetbrains.skia.Rect.makeWH(f.w.toFloat(), f.h.toFloat()), dst, org.jetbrains.skia.SamplingMode.LINEAR, null, true)
+            }
+        }
+    }
 }
