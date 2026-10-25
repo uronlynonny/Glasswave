@@ -218,9 +218,9 @@ private fun StatsCard(c: ScreenCtx) {
             GText("YOUR STATS · THIS MONTH", 11, accent, FontWeight.Bold)
             Spacer(Modifier.height(4.dp))
             val m = month
-            GText(if (m == null) "…" else " min ·  plays", 22, weight = FontWeight.ExtraBold, maxLines = 1)
+            GText(if (m == null) "…" else "${m.minutes} min · ${m.plays} plays", 22, weight = FontWeight.ExtraBold, maxLines = 1)
             GText(
-                m?.topSongs?.firstOrNull()?.let { "Top song: " } ?: "Top songs, top artists and your history",
+                m?.topSongs?.firstOrNull()?.let { "Top song: ${it.track.title}" } ?: "Top songs, top artists and your history",
                 13, Dim, maxLines = 1,
             )
         }

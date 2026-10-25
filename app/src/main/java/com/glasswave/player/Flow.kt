@@ -179,7 +179,7 @@ object Flow {
         if (first) {
             val byTop = topRadio.filter { t -> topArtists.any { a -> t.artist.contains(a, true) } }
             val rotation = fresh(history.take(12).shuffled().take(3) + byTop + topRadio, used, 6, allowHeard = true)
-            if (rotation.size >= 3) out += Segment("On repeat", if (topArtist != null) "Opening with  and the songs you keep coming back to" else "The songs you keep coming back to", rotation)
+            if (rotation.size >= 3) out += Segment("On repeat", if (topArtist != null) "Opening with $topArtist and the songs you keep coming back to" else "The songs you keep coming back to", rotation)
         }
         val rest = mutableListOf<Segment>()
         val newOnes = fresh(freshRadio, used, 6)

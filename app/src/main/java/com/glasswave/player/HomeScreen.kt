@@ -314,7 +314,7 @@ private fun MadeForYou(c: ScreenCtx, seeds: List<Track>) {
         LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             item(key = "flow") { FlowTile(c, seeds) }
             if (liked >= 3) item(key = "liked") {
-                MixTile("Liked mix", " songs, shuffled", androidx.compose.material.icons.Icons.Rounded.Favorite, Lime) {
+                MixTile("Liked mix", "$liked songs, shuffled", androidx.compose.material.icons.Icons.Rounded.Favorite, Lime) {
                     scope.launch { c.ps.playList(Library.tracks(Library.LIKED_ID), 0, shuffle = true) }
                 }
             }
