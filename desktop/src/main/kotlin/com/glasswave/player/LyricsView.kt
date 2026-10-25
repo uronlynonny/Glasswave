@@ -31,7 +31,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
@@ -151,7 +150,7 @@ fun LyricsScreen(ps: PlayerState, onClose: () -> Unit) {
                 }
                 Box(Modifier.weight(1f).fillMaxHeight().padding(end = 24.dp)) { LyricsBody(ps, state, fancy, accent) }
             }
-            Box(Modifier.padding(16.dp).size(46.dp).pressable(0.85f, onClick = onClose), contentAlignment = Alignment.Center) {
+            Box(Modifier.statusBarsPadding().padding(16.dp).size(46.dp).pressable(0.85f, onClick = onClose), contentAlignment = Alignment.Center) {
                 Ico(Icons.Rounded.Close, Color.White, 26.dp)
             }
         } else {

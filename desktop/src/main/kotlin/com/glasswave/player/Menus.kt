@@ -185,7 +185,7 @@ fun BoxScope.MenuLayer(ps: PlayerState, backdrop: Backdrop, open: (MusicItem) ->
             }
         }
         Menus.naming?.let { NameDialog(it, backdrop) }
-        Toast(Modifier.align(Alignment.TopCenter))
+        Toast(Modifier.align(Alignment.TopCenter).statusBarsPadding())
         return
     }
     AnimatedVisibility(sheetOpen, enter = fadeIn(smooth(150)), exit = fadeOut(smooth(150))) {

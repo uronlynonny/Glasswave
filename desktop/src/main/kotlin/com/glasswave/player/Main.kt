@@ -159,6 +159,23 @@ private interface Psapi : JnaLibrary {
 object WinMemory {
     private val kernel by lazy { runCatching { Native.load("kernel32", Psapi::class.java) }.getOrNull() }
 
+    /**
+     * Java keeps the room it grew into after a busy moment (a big search, a playlist import) until a
+     * full clean-up, which may not come for a long time. Every half minute, if it holds more than
+     * twice what it uses, it is cleaned up and shrinks back (a few hundredths of a second, unheard:
+     * the speaker has more than half a second of sound queued).
+     */
+    fun startGuard() {
+        Thread({
+            while (true) {
+                Thread.sleep(30_000)
+                val rt = Runtime.getRuntime()
+                val used = rt.totalMemory() - rt.freeMemory()
+                if (rt.totalMemory() > 48L * 1024 * 1024 && rt.totalMemory() > used * 2) System.gc()
+            }
+        }, "memory-guard").apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
+    }
+
     fun giveBack() {
         runCatching {
             System.gc()
@@ -235,6 +252,7 @@ internal fun startUp() {
     Profile.refresh()
     YtRepo.initMatches(ctx)
     AppVolume.init()
+    WinMemory.startGuard()
     val lastPlayed = History.tracks.firstOrNull()?.url
     // Load FFmpeg now (it takes a few seconds), so the first song you pick starts quickly.
     Thread { runCatching { org.bytedeco.javacv.FFmpegFrameGrabber.tryLoad(); AudioDeck.warmUp() } }.apply { isDaemon = true }.start()
@@ -310,6 +328,7 @@ fun main() {
             LaunchedEffect(Unit) {
                 window.minimumSize = java.awt.Dimension(420, 640)
                 glassTitleBar(window)
+                TitleBar.install(window)
             }
             LaunchedEffect(Unit) {
                 while (true) {
@@ -352,6 +371,8 @@ fun main() {
                     .onPointerEvent(PointerEventType.Press) { if (it.button == PointerButton.Back) BackDispatcher.back() },
             ) {
                 App(vm, ps, openInBrowser = ::openInBrowser, openEqualizer = { Menus.say("Use Windows' sound settings for an equalizer") })
+                // Over everything, see-through: the app's colours show behind it.
+                TitleBar.Bar(window, Modifier.align(androidx.compose.ui.Alignment.TopStart))
             }
         }
     }

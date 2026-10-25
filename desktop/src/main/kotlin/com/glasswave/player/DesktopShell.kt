@@ -124,7 +124,7 @@ fun Sidebar(vm: MainViewModel, page: Backdrop, modifier: Modifier = Modifier) {
     Column(
         modifier
             .fillMaxHeight()
-            .padding(start = 12.dp, top = 12.dp, bottom = 12.dp)
+            .padding(start = 12.dp, top = 12.dp + TitleBar.inset, bottom = 12.dp)
             .width(w)
             .pointerInput(Unit) {
                 awaitPointerEventScope {

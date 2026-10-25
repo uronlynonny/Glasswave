@@ -131,6 +131,52 @@ object MemScript {
                         "search" -> onUi { vm.selectTab(Tab.SEARCH); vm.onQuery(arg); vm.submitSearch() }
                         "mem" -> System.err.println(line(arg))
                         "regions" -> regions(arg)
+                        // wshot name: the whole window as Windows shows it, frame and all.
+                        "wshot" -> {
+                            val w = java.awt.Window.getWindows().first { it is java.awt.Frame && it.isDisplayable }
+                            val u = com.sun.jna.platform.win32.User32.INSTANCE
+                            val g = com.sun.jna.platform.win32.GDI32.INSTANCE
+                            val hwnd = com.sun.jna.platform.win32.WinDef.HWND(Native.getWindowPointer(w))
+                            val r = com.sun.jna.platform.win32.WinDef.RECT()
+                            u.GetWindowRect(hwnd, r)
+                            val ww = r.right - r.left
+                            val hh = r.bottom - r.top
+                            val dc = u.GetDC(hwnd)
+                            val mem = g.CreateCompatibleDC(dc)
+                            val bmp = g.CreateCompatibleBitmap(dc, ww, hh)
+                            val prev = g.SelectObject(mem, bmp)
+                            u.PrintWindow(hwnd, mem, 2)
+                            val bi = com.sun.jna.platform.win32.WinGDI.BITMAPINFO()
+                            bi.bmiHeader.biWidth = ww
+                            bi.bmiHeader.biHeight = -hh
+                            bi.bmiHeader.biPlanes = 1
+                            bi.bmiHeader.biBitCount = 32
+                            bi.bmiHeader.biCompression = 0
+                            val buf = Memory(ww.toLong() * hh * 4)
+                            g.GetDIBits(dc, bmp, 0, hh, buf, bi, 0)
+                            g.SelectObject(mem, prev); g.DeleteObject(bmp); g.DeleteDC(mem); u.ReleaseDC(hwnd, dc)
+                            val img = java.awt.image.BufferedImage(ww, hh, java.awt.image.BufferedImage.TYPE_INT_RGB)
+                            img.setRGB(0, 0, ww, hh, buf.getIntArray(0, ww * hh), 0, ww)
+                            javax.imageio.ImageIO.write(img, "png", File(file.parentFile, "$arg.png"))
+                        }
+                        // hittest x y: what Windows thinks is at that spot of the window (window pixels, from its top-left).
+                        "hittest" -> {
+                            val (x, y) = arg.split(" ").map { it.toInt() }
+                            val w = java.awt.Window.getWindows().first { it is java.awt.Frame && it.isDisplayable }
+                            val u = com.sun.jna.platform.win32.User32.INSTANCE
+                            val hwnd = com.sun.jna.platform.win32.WinDef.HWND(Native.getWindowPointer(w))
+                            val r = com.sun.jna.platform.win32.WinDef.RECT()
+                            u.GetWindowRect(hwnd, r)
+                            val sx = r.left + (if (x < 0) r.right - r.left + x else x)
+                            val sy = r.top + y
+                            val lp = ((sy and 0xFFFF).toLong() shl 16) or (sx and 0xFFFF).toLong()
+                            val res = u.SendMessage(hwnd, 0x0084, com.sun.jna.platform.win32.WinDef.WPARAM(0), com.sun.jna.platform.win32.WinDef.LPARAM(lp))
+                            val names = mapOf(1L to "client", 2L to "caption(drag)", 12L to "top-edge", 13L to "top-left", 14L to "top-right", 10L to "left-edge", 11L to "right-edge")
+                            System.err.println("GW hittest $arg -> ${names[res.toLong()] ?: res.toLong()}")
+                        }
+                        "maximize" -> onUi {
+                            (java.awt.Window.getWindows().firstOrNull { it is java.awt.Frame && it.isDisplayable } as? java.awt.Frame)?.extendedState = java.awt.Frame.MAXIMIZED_BOTH
+                        }
                         "minimize", "restore" -> onUi {
                             (java.awt.Window.getWindows().firstOrNull { it is java.awt.Frame && it.isDisplayable } as? java.awt.Frame)
                                 ?.extendedState = if (parts[0] == "minimize") java.awt.Frame.ICONIFIED else java.awt.Frame.NORMAL
