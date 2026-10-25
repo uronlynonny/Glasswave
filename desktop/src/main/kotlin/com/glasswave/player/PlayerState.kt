@@ -47,8 +47,16 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     var repeat by mutableStateOf(Player.REPEAT_MODE_OFF)
     var speed by mutableStateOf(1f)
 
-    /** Playback speed isn't available on desktop yet; songs always play at normal speed. */
-    fun changeSpeed(s: Float) {}
+    /** Playing speed, 0.5x to 2x. Pitch comes from Settings > Sound & effects. */
+    fun changeSpeed(s: Float) {
+        speed = s.coerceIn(0.5f, 2f)
+        AudioDeck.speed = speed
+    }
+
+    init {
+        AudioDeck.pitch = Sound.pitchFactor()
+        Sound.listeners += { AudioDeck.pitch = Sound.pitchFactor() }
+    }
 
     /** Goes up whenever the queue changes, so the queue list knows to refresh. */
     var queueVersion by mutableStateOf(0)
@@ -219,7 +227,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
 
     /* ---- Transport ---- */
 
-    private var deck = AudioDeck("a")
+    private var deck = AudioDeck("a").also { AudioDeck.current = it }
+        set(v) { field = v; AudioDeck.current = v }
     private var spare = AudioDeck("b")
     /** The song finished and nothing came after it. */
     private var atEnd = false
@@ -315,6 +324,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     /** Looks up where a song's audio is. Blocking. */
     private fun resolve(t: Track): AudioSource {
         Downloads.fileFor(t.url)?.let { return AudioSource.LocalFile(it) }
+        PcMusic.fileOf(t.url)?.let { return AudioSource.LocalFile(it) } // a music file on this PC
         val uri = android.net.Uri.parse(t.url)
         val page = if (uri.scheme == "gwmatch") {
             YtRepo.match(uri.getQueryParameter("q") ?: throw java.io.IOException("Empty song"), uri.getQueryParameter("d")?.toLongOrNull() ?: 0)
@@ -401,11 +411,14 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
      */
     private fun recover(e: Exception) {
         val t = items.getOrNull(cur) ?: return fail(e)
-        if (!Problems.online()) {
+        // A music file on this PC doesn't need the internet: if it won't play, skip it.
+        val pc = PcMusic.isPcSong(t.url)
+        if (pc) recoveries = maxOf(recoveries, 3)
+        if (!pc && !Problems.online()) {
             fail(java.net.UnknownHostException("offline"))
             return
         }
-        YtRepo.forgetStreamUrls()
+        if (!pc) YtRepo.forgetStreamUrls()
         if (recoveries < 3) {
             recoveries++
             val at = livePosition()

@@ -458,6 +458,11 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
             }
             Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
         }
+        // Bars that dance to the music (Settings > Look).
+        if (Settings.visualizer != VisualizerStyle.OFF) {
+            Visualizer(ps.playing, CoverTint.accent, Modifier.fillMaxWidth().height(if (compact) 24.dp else 34.dp))
+            Spacer(Modifier.height(6.dp))
+        }
         AppleSeekBar(ps)
         if (ps.error != null) {
             Spacer(Modifier.height(4.dp))
@@ -736,6 +741,11 @@ private fun MoreSheet(ps: PlayerState, fp: Backdrop, colors: CoverColors, openEq
             ChoiceRow(listOf("0.75x", "1x", "1.25x", "1.5x", "2x"), "${if (ps.speed % 1f == 0f) ps.speed.toInt().toString() else ps.speed.toString()}x") {
                 ps.changeSpeed(it.removeSuffix("x").toFloat())
             }
+            // Higher or lower without changing the speed. More in Settings > Sound & effects.
+            SheetLabel("Pitch")
+            val pitches = listOf("-3", "-2", "-1", "Normal", "+1", "+2", "+3")
+            val now = Sound.pitch.toInt().let { if (it == 0) "Normal" else if (it > 0) "+$it" else "$it" }
+            ChoiceRow(pitches, now) { Sound.updatePitch(if (it == "Normal") 0f else it.toFloat()) }
         }
     }
 }

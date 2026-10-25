@@ -115,8 +115,10 @@ fun isWide(): Boolean = WindowSize.widthDp >= 600f
 
 /** The accent of what's playing: a bright, readable colour from the cover (lime when nothing plays). */
 object CoverTint {
-    var accent by mutableStateOf(Color(0xFFC6F432))
-        internal set
+    private var fromCover by mutableStateOf(Color(0xFFC6F432))
+    var accent: Color
+        get() = Settings.accentColor?.let { Color(it) } ?: fromCover
+        internal set(v) { fromCover = v }
 }
 
 /** Lifts a colour until it reads well on the dark glass. */
@@ -183,7 +185,14 @@ private fun DrawScope.blob(color: Color, cx: Float, cy: Float, r: Float) {
  * the rest of the screen. On Android 12+ the cover itself is also blurred in, loaded tiny.
  */
 @Composable
-fun GlassBackground(colors: CoverColors, art: String?, modifier: Modifier = Modifier, artAlpha: Float = 0.35f, moving: Boolean = true) {
+fun GlassBackground(colors: CoverColors, art: String?, modifier: Modifier = Modifier, artAlpha: Float = 0.35f, moving: Boolean = true, wallpaper: Boolean = false) {
+    val wall = if (wallpaper) Settings.wallpaper else null
+    if (wall != null) {
+        Wallpaper(wall, modifier)
+        return
+    }
+    // How strong the colours are (Settings > Look).
+    val k = Settings.colorStrength
     // Held still when [moving] is off: a drifting background makes every glass surface redraw constantly.
     val anim = if (moving) rememberDrift(40_000).value else 0.8f
     val ctx = LocalContext.current
@@ -194,7 +203,7 @@ fun GlassBackground(colors: CoverColors, art: String?, modifier: Modifier = Modi
                 model = request,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().blur(80.dp).alpha(artAlpha),
+                modifier = Modifier.fillMaxSize().blur(80.dp).alpha((artAlpha * k).coerceIn(0f, 1f)),
             )
         }
         Box(
@@ -205,10 +214,10 @@ fun GlassBackground(colors: CoverColors, art: String?, modifier: Modifier = Modi
                     val t = if (Settings.animations) anim else 0.8f
                     val w = size.width
                     val h = size.height
-                    blob(colors.a.copy(alpha = 0.55f), w * (0.25f + 0.25f * cos(t)), h * (0.18f + 0.08f * sin(t * 2)), w * 1.0f)
-                    blob(colors.b.copy(alpha = 0.60f), w * (0.80f + 0.18f * sin(t)), h * (0.48f + 0.10f * cos(t)), w * 0.95f)
-                    blob(colors.c.copy(alpha = 0.40f), w * (0.30f + 0.25f * sin(t + 1.7f)), h * (0.86f + 0.06f * cos(t * 2)), w * 0.85f)
-                    blob(colors.a.copy(alpha = 0.25f), w * (0.70f + 0.20f * cos(t + 2.4f)), h * (0.10f + 0.05f * sin(t)), w * 0.6f)
+                    blob(colors.a.copy(alpha = (0.55f * k).coerceIn(0f, 1f)), w * (0.25f + 0.25f * cos(t)), h * (0.18f + 0.08f * sin(t * 2)), w * 1.0f)
+                    blob(colors.b.copy(alpha = (0.60f * k).coerceIn(0f, 1f)), w * (0.80f + 0.18f * sin(t)), h * (0.48f + 0.10f * cos(t)), w * 0.95f)
+                    blob(colors.c.copy(alpha = (0.40f * k).coerceIn(0f, 1f)), w * (0.30f + 0.25f * sin(t + 1.7f)), h * (0.86f + 0.06f * cos(t * 2)), w * 0.85f)
+                    blob(colors.a.copy(alpha = (0.25f * k).coerceIn(0f, 1f)), w * (0.70f + 0.20f * cos(t + 2.4f)), h * (0.10f + 0.05f * sin(t)), w * 0.6f)
                     drawRect(Brush.verticalGradient(listOf(Color(0x22000000), Color(0x99000000))))
                 },
         )
@@ -224,7 +233,8 @@ fun Modifier.glass(
     light: Float = 0.12f,
 ): Modifier = this
     .clip(shape)
-    .background(Color(0xFF0B0F18).copy(alpha = base))
+    // How solid the glass is (Settings > Look).
+    .background(Color(0xFF0B0F18).copy(alpha = (base * Settings.glassOpacity).coerceIn(0f, 0.95f)))
     .background(
         Brush.linearGradient(
             listOf(Color.White.copy(alpha = light), Color.White.copy(alpha = light * 0.25f)),
@@ -257,7 +267,7 @@ fun GText(
         style = TextStyle(
             color = color,
             fontSize = size.sp,
-            fontFamily = if (size >= 20) DisplayFont else TextFont,
+            fontFamily = AppFontFamily ?: if (size >= 20) DisplayFont else TextFont,
             fontWeight = weight,
             // Big bold titles sit a little tighter, like Apple's.
             letterSpacing = if (size >= 22) (-0.4).sp else 0.sp,
@@ -282,6 +292,16 @@ fun Ico(icon: ImageVector, color: Color = Color.White, size: Dp = 24.dp, modifie
 object Motion {
     const val SPEED = 0.65f
     val ease = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.9f, 0.25f, 1f)
+}
+
+/** The font you imported in Settings > Look (null for Windows' own type, below), loaded once. */
+private val fontFamilies = HashMap<String, androidx.compose.ui.text.font.FontFamily?>()
+
+val AppFontFamily: androidx.compose.ui.text.font.FontFamily?
+    get() = Settings.fontFile?.let { fontFamilyFromFile(it) }
+
+fun fontFamilyFromFile(path: String): androidx.compose.ui.text.font.FontFamily? = fontFamilies.getOrPut(path) {
+    runCatching { androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.platform.Font(java.io.File(path))) }.getOrNull()
 }
 
 /** Windows 11's own type (closest to Apple's San Francisco); older Windows falls back to Segoe UI. */

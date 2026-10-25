@@ -12,6 +12,7 @@ import javax.swing.SwingUtilities
 import okhttp3.Request
 import okhttp3.Response
 import org.bytedeco.ffmpeg.global.avutil
+import org.bytedeco.javacv.FFmpegFrameFilter
 import org.bytedeco.javacv.FFmpegFrameGrabber
 
 /** Where a song's audio comes from: a downloaded file, or an address on YouTube's servers. */
@@ -165,6 +166,8 @@ class AudioDeck(private val name: String) {
     @Volatile private var seekUs = -1L
     @Volatile private var playedUs = 0L
     @Volatile private var line: SourceDataLine? = null
+    /** The speed of the sound waiting at the speaker. */
+    @Volatile private var playSpeed = 1f
     private val lock = Object()
 
     /** Where the song is right now, counting only what has actually come out of the speakers. */
@@ -174,7 +177,8 @@ class AudioDeck(private val name: String) {
             if (s >= 0) return s / 1000
             val l = line ?: return playedUs / 1000
             val queued = (l.bufferSize - l.available()).coerceAtLeast(0)
-            return ((playedUs / 1000) - queued / BYTES_PER_MS).coerceAtLeast(0)
+            // At a different speed, each second of sound waiting at the speaker covers more (or less) of the song.
+            return ((playedUs / 1000) - (queued / BYTES_PER_MS * playSpeed).toLong()).coerceAtLeast(0)
         }
 
     fun load(source: AudioSource, startMs: Long, play: Boolean, tag: Any?) {
@@ -230,6 +234,13 @@ class AudioDeck(private val name: String) {
     private fun run(gen: Int, source: AudioSource, startMs: Long) {
         var grabber: FFmpegFrameGrabber? = null
         var out: SourceDataLine? = null
+        // Speed and pitch go through FFmpeg's own tempo filter (only while they're not normal).
+        var chain: FFmpegFrameFilter? = null
+        var chainFor = 1f to 1f
+        fun closeChain() {
+            runCatching { chain?.stop(); chain?.release() }
+            chain = null
+        }
         try {
             grabber = when (source) {
                 is AudioSource.LocalFile -> FFmpegFrameGrabber(source.file)
@@ -264,6 +275,79 @@ class AudioDeck(private val name: String) {
             var env = 1f
             val release = (1.0 - Math.exp(-1.0 / (0.15 * RATE))).toFloat()
             val rng = java.util.SplittableRandom()
+            // Settings > Sound & effects.
+            val fx = SoundFx(RATE)
+
+            /** Sends one piece of decoded sound to the speaker. [mediaUs]: where it starts in the song, or -1 to carry on. */
+            fun emit(frame: org.bytedeco.javacv.Frame, mediaUs: Long, stretch: Float): Boolean {
+                val bufs = frame.samples ?: return true
+                val raw = bufs.firstOrNull() ?: return true
+                val fbuf = raw as? java.nio.FloatBuffer
+                val sbuf = raw as? java.nio.ShortBuffer
+                if (fbuf == null && sbuf == null) return true
+                // Some filters hand back left and right separately; most give them interleaved.
+                val planar = bufs.size >= 2
+                val right = if (planar) bufs[1] else null
+                val count = fbuf?.remaining() ?: sbuf!!.remaining()
+                val n = if (planar) count * 2 else count
+                if (n == 0) return true
+                if (bytes.size < n * 2) bytes = ByteArray(n * 2)
+                fun sample(i: Int): Float {
+                    if (planar) {
+                        val k = i / 2
+                        val b = if (i % 2 == 0) raw else right!!
+                        return when (b) {
+                            is java.nio.FloatBuffer -> b.get(b.position() + k)
+                            is java.nio.ShortBuffer -> b.get(b.position() + k) / 32768f
+                            else -> 0f
+                        }
+                    }
+                    return fbuf?.get(fbuf.position() + i) ?: (sbuf!!.get(sbuf.position() + i) / 32768f)
+                }
+                // Volume, gliding from the last value to the new one across this piece of audio.
+                val app = AppVolume.gain
+                if (master != null && app != lastApp) {
+                    lastApp = app
+                    runCatching {
+                        master.value = if (app <= 0.0001f) master.minimum
+                        else (20f * kotlin.math.log10(app)).coerceIn(master.minimum, master.maximum)
+                    }
+                }
+                val target = volume * (if (master != null) 1f else app)
+                fx.update()
+                val watch = Spectrum.wanted && current === this
+                var i = 0
+                while (i + 1 < n) {
+                    fx.process(sample(i), sample(i + 1))
+                    if (watch) Spectrum.feed((fx.outL + fx.outR) * 0.5f, RATE)
+                    // One stereo frame at a time, so both sides are limited together.
+                    val g = lastVol + (target - lastVol) * i / n
+                    var a = fx.outL * g
+                    var b = fx.outR * g
+                    val peak = maxOf(kotlin.math.abs(a), kotlin.math.abs(b)) * env
+                    if (peak > CEILING) env *= CEILING / peak else env += (1f - env) * release
+                    a *= env
+                    b *= env
+                    // A whisper of dither (TPDF) so quiet parts and fades stay smooth at 16-bit.
+                    val va = (a * 32767f + (rng.nextDouble() - rng.nextDouble()).toFloat()).toInt().coerceIn(-32768, 32767)
+                    val vb = (b * 32767f + (rng.nextDouble() - rng.nextDouble()).toFloat()).toInt().coerceIn(-32768, 32767)
+                    bytes[i * 2] = va.toByte()
+                    bytes[i * 2 + 1] = (va shr 8).toByte()
+                    bytes[i * 2 + 2] = vb.toByte()
+                    bytes[i * 2 + 3] = (vb shr 8).toByte()
+                    i += 2
+                }
+                lastVol = target
+                if (seekUs >= 0) return false // a jump came in while decoding: drop this piece
+                // Automated checks only: pretend the connection dropped once, 5 s in.
+                if (testDrop && playedUs > 5_000_000) { testDrop = false; throw IOException("Test: connection dropped") }
+                l.write(bytes, 0, n * 2)
+                val start = if (mediaUs > 0) mediaUs else playedUs
+                playedUs = start + ((n / 2) * 1_000_000L / RATE * stretch).toLong()
+                playSpeed = stretch
+                return true
+            }
+
             while (gen == generation) {
                 if (!playWhenReady) {
                     if (l.isRunning) l.stop()
@@ -276,6 +360,15 @@ class AudioDeck(private val name: String) {
                     grabber.setTimestamp(s)
                     playedUs = s
                     seekUs = -1
+                    fx.clear()
+                    closeChain()
+                }
+                // Speed or pitch changed: start the tempo filter afresh.
+                val want = speed to pitch
+                if (want != chainFor || (chain == null && want != (1f to 1f))) {
+                    closeChain()
+                    chainFor = want
+                    if (want != (1f to 1f)) chain = tempoFilter(want.first, want.second)
                 }
                 if (!l.isRunning) l.start()
                 val frame = grabber.grabSamples()
@@ -293,50 +386,17 @@ class AudioDeck(private val name: String) {
                     }
                     break
                 }
-                val raw = frame.samples?.firstOrNull() ?: continue
-                val fbuf = raw as? java.nio.FloatBuffer
-                val sbuf = raw as? java.nio.ShortBuffer
-                if (fbuf == null && sbuf == null) continue
-                val n = fbuf?.remaining() ?: sbuf!!.remaining()
-                if (n == 0) continue
-                if (bytes.size < n * 2) bytes = ByteArray(n * 2)
-                // Volume, gliding from the last value to the new one across this piece of audio.
-                val app = AppVolume.gain
-                if (master != null && app != lastApp) {
-                    lastApp = app
-                    runCatching {
-                        master.value = if (app <= 0.0001f) master.minimum
-                        else (20f * kotlin.math.log10(app)).coerceIn(master.minimum, master.maximum)
+                val c = chain
+                if (c == null) {
+                    emit(frame, frame.timestamp, 1f)
+                } else {
+                    c.push(frame)
+                    // The filter may hand back none, one or several pieces for each one going in.
+                    while (gen == generation && seekUs < 0) {
+                        val f = c.pull() ?: break
+                        if (!emit(f, -1, chainFor.first)) break
                     }
                 }
-                val target = volume * (if (master != null) 1f else app)
-                val start = fbuf?.position() ?: sbuf!!.position()
-                var i = 0
-                while (i + 1 < n) {
-                    // One stereo frame at a time, so both sides are limited together.
-                    val g = lastVol + (target - lastVol) * i / n
-                    var a = (fbuf?.get(start + i) ?: (sbuf!!.get(start + i) / 32768f)) * g
-                    var b = (fbuf?.get(start + i + 1) ?: (sbuf!!.get(start + i + 1) / 32768f)) * g
-                    val peak = maxOf(kotlin.math.abs(a), kotlin.math.abs(b)) * env
-                    if (peak > CEILING) env *= CEILING / peak else env += (1f - env) * release
-                    a *= env
-                    b *= env
-                    // A whisper of dither (TPDF) so quiet parts and fades stay smooth at 16-bit.
-                    val va = (a * 32767f + (rng.nextDouble() - rng.nextDouble()).toFloat()).toInt().coerceIn(-32768, 32767)
-                    val vb = (b * 32767f + (rng.nextDouble() - rng.nextDouble()).toFloat()).toInt().coerceIn(-32768, 32767)
-                    bytes[i * 2] = va.toByte()
-                    bytes[i * 2 + 1] = (va shr 8).toByte()
-                    bytes[i * 2 + 2] = vb.toByte()
-                    bytes[i * 2 + 3] = (vb shr 8).toByte()
-                    i += 2
-                }
-                lastVol = target
-                val frameStart = if (frame.timestamp > 0) frame.timestamp else playedUs
-                if (seekUs >= 0) continue // a jump came in while decoding: drop this piece
-                // Automated checks only: pretend the connection dropped once, 5 s in.
-                if (testDrop && playedUs > 5_000_000) { testDrop = false; throw IOException("Test: connection dropped") }
-                l.write(bytes, 0, n * 2)
-                playedUs = frameStart + (n / 2) * 1_000_000L / RATE
             }
         } catch (e: Exception) {
             if (gen == generation) {
@@ -344,6 +404,7 @@ class AudioDeck(private val name: String) {
                 post(gen) { listener?.onError(this, e) }
             }
         } finally {
+            closeChain()
             if (line === out) line = null
             out?.let { runCatching { it.stop(); it.close() } }
             runCatching { grabber?.stop(); grabber?.release() }
@@ -352,6 +413,35 @@ class AudioDeck(private val name: String) {
 
     companion object {
         private const val RATE = 48_000
+
+        /** Playing speed (1 = normal) and pitch (1 = normal, 2 = an octave up), for every deck. */
+        @Volatile var speed = 1f
+        @Volatile var pitch = 1f
+
+        /** The deck playing the current song: the visualizer listens to this one. */
+        @Volatile var current: AudioDeck? = null
+
+        /**
+         * FFmpeg's filters for a different speed and pitch: the pitch is moved by playing faster or
+         * slower, and the tempo is then put back (to [speed]) without touching the pitch.
+         */
+        internal fun tempoFilter(speed: Float, pitch: Float): FFmpegFrameFilter? = runCatching {
+            val parts = mutableListOf<String>()
+            if (pitch != 1f) {
+                parts += "asetrate=${(RATE * pitch).toInt()}"
+                parts += "aresample=$RATE"
+            }
+            // atempo takes 0.5..2 at a time, so bigger changes are done in steps.
+            var t = speed / pitch
+            while (t < 0.5f) { parts += "atempo=0.5"; t /= 0.5f }
+            while (t > 2f) { parts += "atempo=2.0"; t /= 2f }
+            if (kotlin.math.abs(t - 1f) > 0.001f) parts += "atempo=${"%.5f".format(java.util.Locale.ROOT, t)}"
+            FFmpegFrameFilter(parts.joinToString(","), 2).apply {
+                sampleFormat = avutil.AV_SAMPLE_FMT_FLT
+                sampleRate = RATE
+                start()
+            }
+        }.onFailure { android.util.Log.w("Glasswave", "Couldn't set up speed and pitch", it) }.getOrNull()
         @Volatile private var testDrop = System.getProperty("gw.testDrop") != null
         /** Where the limiter holds peaks: just under full scale (about -0.3 dB). */
         private const val CEILING = 0.966f

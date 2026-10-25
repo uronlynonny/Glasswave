@@ -89,7 +89,16 @@ import kotlinx.coroutines.withContext
  */
 object Menus {
     data class SongTarget(val track: Track, val playlistId: String?)
-    class NameRequest(val title: String, val initial: String, val confirm: String, val onDone: (String) -> Unit)
+    /** [hint] shows in the empty box, [note] under the title, [max] is the longest text allowed. */
+    class NameRequest(
+        val title: String,
+        val initial: String,
+        val confirm: String,
+        val hint: String = "Playlist name",
+        val note: String? = null,
+        val max: Int = 60,
+        val onDone: (String) -> Unit,
+    )
 
     var song by mutableStateOf<SongTarget?>(null)
         private set
@@ -120,6 +129,21 @@ object Menus {
             Library.createPlaylist(name, first)
             say(if (first != null) "Added to $name" else "Created $name")
         },
+    )
+
+    /**
+     * Asks for a playlist or album link to import, filled in with [initial] (e.g. a link on the clipboard).
+     * [service] names the app the link comes from, when the person picked one.
+     */
+    fun importLink(initial: String, service: String? = null, onDone: (String) -> Unit) = askName(
+        NameRequest(
+            if (service != null) "Import from $service" else "Import from a link", initial, "Import",
+            hint = if (service != null) "Paste a $service link…" else "Paste a link…",
+            note = if (service != null) "In $service, open a playlist or album, tap Share → Copy link, then paste it here."
+            else "A playlist or album from ${LinkImport.servicesText}.",
+            max = 2000,
+            onDone = onDone,
+        ),
     )
 
     val anyOpen get() = song != null || playlist != null || naming != null
@@ -295,9 +319,11 @@ private fun SongMenuBody(target: Menus.SongTarget, ps: PlayerState, open: (Music
                             Menus.say("Plays next")
                             Menus.closeSong()
                         }
+                        // Songs stored on this PC can't be downloaded or looked up on YouTube Music.
+                        val pc = PcMusic.isPcSong(t.url)
                         val pct = Downloads.progress[t.url]
                         val saved = Downloads.isDownloaded(t.url)
-                        MenuRow(
+                        if (!pc) MenuRow(
                             if (saved) Icons.Rounded.Delete else Icons.Rounded.Download,
                             when {
                                 saved -> "Remove download"
@@ -311,11 +337,11 @@ private fun SongMenuBody(target: Menus.SongTarget, ps: PlayerState, open: (Music
                                 pct == null -> { Downloads.download(t); Menus.say("Downloading") }
                             }
                         }
-                        MenuRow(
+                        if (!pc) MenuRow(
                             Icons.Rounded.Album, "Go to album",
                             trailing = if (looking == "album") ({ Spinner() }) else null,
                         ) { goTo("album") }
-                        MenuRow(
+                        if (!pc) MenuRow(
                             Icons.Rounded.Person, "Go to artist",
                             trailing = if (looking == "artist") ({ Spinner() }) else null,
                         ) { goTo("artist") }
@@ -329,7 +355,7 @@ private fun SongMenuBody(target: Menus.SongTarget, ps: PlayerState, open: (Music
                             Menus.closeSong()
                         }
                         MenuRow(Icons.Rounded.Share, "Share") {
-                            val link = if (t.url.startsWith("gwmatch")) {
+                            val link = if (t.url.startsWith("gwmatch") || pc) {
                                 "https://music.youtube.com/search?q=" + android.net.Uri.encode("${t.title} ${t.artist}")
                             } else t.url
                             // On desktop, sharing copies the link to paste anywhere.
@@ -443,15 +469,16 @@ private fun NameDialog(r: Menus.NameRequest, backdrop: Backdrop) {
                 .padding(20.dp),
         ) {
             GText(r.title, 20, weight = FontWeight.Bold)
+            r.note?.let { Spacer(Modifier.height(6.dp)); GText(it, 14, Dim) }
             Spacer(Modifier.height(14.dp))
             Box(
                 Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.08f)).padding(horizontal = 14.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                if (text.isEmpty()) GText("Playlist name", 16, Faint)
+                if (text.isEmpty()) GText(r.hint, 16, Faint)
                 BasicTextField(
                     value = text,
-                    onValueChange = { text = it.take(60) },
+                    onValueChange = { text = it.take(r.max) },
                     singleLine = true,
                     textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
                     cursorBrush = SolidColor(Lime),

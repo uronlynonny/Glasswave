@@ -68,6 +68,14 @@ tasks.register<JavaExec>("deckCheck") {
     args(listOfNotNull(song, project.findProperty("only") as String?))
 }
 
+// For checks only, silent: runs an audio file through speed, pitch and the sound effects.
+// ./gradlew -p desktop fxCheck -Pfile=path/to/song.wav
+tasks.register<JavaExec>("fxCheck") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.FxCheckKt")
+    (project.findProperty("file") as String?)?.let { args(it) }
+}
+
 // For checks only: transcribes a WAV file with voice search's recogniser.
 // ./gradlew -p desktop voiceCheck -Pwav=path/to/file.wav
 tasks.register<JavaExec>("voiceCheck") {
