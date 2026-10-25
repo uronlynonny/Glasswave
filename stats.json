@@ -1,5 +1,5 @@
 {
-  "lastTime": 1792931355,
+  "lastTime": 1792937691,
   "totals": {
     "visits": 70,
     "siteDownloads": 24,
@@ -312,9 +312,15 @@
       "v": 0,
       "d": 0,
       "a": 0
+    },
+    {
+      "t": 1792938250,
+      "v": 0,
+      "d": 0,
+      "a": 0
     }
   ],
-  "updated": 1792934974,
+  "updated": 1792938250,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -327,6 +333,10 @@
     {
       "t": 1792854741,
       "m": "\"Nothing Compares 2 U\" by Sinéad O'Connor wouldn't play (tried 4 times).\nERROR_CODE_IO_UNSPECIFIED\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nXiaomi 2506BPN68G, Android 17, Glasswave 0.16.5\nhttps://music.youtube.com/watch?v=0-EF60neguk"
+    },
+    {
+      "t": 1792937691,
+      "m": "\"Found a Way\" by DeLeon Rovon wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nContentNotAvailableException: Got error UNPLAYABLE: \"This video is not available\"\n\nWindows 11 (10.0), Glasswave for Windows 1.2.1\nhttps://music.youtube.com/watch?v=2Ve22-n7epw"
     }
   ],
   "lastActiveTime": 1792931329,
