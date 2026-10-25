@@ -128,6 +128,8 @@ object MemScript {
                         "vis" -> onUi { Settings.updateVisualizer(VisualizerStyle.valueOf(arg)) }
                         "wallpaper" -> onUi { Settings.updateWallpaper(arg.takeIf { it != "none" }) }
                         "tab" -> onUi { vm.selectTab(Tab.valueOf(arg)) }
+                        "settings" -> onUi { vm.openSettings(arg) }
+                        "accent" -> onUi { Settings.updateAccentColor(if (arg == "song") null else arg.toLong(16).toInt()) }
                         "search" -> onUi { vm.selectTab(Tab.SEARCH); vm.onQuery(arg); vm.submitSearch() }
                         "mem" -> System.err.println(line(arg))
                         "regions" -> regions(arg)

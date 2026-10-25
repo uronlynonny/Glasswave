@@ -160,8 +160,15 @@ object Settings {
 
     fun updateAccentColor(argb: Int?) {
         accentColor = argb
-        prefs.edit { if (argb == null) remove("accent") else putInt("accent", argb) }
+        prefs.edit {
+            if (argb == null) remove("accent") else putInt("accent", argb)
+            // Kept, so going back to "My own colour" brings back the one you had.
+            if (argb != null) putInt("accent_last", argb)
+        }
     }
+
+    /** The last colour you picked yourself (even while the colours follow the song). */
+    fun lastOwnAccent(): Int? = if (prefs.contains("accent_last")) prefs.getInt("accent_last", 0) else null
     fun updateVisualizer(v: VisualizerStyle) { visualizer = v; prefs.edit { putString("visualizer", v.name) } }
     fun updateFont(path: String?, name: String) {
         fontFile = path

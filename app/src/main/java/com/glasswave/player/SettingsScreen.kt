@@ -256,7 +256,7 @@ private fun Look() {
     Group("Highlight colour") {
         AccentPicker()
     }
-    Note("Used for buttons, the playing song, lyrics and the visualizer. \"Cover\" picks a colour from each song's cover.")
+    Note("Match the song: buttons, the side menu, the playing song, lyrics and the visualizer take each song's cover colour. My own colour: they always stay the colour you pick.")
     Group("Wallpaper") {
         val pick = androidx.activity.compose.rememberLauncherForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
@@ -1044,22 +1044,21 @@ private fun EqBands() {
     }
 }
 
-/** "Cover" (from each song) or one of the ready colours, plus a rainbow slider for any colour. */
+/**
+ * Two ways: the colours follow each song's cover (buttons, the side menu, the playing song...), or
+ * they stay one colour you pick, from the ready ones or the rainbow slider.
+ */
 @Composable
 private fun AccentPicker() {
     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+        val own = Settings.accentColor != null
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Pill("Match the song", !own) { Settings.updateAccentColor(null) }
+            Pill("My own colour", own) { if (!own) Settings.updateAccentColor(Settings.lastOwnAccent() ?: AccentSwatches[2]) }
+        }
+        if (!own) return@Column
+        Spacer(Modifier.height(14.dp))
         androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            item {
-                val on = Settings.accentColor == null
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        Modifier.size(38.dp).pressable(0.9f) { Settings.updateAccentColor(null) }.clip(CircleShape)
-                            .background(Brush.sweepGradient(listOf(Color(0xFFFF5C7A), Color(0xFFF6C744), Color(0xFF68D391), Color(0xFF7AA2FF), Color(0xFFB794F6), Color(0xFFFF5C7A))))
-                            .border(if (on) 3.dp else 0.dp, Color.White, CircleShape),
-                    )
-                    GText("Cover", 11, if (on) Color.White else Faint, modifier = Modifier.padding(top = 4.dp))
-                }
-            }
             items(AccentSwatches.size) { i ->
                 val c = AccentSwatches[i]
                 val on = Settings.accentColor == c
