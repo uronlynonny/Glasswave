@@ -1,11 +1,11 @@
 {
-  "lastTime": 1792963406,
+  "lastTime": 1792967609,
   "totals": {
     "visits": 74,
     "siteDownloads": 26,
-    "apk": 78
+    "apk": 80
   },
-  "apkTotal": 41,
+  "apkTotal": 43,
   "hours": [
     {
       "t": 1792763089,
@@ -366,9 +366,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1792970484,
+      "v": 0,
+      "d": 0,
+      "a": 2
     }
   ],
-  "updated": 1792966877,
+  "updated": 1792970484,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -385,9 +391,13 @@
     {
       "t": 1792937691,
       "m": "\"Found a Way\" by DeLeon Rovon wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nContentNotAvailableException: Got error UNPLAYABLE: \"This video is not available\"\n\nWindows 11 (10.0), Glasswave for Windows 1.2.1\nhttps://music.youtube.com/watch?v=2Ve22-n7epw"
+    },
+    {
+      "t": 1792967609,
+      "m": "\"One Dance (feat. WizKid & Kyla)\" by Drake wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nYoutubeMusicPremiumContentException: This video is a YouTube Music Premium video\n\nWindows 11 (10.0), Glasswave for Windows 1.2.1\nhttps://music.youtube.com/watch?v=5LFB3qdmZBM"
     }
   ],
-  "lastActiveTime": 1792966160,
+  "lastActiveTime": 1792969342,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -407,6 +417,7 @@
       ],
       "a": [
         "36d58cc1-c393-490b-9440-241580552d0a",
+        "69bb0599-6136-4287-8044-abbd687c7a08",
         "9883395e-3a20-4852-bfe3-0bca145d081a",
         "99dfa862-6949-40b9-bc5a-c323be99e521",
         "9a1189fa-f5da-422c-a766-1b9a2be0d75a",
@@ -418,15 +429,15 @@
   },
   "active": {
     "today": {
-      "a": 7,
+      "a": 8,
       "w": 4
     },
     "week": {
-      "a": 7,
+      "a": 8,
       "w": 4
     },
     "month": {
-      "a": 7,
+      "a": 8,
       "w": 4
     },
     "daily": [
@@ -437,7 +448,7 @@
       },
       {
         "d": "2026-10-25",
-        "a": 7,
+        "a": 8,
         "w": 4
       }
     ]
