@@ -50,15 +50,20 @@ object Updater {
     /** The new version, already downloaded in the background and waiting to be installed. */
     var ready by mutableStateOf<File?>(null)
         private set
-    private var prefetching = false
+    /** You tapped Update while it was still downloading: the installer opens as soon as it's done. */
+    var installWhenReady by mutableStateOf(false)
+        private set
+    /** Only ever one download at a time (a second tap used to start another from 0%). */
+    private var downloading = false
 
     fun init(context: Context) {
         app = context.applicationContext
         lastChecked = app.getSharedPreferences("updater", Context.MODE_PRIVATE).getLong("last", 0L)
         // Installer files for versions that are now installed (or older) aren't needed any more.
         File(app.cacheDir, "updates").listFiles()?.forEach { f ->
-            val v = f.name.removePrefix("Glasswave-").removeSuffix(".apk")
-            if (!f.name.endsWith(".apk") || !newer(v)) f.delete()
+            // A half-finished download of a newer version stays, so it can carry on where it stopped.
+            val v = f.name.removePrefix("Glasswave-").removeSuffix(".part").removeSuffix(".apk")
+            if (!(f.name.endsWith(".apk") || f.name.endsWith(".apk.part")) || !newer(v)) f.delete()
         }
     }
 
@@ -67,18 +72,35 @@ object Updater {
     /** A complete download of [r], if there is one. */
     private fun downloaded(r: Release): File? = fileFor(r).takeIf { it.exists() && it.length() > 0 && (r.size <= 0 || it.length() == r.size) }
 
-    /** Fetches the new version quietly as soon as it's found, so updating is a single tap. */
+    /** Fetches the new version as soon as it's found, so updating is a single tap. */
     private fun prefetch(r: Release) {
         downloaded(r)?.let { ready = it; return }
-        if (prefetching || progress != null) return
-        prefetching = true
+        startDownload(r)
+    }
+
+    /**
+     * Downloads [r] (once, however many times Update is tapped), showing its progress. When it's
+     * done, opens the installer if you asked for it in the meantime.
+     */
+    private fun startDownload(r: Release) {
+        if (downloading) return
+        downloading = true
+        progress = 0f
         scope.launch {
             try {
-                ready = withContext(Dispatchers.IO) { download(r, showProgress = false) }
+                val file = withContext(Dispatchers.IO) { downloadWithRetries(r) }
+                ready = file
+                if (installWhenReady) {
+                    installWhenReady = false
+                    runCatching { openInstaller(app, file) }.onFailure { status = "Couldn't open the installer. Tap Update again." }
+                }
             } catch (e: Exception) {
-                android.util.Log.w("Glasswave", "Background update download failed", e)
+                android.util.Log.w("Glasswave", "Update download failed", e)
+                if (installWhenReady) status = "Couldn't finish downloading the update. Tap Update to carry on from where it stopped."
+                installWhenReady = false
             } finally {
-                prefetching = false
+                downloading = false
+                progress = null
             }
         }
     }
@@ -206,7 +228,6 @@ object Updater {
      */
     fun install(activity: Context) {
         val r = available ?: return
-        if (progress != null) return
         if (Build.VERSION.SDK_INT >= 26 && !app.packageManager.canRequestPackageInstalls()) {
             status = "Allow Glasswave to install updates, then tap Update again."
             runCatching {
@@ -224,49 +245,74 @@ object Updater {
             runCatching { openInstaller(activity, f) }.onFailure { status = "Couldn't open the installer. Try again." }
             return
         }
-        progress = 0f
-        scope.launch {
+        // Still downloading (or not started): install as soon as it's there. Never starts a second download.
+        installWhenReady = true
+        startDownload(r)
+    }
+
+    /** For updates: waits up to a minute when the connection pauses, instead of the usual 20 seconds. */
+    private val downloadClient by lazy {
+        YtRepo.http.newBuilder().readTimeout(60, java.util.concurrent.TimeUnit.SECONDS).retryOnConnectionFailure(true).build()
+    }
+
+    /** A few quick retries; each one carries on from what's already downloaded. */
+    private fun downloadWithRetries(r: Release): File {
+        val waits = listOf(2L, 5L, 10L, 20L, 30L)
+        var attempt = 0
+        while (true) {
             try {
-                val file = withContext(Dispatchers.IO) { download(r) }
-                ready = file
-                openInstaller(activity, file)
-            } catch (e: Exception) {
-                android.util.Log.w("Glasswave", "Update failed", e)
-                status = "Couldn't download the update. Try again later."
-            } finally {
-                progress = null
+                return download(r)
+            } catch (e: IOException) {
+                if (attempt >= waits.size) throw e
+                android.util.Log.w("Glasswave", "Update download paused (${e.message}); trying again")
+                Thread.sleep(waits[attempt++] * 1000)
             }
         }
     }
 
-    /** Downloads to a temporary file and only then names it, so a cut-off download is never installed. */
-    private fun download(r: Release, showProgress: Boolean = true): File {
+    /**
+     * Downloads to a temporary file and only then names it, so a cut-off download is never
+     * installed. A download that stopped partway carries on from where it got to.
+     */
+    private fun download(r: Release): File {
         val final = fileFor(r)
         final.parentFile?.mkdirs()
         val out = File(final.parentFile, final.name + ".part")
-        val req = Request.Builder().url(r.apkUrl).header("User-Agent", "Glasswave").build()
-        YtRepo.http.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw IOException("Download failed (${resp.code})")
-            val body = resp.body ?: throw IOException("Empty download")
-            val total = body.contentLength().takeIf { it > 0 } ?: r.size.takeIf { it > 0 }
-            var done = 0L
-            body.byteStream().use { input ->
-                out.outputStream().use { output ->
-                    val buf = ByteArray(64 * 1024)
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n < 0) break
-                        output.write(buf, 0, n)
-                        done += n
-                        if (showProgress && total != null) {
-                            val p = done.toFloat() / total
-                            scope.launch { progress = p }
+        var have = if (out.exists()) out.length() else 0L
+        if (r.size > 0 && have > r.size) { out.delete(); have = 0 }
+        if (!(r.size > 0 && have == r.size)) {
+            val req = Request.Builder().url(r.apkUrl).header("User-Agent", "Glasswave")
+                .apply { if (have > 0) header("Range", "bytes=$have-") }
+                .build()
+            downloadClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) throw IOException("Download failed (${resp.code})")
+                // 206: the rest of the file. 200: the whole file again, so start over.
+                val append = have > 0 && resp.code == 206
+                if (!append) have = 0
+                val body = resp.body ?: throw IOException("Empty download")
+                val total = r.size.takeIf { it > 0 } ?: body.contentLength().takeIf { it > 0 }?.plus(have)
+                var done = have
+                var shown = 0L
+                body.byteStream().use { input ->
+                    java.io.FileOutputStream(out, append).use { output ->
+                        val buf = ByteArray(64 * 1024)
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            output.write(buf, 0, n)
+                            done += n
+                            if (total != null && done - shown > 128 * 1024) {
+                                shown = done
+                                val p = (done.toFloat() / total).coerceIn(0f, 1f)
+                                scope.launch { progress = p }
+                            }
                         }
                     }
                 }
+                if (total != null && done < total) throw IOException("Download cut off")
             }
-            if (total != null && done != total) { out.delete(); throw IOException("Download cut off") }
         }
+        if (r.size > 0 && out.length() != r.size) { out.delete(); throw IOException("The download didn't match the update") }
         final.delete()
         if (!out.renameTo(final)) throw IOException("Couldn't save the update")
         return final

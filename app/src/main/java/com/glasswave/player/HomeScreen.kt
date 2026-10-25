@@ -125,22 +125,28 @@ fun HomeScreen(c: ScreenCtx) {
                 item(key = "update") {
                     val ctx = androidx.compose.ui.platform.LocalContext.current
                     val p = Updater.progress
-                    GText(
-                        when {
-                            p != null -> "Downloading Glasswave ${r.version}… ${(p * 100).toInt()}%"
-                            Updater.ready != null -> "Glasswave ${r.version} is downloaded · tap to install"
-                            else -> "Glasswave ${r.version} is out · getting it ready…"
-                        },
-                        13, CoverTint.accent, FontWeight.SemiBold, 1,
-                        Modifier.padding(start = 20.dp, end = 16.dp, bottom = 2.dp).pressable(0.98f) { Updater.install(ctx) },
-                    )
-                    // A peek at what's in it: the first two lines of its notes.
-                    val peek = Updater.highlights(r.notes, 2)
-                    if (peek.isNotEmpty()) {
+                    // The whole area (both lines and the space around them) installs: no fiddly target,
+                    // and tapping again while it downloads just waits for it.
+                    Column(
+                        Modifier.fillMaxWidth().pressable(0.99f) { Updater.install(ctx) }
+                            .padding(start = 20.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
+                    ) {
                         GText(
-                            peek.joinToString(" · "), 12, Dim, maxLines = 2,
-                            modifier = Modifier.padding(start = 20.dp, end = 16.dp, bottom = 6.dp).pressable(0.98f) { Updater.install(ctx) },
+                            when {
+                                p != null && Updater.installWhenReady -> "Downloading Glasswave ${r.version}… ${(p * 100).toInt()}% · installs when done"
+                                p != null -> "Downloading Glasswave ${r.version}… ${(p * 100).toInt()}% · tap to install when done"
+                                Updater.ready != null -> "Glasswave ${r.version} is downloaded · tap to install"
+                                else -> "Glasswave ${r.version} is out · tap to get it"
+                            },
+                            13, CoverTint.accent, FontWeight.SemiBold, 1,
                         )
+                        // A peek at what's in it: the first two lines of its notes.
+                        val peek = Updater.highlights(r.notes, 2)
+                        if (peek.isNotEmpty()) {
+                            Spacer(Modifier.height(2.dp))
+                            GText(peek.joinToString(" · "), 12, Dim, maxLines = 2)
+                        }
+                        Updater.status?.let { Spacer(Modifier.height(2.dp)); GText(it, 12, Color(0xFFFFB4A8), maxLines = 2) }
                     }
                 }
             }
