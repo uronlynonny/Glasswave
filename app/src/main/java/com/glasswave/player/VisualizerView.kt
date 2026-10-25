@@ -15,12 +15,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 
 /**
- * Bars (or a wave) that move with the music, in the highlight colour. Drawn every frame without
+ * Bars that move with the music, in the highlight colour. Drawn every frame without
  * redrawing anything around it, and only measuring the sound while it's on screen.
  */
 @Composable
@@ -72,24 +69,6 @@ fun Visualizer(playing: Boolean, color: Color, modifier: Modifier = Modifier, st
                         val y = if (style == VisualizerStyle.MIRROR) (h - bh) / 2 else h - bh
                         drawRoundRect(brush, Offset(x, y), Size(bw, bh), CornerRadius(bw / 2))
                     }
-                }
-                VisualizerStyle.WAVE -> {
-                    val path = Path()
-                    val step = w / (n - 1)
-                    fun y(i: Int) = h - (0.06f + shown[i] * 0.9f) * h
-                    path.moveTo(0f, y(0))
-                    for (i in 1 until n) {
-                        val x0 = (i - 1) * step
-                        val x1 = i * step
-                        path.cubicTo(x0 + step / 2, y(i - 1), x1 - step / 2, y(i), x1, y(i))
-                    }
-                    val fill = Path().apply {
-                        addPath(path)
-                        lineTo(w, h); lineTo(0f, h); close()
-                    }
-                    drawPath(fill, Brush.verticalGradient(listOf(color.copy(alpha = 0.35f), Color.Transparent)))
-                    drawPath(path, color.copy(alpha = 0.35f), style = Stroke(width = 7f, cap = StrokeCap.Round))
-                    drawPath(path, color, style = Stroke(width = 3f, cap = StrokeCap.Round))
                 }
                 VisualizerStyle.OFF -> Unit
             }

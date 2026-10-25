@@ -66,6 +66,32 @@ object WallpaperFile {
     }
 }
 
+/** A font file you imported, kept inside the app. */
+object FontFile {
+    private fun dir(context: Context) = File(context.filesDir, "font").apply { mkdirs() }
+
+    /** The imported font, if there is one. */
+    fun saved(context: Context): File? = dir(context).listFiles()?.firstOrNull()
+
+    /** Copies a picked font in. Returns its path and a name to show, or null if it isn't a usable font. */
+    fun save(context: Context, uri: Uri): Pair<String, String>? = runCatching {
+        var name = "Your font"
+        context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0)?.let { name = it }
+        }
+        val ext = name.substringAfterLast('.', "ttf").lowercase().takeIf { it in setOf("ttf", "otf", "ttc") } ?: "ttf"
+        val out = File(dir(context), "font-${System.currentTimeMillis()}.$ext")
+        context.contentResolver.openInputStream(uri)!!.use { input -> out.outputStream().use { input.copyTo(it) } }
+        // Make sure Android can actually read it.
+        if (android.graphics.Typeface.Builder(out).build() == null) {
+            out.delete()
+            return null
+        }
+        dir(context).listFiles()?.filter { it != out }?.forEach { it.delete() }
+        out.path to name.substringBeforeLast('.').replace('_', ' ').replace('-', ' ').trim()
+    }.getOrNull()
+}
+
 /** Your wallpaper behind the app, softened and darkened by the amounts in Settings > Look. */
 @Composable
 fun Wallpaper(path: String, modifier: Modifier = Modifier) {
@@ -74,12 +100,17 @@ fun Wallpaper(path: String, modifier: Modifier = Modifier) {
     // Blurring needs Android 12+; older phones get a softer, smaller picture instead.
     val soft = if (Build.VERSION.SDK_INT >= 31 && blur > 0.01f) Modifier.blur((blur * 40).dp) else Modifier
     Box(modifier.fillMaxSize().background(Color.Black)) {
+        // A new wallpaper starts completely fresh (nothing kept from the last one).
+        androidx.compose.runtime.key(path) {
         if (WallpaperFile.isVideo(path)) {
             LoopingVideo(path, Modifier.fillMaxSize().then(soft))
         } else {
             val size = if (Build.VERSION.SDK_INT >= 31) 1080 else (1080 - blur * 900).toInt()
-            val req = remember(path, size) { ImageRequest.Builder(ctx).data(File(path)).size(size).build() }
+            val req = remember(path, size) {
+                ImageRequest.Builder(ctx).data(File(path)).size(size).memoryCacheKey("wall:$path").diskCachePolicy(coil.request.CachePolicy.DISABLED).build()
+            }
             AsyncImage(req, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().then(soft))
+        }
         }
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = Settings.wallpaperDim)))
     }

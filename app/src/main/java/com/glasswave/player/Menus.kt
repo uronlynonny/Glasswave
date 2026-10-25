@@ -129,12 +129,16 @@ object Menus {
         },
     )
 
-    /** Asks for a playlist or album link to import, filled in with [initial] (e.g. a link on the clipboard). */
-    fun importLink(initial: String, onDone: (String) -> Unit) = askName(
+    /**
+     * Asks for a playlist or album link to import, filled in with [initial] (e.g. a link on the clipboard).
+     * [service] names the app the link comes from, when the person picked one.
+     */
+    fun importLink(initial: String, service: String? = null, onDone: (String) -> Unit) = askName(
         NameRequest(
-            "Import from a link", initial, "Import",
-            hint = "Paste a link…",
-            note = "A playlist or album from Spotify, YouTube Music, YouTube, SoundCloud, Apple Music or Deezer.",
+            if (service != null) "Import from $service" else "Import from a link", initial, "Import",
+            hint = if (service != null) "Paste a $service link…" else "Paste a link…",
+            note = if (service != null) "In $service, open a playlist or album, tap Share → Copy link, then paste it here."
+            else "A playlist or album from ${LinkImport.servicesText}.",
             max = 2000,
             onDone = onDone,
         ),

@@ -55,19 +55,6 @@ enum class VisualizerStyle(val label: String, val detail: String) {
     OFF("Off", "No visualizer."),
     BARS("Bars", "Bars that jump with each beat, bass on the left."),
     MIRROR("Mirror", "Bars that grow up and down from the middle."),
-    WAVE("Wave", "A smooth glowing line that rides the music."),
-}
-
-/** The app's text style. These come with every Android phone, so nothing is downloaded. */
-enum class AppFont(val label: String, val family: String?) {
-    SYSTEM("Standard", null),
-    LIGHT("Light", "sans-serif-light"),
-    CONDENSED("Condensed", "sans-serif-condensed"),
-    MEDIUM("Bold", "sans-serif-medium"),
-    SERIF("Serif", "serif"),
-    MONO("Typewriter", "monospace"),
-    CASUAL("Casual", "casual"),
-    HANDWRITING("Handwriting", "cursive"),
 }
 
 enum class CacheSize(val label: String, val bytes: Long) {
@@ -116,7 +103,10 @@ object Settings {
     /** Your own highlight colour (ARGB), or null to take it from each song's cover. */
     var accentColor by mutableStateOf<Int?>(null); private set
     var visualizer by mutableStateOf(VisualizerStyle.BARS); private set
-    var font by mutableStateOf(AppFont.SYSTEM); private set
+    /** A font file you imported (kept inside the app), or null for the standard font. */
+    var fontFile by mutableStateOf<String?>(null); private set
+    /** Its name, for Settings. */
+    var fontName by mutableStateOf(""); private set
     /** Your own picture, GIF or video behind the app (a file inside the app), or null for the cover's colours. */
     var wallpaper by mutableStateOf<String?>(null); private set
     /** 0..1: how soft the wallpaper is. */
@@ -159,7 +149,8 @@ object Settings {
         highPerformance = prefs.getBoolean("high_perf", false)
         accentColor = if (prefs.contains("accent")) prefs.getInt("accent", 0) else null
         visualizer = enumPref("visualizer", VisualizerStyle.BARS)
-        font = enumPref("font", AppFont.SYSTEM)
+        fontFile = prefs.getString("font_file", null)?.takeIf { java.io.File(it).exists() }
+        fontName = prefs.getString("font_name", "") ?: ""
         wallpaper = prefs.getString("wallpaper", null)?.takeIf { java.io.File(it).exists() }
         wallpaperBlur = prefs.getFloat("wallpaper_blur", 0.25f)
         wallpaperDim = prefs.getFloat("wallpaper_dim", 0.35f)
@@ -172,7 +163,14 @@ object Settings {
         prefs.edit { if (argb == null) remove("accent") else putInt("accent", argb) }
     }
     fun updateVisualizer(v: VisualizerStyle) { visualizer = v; prefs.edit { putString("visualizer", v.name) } }
-    fun updateFont(f: AppFont) { font = f; prefs.edit { putString("font", f.name) } }
+    fun updateFont(path: String?, name: String) {
+        fontFile = path
+        fontName = name
+        prefs.edit {
+            if (path == null) remove("font_file") else putString("font_file", path)
+            putString("font_name", name)
+        }
+    }
     fun updateWallpaper(path: String?) {
         wallpaper = path
         prefs.edit { if (path == null) remove("wallpaper") else putString("wallpaper", path) }

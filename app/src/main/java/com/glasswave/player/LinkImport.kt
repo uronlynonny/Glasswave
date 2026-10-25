@@ -16,7 +16,7 @@ class ImportProblem(message: String) : IOException(message)
 
 /**
  * "Import from a link": paste a playlist or album link from Spotify, YouTube Music, YouTube,
- * SoundCloud, Apple Music or Deezer and get it as one of your own playlists. No sign-in needed;
+ * SoundCloud, Apple Music, Audiomack or Deezer and get it as one of your own playlists. No sign-in needed;
  * everything here reads the same public pages and feeds a web browser would.
  *
  * Songs from YouTube keep their YouTube address. Songs from the other services get a "gwmatch://"
@@ -25,6 +25,12 @@ class ImportProblem(message: String) : IOException(message)
 object LinkImport {
     /** A playlist or album read from a link. [note] replaces the usual "Imported" message when not every song came. */
     data class Imported(val name: String, val cover: String?, val tracks: List<Track>, val note: String? = null)
+
+    /** The services a link can come from, in the order the app lists them. */
+    val SERVICES = listOf("Spotify", "YouTube Music", "YouTube", "SoundCloud", "Apple Music", "Audiomack", "Deezer")
+
+    /** "Spotify, YouTube Music, ... or Deezer", for plain sentences. */
+    val servicesText = SERVICES.dropLast(1).joinToString(", ") + " or " + SERVICES.last()
 
     /** Big enough for nearly any playlist, small enough to stay quick. */
     private const val MAX = 1000
@@ -37,6 +43,7 @@ object LinkImport {
     private fun isSoundCloud(h: String) = h == "soundcloud.com" || h == "on.soundcloud.com" || h == "api.soundcloud.com"
     private fun isApple(h: String) = h == "music.apple.com" || h == "itunes.apple.com"
     private fun isDeezer(h: String) = h == "deezer.com" || h == "link.deezer.com" || h == "deezer.page.link"
+    private fun isAudiomack(h: String) = h == "audiomack.com"
 
     /** The first web link in [text], so a whole "Check out this playlist: https://..." message can be pasted. */
     private fun firstLink(text: String): String =
@@ -47,7 +54,7 @@ object LinkImport {
         if (text.isNullOrBlank() || text.length > 2000) return null
         val link = firstLink(text)
         val h = hostOf(link)
-        return link.takeIf { isSpotify(h) || isYouTube(h) || isSoundCloud(h) || isApple(h) || isDeezer(h) }
+        return link.takeIf { isSpotify(h) || isYouTube(h) || isSoundCloud(h) || isApple(h) || isAudiomack(h) || isDeezer(h) }
     }
 
     /** Reads the playlist, album or song behind [link]. Throws [ImportProblem] with a plain message if it can't. */
@@ -60,8 +67,9 @@ object LinkImport {
             isSoundCloud(h) -> soundCloud(url)
             isApple(h) -> apple(url)
             isDeezer(h) -> deezer(url)
+            isAudiomack(h) -> audiomack(url)
             else -> throw ImportProblem(
-                "That link isn't one Glasswave can read. Paste a playlist or album link from Spotify, YouTube Music, YouTube, SoundCloud, Apple Music or Deezer.",
+                "That link isn't one Glasswave can read. Paste a playlist or album link from $servicesText.",
             )
         }
         return if (got.note == null && got.tracks.size >= MAX) got.copy(note = "Imported the first $MAX songs of ${got.name}. That's as many as one import brings in.") else got
@@ -364,6 +372,77 @@ object LinkImport {
             if (tracks.size < minOf(count, MAX)) note = "Imported the first ${tracks.size} songs of $name. Apple Music didn't share the rest."
         }
         Imported(name.ifEmpty { "Apple Music playlist" }, cover, tracks.take(MAX), note)
+    }
+
+    /* ---------------- Audiomack ---------------- */
+
+    /**
+     * Audiomack's page carries its data in the "self.__next_f.push" pieces the website uses to draw
+     * itself. This joins them back into one text.
+     */
+    private fun nextData(html: String): String {
+        val out = StringBuilder()
+        val marker = "self.__next_f.push([1,"
+        var at = html.indexOf(marker)
+        while (at >= 0) {
+            val q = at + marker.length
+            val end = html.indexOf("])</script>", q)
+            if (end < 0) break
+            (runCatching { JSONTokener(html.substring(q, end)).nextValue() }.getOrNull() as? String)?.let(out::append)
+            at = html.indexOf(marker, end)
+        }
+        return out.toString()
+    }
+
+    /** The playlist, album or song called [slug] inside the page data, read whole. */
+    private fun amFind(data: String, slug: String, kind: String): JSONObject? {
+        var from = 0
+        while (true) {
+            val at = data.indexOf("\"url_slug\":${JSONObject.quote(slug)}", from)
+            if (at < 0) return null
+            // Step back to the start of the object this belongs to.
+            var p = at
+            var tries = 0
+            while (tries++ < 400) {
+                p = data.lastIndexOf('{', p - 1)
+                if (p < 0) break
+                val o = runCatching { JSONTokener(data.substring(p)).nextValue() as? JSONObject }.getOrNull()
+                if (o != null && o.str("url_slug") == slug) {
+                    if (o.str("type") == kind) return o
+                    break
+                }
+            }
+            from = at + 1
+        }
+    }
+
+    private fun amTrack(t: JSONObject, cover: String?): Track? {
+        val title = t.str("title").ifEmpty { return null }
+        val artist = t.optJSONObject("artist")?.str("name") ?: t.str("artist")
+        val s = t.str("duration").toLongOrNull() ?: 0
+        val art = t.str("image").takeIf { it.startsWith("http") }?.let { "$it?width=300" } ?: cover
+        return Track(matchUrl(title, artist, s), title, artist, s, art)
+    }
+
+    private suspend fun audiomack(link: String): Imported = withContext(Dispatchers.IO) {
+        val m = Regex("audiomack\\.com/([^/?#]+)/(playlist|album|song)/([^/?#]+)").find(link)
+            ?: throw ImportProblem("That Audiomack link isn't a playlist, album or song.")
+        val (_, kind, slug) = m.destructured
+        val page = fetch(link)
+        if (page.code == 404) throw ImportProblem("Couldn't open that Audiomack link. It may be private or deleted.")
+        val o = amFind(nextData(page.text), slug, kind)
+            ?: throw ImportProblem("Couldn't open that Audiomack link. It may be private or deleted.")
+        val cover = o.str("image").takeIf { it.startsWith("http") }
+        if (kind == "song") {
+            val t = amTrack(o, cover) ?: throw ImportProblem("Couldn't read that Audiomack song.")
+            return@withContext Imported(t.title, cover, listOf(t))
+        }
+        val rows = o.optJSONArray("tracks") ?: JSONArray()
+        val tracks = (0 until minOf(rows.length(), MAX)).mapNotNull { i -> rows.optJSONObject(i)?.let { amTrack(it, cover) } }
+        if (tracks.isEmpty()) throw ImportProblem("That Audiomack ${if (kind == "album") "album" else "playlist"} is empty or private.")
+        val name = o.str("title").ifEmpty { "Audiomack $kind" }
+        val total = minOf(o.optInt("track_count", rows.length()), MAX)
+        Imported(name, cover, tracks, if (tracks.size < total) "Imported ${songs(tracks.size)} of $name. Audiomack didn't share the other ${total - tracks.size}." else null)
     }
 
     /* ---------------- Deezer ---------------- */

@@ -124,15 +124,14 @@ object CoverTint {
         internal set(v) { fromCover = v }
 }
 
-/** The text style picked in Settings > Look, made once per style. */
-private val fontFamilies = HashMap<AppFont, androidx.compose.ui.text.font.FontFamily>()
+/** The font you imported in Settings > Look (null for the standard one), loaded once. */
+private val fontFamilies = HashMap<String, androidx.compose.ui.text.font.FontFamily?>()
 
 val AppFontFamily: androidx.compose.ui.text.font.FontFamily?
     get() {
-        val f = Settings.font
-        val name = f.family ?: return null
-        return fontFamilies.getOrPut(f) {
-            androidx.compose.ui.text.font.FontFamily(android.graphics.Typeface.create(name, android.graphics.Typeface.NORMAL))
+        val path = Settings.fontFile ?: return null
+        return fontFamilies.getOrPut(path) {
+            runCatching { androidx.compose.ui.text.font.FontFamily(android.graphics.Typeface.createFromFile(path)) }.getOrNull()
         }
     }
 

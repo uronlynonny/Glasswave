@@ -252,6 +252,7 @@ private fun Main(c: ScreenCtx, open: (SettingsPage) -> Unit) {
 @Composable
 private fun Look() {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     Group("Highlight colour") {
         AccentPicker()
     }
@@ -261,8 +262,11 @@ private fun Look() {
             androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
         ) { uri ->
             if (uri != null) {
-                val path = WallpaperFile.save(ctx, uri)
-                if (path != null) Settings.updateWallpaper(path) else Menus.say("Couldn't open that file")
+                // Copied in the background (a video can be big), then shown.
+                scope.launch {
+                    val path = withContext(Dispatchers.IO) { WallpaperFile.save(ctx, uri) }
+                    if (path != null) Settings.updateWallpaper(path) else Menus.say("Couldn't open that file")
+                }
             }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -292,9 +296,10 @@ private fun Look() {
         Choices(VisualizerStyle.entries, Settings.visualizer, { it.label }, { it.detail }) { Settings.updateVisualizer(it) }
     }
     Note("Shown above the progress bar in the player, in your highlight colour. It only works while it's on screen, so it doesn't use battery otherwise.")
-    Group("Text style") {
+    Group("Font") {
         FontChoices()
     }
+    Note("Import any font file (.ttf or .otf) from your phone, for example one you downloaded from Google Fonts.")
     Group("Player style") {
         Choices(PlayerStyle.entries, Settings.playerStyle, { it.label }, { it.detail }) { Settings.updatePlayerStyle(it) }
     }
@@ -420,7 +425,7 @@ private fun AccountsPage(c: ScreenCtx) {
     // Way 1: no account, no key. Paste a link from any music app, get the playlist.
     Group("Import from a link") {
         Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
-            GText("Paste a playlist or album link from Spotify, YouTube Music, YouTube, SoundCloud, Apple Music or Deezer. No sign-in needed: in the other app, tap Share → Copy link, then paste it here.", 14, Dim)
+            GText("Paste a playlist or album link from ${LinkImport.servicesText}. No sign-in needed: in the other app, tap Share → Copy link, then paste it here.", 14, Dim)
             Spacer(Modifier.height(12.dp))
             var link by remember { mutableStateOf("") }
             val clip = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -444,6 +449,21 @@ private fun AccountsPage(c: ScreenCtx) {
                 GlassButton(if (vm.importing) "Importing…" else "Import", c.bg, accent = true) {
                     vm.importLink(link)
                     link = ""
+                }
+            }
+        }
+        // One row per service, so it's clear where links can come from.
+        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+        LinkImport.SERVICES.forEach { service ->
+            Divider()
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                GText(service, 16, Color.White, modifier = Modifier.weight(1f))
+                Pill("Import", true) {
+                    val copied = LinkImport.supportedLink(runCatching { clipboard.getText()?.text }.getOrNull())
+                    Menus.importLink(copied ?: "", service) { vm.importLink(it) }
                 }
             }
         }
@@ -1060,26 +1080,52 @@ private fun AccentPicker() {
     }
 }
 
-/** Each text style, written in that style. */
+/** The standard font, or one you imported (shown written in itself). */
 @Composable
 private fun FontChoices() {
-    AppFont.entries.forEachIndexed { i, f ->
-        if (i > 0) Divider()
-        val family = remember(f) { f.family?.let { androidx.compose.ui.text.font.FontFamily(android.graphics.Typeface.create(it, android.graphics.Typeface.NORMAL)) } }
-        Row(
-            Modifier.fillMaxWidth().pressable(0.98f) { Settings.updateFont(f) }.padding(horizontal = 18.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            androidx.compose.foundation.text.BasicText(
-                f.label + "  ·  The quick brown fox",
-                Modifier.weight(1f),
-                style = TextStyle(color = Color.White, fontSize = 16.sp, fontFamily = family, fontWeight = FontWeight.Medium),
-                maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            )
-            AnimatedVisibility(Settings.font == f, enter = scaleIn(bouncy()), exit = scaleOut(smooth(120))) {
-                Ico(Icons.Rounded.Check, Accent, 24.dp)
-            }
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val pick = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) scope.launch {
+            val got = withContext(Dispatchers.IO) { FontFile.save(ctx, uri) }
+            if (got != null) Settings.updateFont(got.first, got.second) else Menus.say("That isn't a font file Glasswave can use")
         }
+    }
+    fun import() = pick.launch(arrayOf("font/*", "application/x-font-ttf", "application/x-font-otf", "application/font-sfnt", "application/vnd.ms-opentype", "application/octet-stream"))
+    val own = Settings.fontFile
+    Row(
+        Modifier.fillMaxWidth().pressable(0.98f) { Settings.updateFont(null, Settings.fontName) }.padding(horizontal = 18.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            androidx.compose.foundation.text.BasicText("Default", style = TextStyle(color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium))
+            GText("Glasswave's own clean font.", 13, Dim)
+        }
+        AnimatedVisibility(own == null, enter = scaleIn(bouncy()), exit = scaleOut(smooth(120))) { Ico(Icons.Rounded.Check, Accent, 24.dp) }
+    }
+    Divider()
+    val saved = FontFile.saved(ctx)
+    Row(
+        Modifier.fillMaxWidth().pressable(0.98f) {
+            if (saved != null && own == null) Settings.updateFont(saved.path, Settings.fontName) else import()
+        }.padding(horizontal = 18.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            val family = remember(saved?.path) { saved?.let { runCatching { androidx.compose.ui.text.font.FontFamily(android.graphics.Typeface.createFromFile(it)) }.getOrNull() } }
+            androidx.compose.foundation.text.BasicText(
+                if (saved != null) Settings.fontName.ifBlank { "Your font" } else "Import a font",
+                style = TextStyle(color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, fontFamily = family),
+                maxLines = 1,
+            )
+            GText(if (saved != null) "Your own font. Tap Change to pick another." else "Use any font file from your phone.", 13, Dim)
+        }
+        if (saved != null) {
+            Pill("Change", false) { import() }
+            Spacer(Modifier.width(8.dp))
+        }
+        AnimatedVisibility(own != null, enter = scaleIn(bouncy()), exit = scaleOut(smooth(120))) { Ico(Icons.Rounded.Check, Accent, 24.dp) }
     }
 }
