@@ -25,7 +25,11 @@ import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
@@ -65,17 +69,38 @@ object Queued {
     val ids: MutableSet<String> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
 }
 
-/** Reads a downloaded song from its file; everything else goes through the cache and the internet. */
+/**
+ * Reads a downloaded song from its file, and a song on this phone ("On this phone") straight from
+ * the phone; everything else goes through the cache and the internet.
+ */
 @OptIn(UnstableApi::class)
 private class LocalFirstDataSource(private val online: DataSource, private val file: FileDataSource) : DataSource {
     private var active: DataSource? = null
+    private val listeners = ArrayList<TransferListener>()
+    /** Opens content:// songs from the phone's music library. Made when first needed. */
+    private var phone: DataSource? = null
 
     override fun addTransferListener(listener: TransferListener) {
         online.addTransferListener(listener)
         file.addTransferListener(listener)
+        listeners += listener
+        phone?.addTransferListener(listener)
+    }
+
+    private fun phoneSource(): DataSource = phone ?: run {
+        val app = PhoneMusic.app ?: throw IOException("Glasswave isn't ready to open songs on this phone yet")
+        androidx.media3.datasource.ContentDataSource(app).also { s ->
+            listeners.forEach { s.addTransferListener(it) }
+            phone = s
+        }
     }
 
     override fun open(dataSpec: DataSpec): Long {
+        // Songs on this phone: open them directly, not through the cache or the internet.
+        when (dataSpec.uri.scheme) {
+            "content" -> phoneSource().let { active = it; return it.open(dataSpec) }
+            "file" -> { active = file; return file.open(dataSpec) }
+        }
         val local = Downloads.fileFor(dataSpec.uri.toString())
         return if (local != null) {
             active = file
@@ -188,6 +213,23 @@ class PlaybackService : MediaSessionService() {
     private val worker = Executors.newFixedThreadPool(2)
     private val main = Handler(Looper.getMainLooper())
     private val settingsListener: () -> Unit = { session?.player?.let { applySettings(it); maybeAutoplay(it); applyLevel(it) } }
+    private val soundListener: () -> Unit = { session?.player?.let { applyPitch(it) } }
+
+    /** A player whose sound goes through Glasswave's own effects (equalizer, bass, reverb...). */
+    private fun withEffects(measure: Boolean) = object : DefaultRenderersFactory(this) {
+        override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
+            DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                .setAudioProcessors(arrayOf(SoundProcessor(measure)))
+                .build()
+    }
+
+    /** Pitch from Sound settings, keeping whatever speed is set. */
+    private fun applyPitch(p: Player) {
+        val want = Sound.pitchFactor()
+        if (p.playbackParameters.pitch != want) p.playbackParameters = PlaybackParameters(p.playbackParameters.speed, want)
+    }
 
     /* ---- Volume leveling: every song at the same loudness ---- */
 
@@ -284,7 +326,7 @@ class PlaybackService : MediaSessionService() {
             .setBackBuffer(15 * 60_000, true)
             .build()
 
-        val player = ExoPlayer.Builder(this)
+        val player = ExoPlayer.Builder(this, withEffects(measure = true))
             .setMediaSourceFactory(DefaultMediaSourceFactory(sources))
             .setLoadControl(load)
             .setAudioAttributes(
@@ -300,7 +342,9 @@ class PlaybackService : MediaSessionService() {
             .setSeekForwardIncrementMs(10_000)
             .build()
         applySettings(player)
+        applyPitch(player)
         Settings.listeners += settingsListener
+        Sound.listeners += soundListener
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -532,11 +576,14 @@ class PlaybackService : MediaSessionService() {
             recoveringFor = item.mediaId
             recoveries = 0
         }
-        if (!Problems.online(this)) {
+        // A song stored on the phone doesn't need the internet: if it won't play, skip it.
+        val phone = PhoneMusic.isPhoneSong(item.mediaId)
+        if (phone) recoveries = maxOf(recoveries, 3)
+        if (!phone && !Problems.online(this)) {
             Menus.say("No internet connection")
             return
         }
-        YtRepo.forgetStreamUrls()
+        if (!phone) YtRepo.forgetStreamUrls()
         if (recoveries < 3) {
             recoveries++
             main.postDelayed({
@@ -641,7 +688,7 @@ class PlaybackService : MediaSessionService() {
     private fun mixerFor(): ExoPlayer? {
         mixer?.let { return it }
         val src = mediaSources ?: return null
-        return ExoPlayer.Builder(this)
+        return ExoPlayer.Builder(this, withEffects(measure = false))
             .setMediaSourceFactory(DefaultMediaSourceFactory(src))
             // Same sound settings as the main player, but it never takes audio focus of its own.
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), false)
@@ -684,6 +731,8 @@ class PlaybackService : MediaSessionService() {
             m.seekTo(start)
             m.playWhenReady = false
             m.volume = levelGain
+            // Same speed and pitch as the song it carries on.
+            m.playbackParameters = p.playbackParameters
             mixPreparedFor = item.mediaId
             mixAt = start
             return false
@@ -768,6 +817,7 @@ class PlaybackService : MediaSessionService() {
         }
         livePlayer = null
         Settings.listeners -= settingsListener
+        Sound.listeners -= soundListener
         main.removeCallbacks(fader)
         worker.shutdownNow()
         SleepTimer.cancel()

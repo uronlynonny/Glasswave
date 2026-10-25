@@ -75,6 +75,8 @@ dependencies {
     implementation("androidx.media3:media3-session:1.4.1")
 
     implementation("io.coil-kt:coil-compose:2.7.0")
+    // Moving GIF wallpapers.
+    implementation("io.coil-kt:coil-gif:2.7.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 

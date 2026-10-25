@@ -683,6 +683,34 @@ object YtMusicApi {
         return out.values.toList()
     }
 
+    /**
+     * A playlist or album from a shared link, read without signing in. Follows YouTube's
+     * "load more" pages up to [max] songs. [id] is a playlist id (PL..., OLAK5uy_...) or an album id (MPREb...).
+     */
+    suspend fun linkPage(id: String, max: Int = 1000): Page = withContext(Dispatchers.IO) {
+        if (id.startsWith("MPREb")) return@withContext page(AlbumItem(id, "", "", null))
+        val json = browse(JSONObject().put("browseId", if (id.startsWith("VL")) id else "VL$id"))
+        val h = header(json)
+        // An album's own playlist (OLAK5uy_...) has no title; open the album instead, for its name and cover.
+        if (id.removePrefix("VL").startsWith("OLAK5uy_")) {
+            val album = collect(json, "browseEndpoint").firstNotNullOfOrNull { e -> e.optString("browseId").takeIf { it.startsWith("MPREb") } }
+            if (album != null) return@withContext page(AlbumItem(album, "", "", null))
+        }
+        val out = LinkedHashMap<String, Track>()
+        var scope: Any = collect(json, "musicPlaylistShelfRenderer").firstOrNull()
+            ?: collect(json, "musicShelfRenderer").firstOrNull()
+            ?: json
+        for (i in 0 until 100) {
+            val before = out.size
+            for (s in items(scope).filterIsInstance<SongItem>()) out.putIfAbsent(s.track.url, s.track)
+            if (out.size >= max) break
+            val next = nextPage(scope) ?: break
+            if (out.size == before && i > 0) break
+            scope = more("browse", next)
+        }
+        Page(h.title, h.subtitle, h.thumb, out.values.take(max), emptyList())
+    }
+
     /** All songs in one of your playlists. [browseId] starts with "VL". */
     fun tracks(browseId: String): List<Track> =
         tracksFrom(browse(JSONObject().put("browseId", browseId), requireAuth = true), requireAuth = true)

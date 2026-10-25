@@ -242,7 +242,12 @@ object Sync {
         io.execute { o()?.let { runCatching { send(it, essential) } } }
     }
 
-    private fun trackJson(t: Track) = JSONObject().put("u", t.url).put("t", t.title).put("a", t.artist).put("s", t.seconds).put("i", t.thumb ?: "")
+    private fun trackJson(t: Track): JSONObject {
+        // A song stored on this phone can't play elsewhere: the other device finds it on YouTube Music instead.
+        val phone = PhoneMusic.isPhoneSong(t.url)
+        val url = if (phone) matchUrl(t.title, t.artist, t.seconds) else t.url
+        return JSONObject().put("u", url).put("t", t.title).put("a", t.artist).put("s", t.seconds).put("i", if (phone) "" else t.thumb ?: "")
+    }
     private fun trackOf(o: JSONObject?) = o?.optString("u")?.takeIf { it.isNotEmpty() }?.let {
         Track(it, o.optString("t"), o.optString("a"), o.optLong("s"), o.optString("i").ifEmpty { null })
     }

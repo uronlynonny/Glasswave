@@ -30,6 +30,8 @@ object Problems {
 
     fun songFailed(context: Context, item: MediaItem, error: PlaybackException, tries: Int) {
         if (!Settings.reportProblems) return
+        // Your own music files are private: never reported.
+        if (PhoneMusic.isPhoneSong(item.mediaId)) return
         val url = item.mediaId
         val prefs = context.getSharedPreferences("problems", Context.MODE_PRIVATE)
         val day = System.currentTimeMillis() / 86_400_000

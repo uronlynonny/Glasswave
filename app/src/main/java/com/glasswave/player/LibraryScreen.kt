@@ -36,6 +36,7 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.runtime.Composable
@@ -70,6 +71,14 @@ fun LibraryScreen(c: ScreenCtx) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GlassCircle(44.dp, c.bg, onClick = { Menus.newPlaylist() }) {
                     Ico(Icons.Rounded.Add, Color.White, 24.dp)
+                }
+                // Import a playlist from a link; a link already on the clipboard is filled in.
+                val clip = androidx.compose.ui.platform.LocalClipboardManager.current
+                GlassCircle(44.dp, c.bg, onClick = {
+                    val copied = runCatching { clip.getText()?.text }.getOrNull()
+                    Menus.importLink(LinkImport.supportedLink(copied) ?: "") { vm.importLink(it) }
+                }) {
+                    Ico(Icons.Rounded.Link, Color.White, 22.dp)
                 }
                 if (vm.ytSignedIn || vm.spSignedIn) {
                     GlassCircle(44.dp, c.bg, onClick = { vm.syncAll() }) {
@@ -129,6 +138,8 @@ fun LibraryScreen(c: ScreenCtx) {
                     Ico(Icons.AutoMirrored.Rounded.KeyboardArrowRight, Faint, 24.dp)
                 }
             }
+            // Music files already on the phone.
+            item(key = "phone", span = { GridItemSpan(maxLineSpan) }) { PhoneMusicRow(c) }
             if (all.isEmpty()) {
                 item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
                     Column(

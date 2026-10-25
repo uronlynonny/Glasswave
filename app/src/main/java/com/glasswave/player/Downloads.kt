@@ -89,7 +89,8 @@ object Downloads {
     fun qualityNow(): Quality = if (onWifi()) Settings.downloadWifi else Settings.downloadData
 
     fun download(t: Track) {
-        if (isDownloaded(t.url) || isDownloading(t.url)) return
+        // Songs already stored on the phone don't need downloading.
+        if (PhoneMusic.isPhoneSong(t.url) || isDownloaded(t.url) || isDownloading(t.url)) return
         progress[t.url] = 0f
         pending[t.url] = t
         scope.launch {

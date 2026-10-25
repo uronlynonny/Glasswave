@@ -32,6 +32,8 @@ sealed interface Route {
     data class Saved(val info: PlaylistInfo) : Route
     /** Songs downloaded to the phone. */
     data object Offline : Route
+    /** Music files already on the phone. */
+    data object Phone : Route
     /** Your listening stats: top songs and artists, history. */
     data object Stats : Route
 }
@@ -468,27 +470,35 @@ class MainViewModel : ViewModel() {
     var importing by mutableStateOf(false)
         private set
 
-    /** Imports a public Spotify playlist or album from its link into your own playlists. No sign-in needed. */
-    fun importSpotifyLink(link: String) {
+    /**
+     * Imports a public playlist, album or song from a link (Spotify, YouTube Music, YouTube, SoundCloud,
+     * Apple Music or Deezer) into your own playlists. No sign-in needed.
+     */
+    fun importLink(link: String) {
         if (importing || link.isBlank()) return
         importing = true
+        Menus.say("Getting the songs…")
         viewModelScope.launch {
             try {
-                val got = SpotifyApi.importLink(link.trim())
+                val got = LinkImport.importLink(link.trim())
                 withContext(Dispatchers.IO) { Library.createWith(got.name, got.cover, got.tracks) }
-                Menus.say(
-                    if (got.cut) "Imported the first ${got.tracks.size} songs of ${got.name}. Spotify only shares 100 by link; sign in to Spotify in Settings to get them all."
-                    else "Imported ${got.name} · ${got.tracks.size} songs",
-                )
+                val n = got.tracks.size
+                Menus.say(got.note ?: "Imported ${got.name} · ${if (n == 1) "1 song" else "$n songs"}")
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: ImportProblem) {
+                Menus.say(e.message ?: "Couldn't import that link")
             } catch (e: Exception) {
-                Menus.say(e.message?.takeIf { it.length < 70 } ?: "Couldn't import that link")
+                android.util.Log.w("Glasswave", "Link import failed", e)
+                Menus.say("Couldn't import that link. Check your internet and try again.")
             } finally {
                 importing = false
             }
         }
     }
+
+    /** Older name, kept so nothing breaks. */
+    fun importSpotifyLink(link: String) = importLink(link)
 
     fun signOutSpotify() {
         Accounts.signOutSpotify()

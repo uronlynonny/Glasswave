@@ -12,6 +12,7 @@ class GlassApp : Application(), ImageLoaderFactory {
         super.onCreate()
         Settings.init(this)
         LastPlayed.init(this)
+        Sound.init(this)
         Accounts.init(this)
         Library.init(this)
         History.init(this)
@@ -49,5 +50,9 @@ class GlassApp : Application(), ImageLoaderFactory {
             .okHttpClient(YtRepo.http)
             .respectCacheHeaders(false)
             .crossfade(true)
+            // GIF wallpapers move.
+            .components {
+                if (android.os.Build.VERSION.SDK_INT >= 28) add(coil.decode.ImageDecoderDecoder.Factory()) else add(coil.decode.GifDecoder.Factory())
+            }
             .build()
 }

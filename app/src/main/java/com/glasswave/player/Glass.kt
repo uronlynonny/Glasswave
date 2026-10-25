@@ -113,11 +113,28 @@ fun isWide(): Boolean = androidx.compose.ui.platform.LocalConfiguration.current.
 
 /* ---------------- Colours from the album cover ---------------- */
 
-/** The accent of what's playing: a bright, readable colour from the cover (lime when nothing plays). */
+/**
+ * The accent of what's playing: a bright, readable colour from the cover (lime when nothing plays),
+ * or the colour you picked in Settings > Look.
+ */
 object CoverTint {
-    var accent by mutableStateOf(Color(0xFFC6F432))
-        internal set
+    private var fromCover by mutableStateOf(Color(0xFFC6F432))
+    var accent: Color
+        get() = Settings.accentColor?.let { Color(it) } ?: fromCover
+        internal set(v) { fromCover = v }
 }
+
+/** The text style picked in Settings > Look, made once per style. */
+private val fontFamilies = HashMap<AppFont, androidx.compose.ui.text.font.FontFamily>()
+
+val AppFontFamily: androidx.compose.ui.text.font.FontFamily?
+    get() {
+        val f = Settings.font
+        val name = f.family ?: return null
+        return fontFamilies.getOrPut(f) {
+            androidx.compose.ui.text.font.FontFamily(android.graphics.Typeface.create(name, android.graphics.Typeface.NORMAL))
+        }
+    }
 
 /** Lifts a colour until it reads well on the dark glass. */
 fun readable(c: Color): Color {
@@ -183,17 +200,24 @@ private fun DrawScope.blob(color: Color, cx: Float, cy: Float, r: Float) {
  * the rest of the screen. On Android 12+ the cover itself is also blurred in, loaded tiny.
  */
 @Composable
-fun GlassBackground(colors: CoverColors, art: String?, modifier: Modifier = Modifier, artAlpha: Float = 0.35f) {
+fun GlassBackground(colors: CoverColors, art: String?, modifier: Modifier = Modifier, artAlpha: Float = 0.35f, wallpaper: Boolean = false) {
+    val wall = if (wallpaper) Settings.wallpaper else null
+    if (wall != null) {
+        Wallpaper(wall, modifier)
+        return
+    }
     val anim by rememberDrift(40_000)
     val ctx = LocalContext.current
     val request = remember(art) { art?.let { ImageRequest.Builder(ctx).data(it).size(96).build() } }
+    // How strong the colours are (Settings > Look).
+    val k = Settings.colorStrength
     Box(modifier.fillMaxSize().background(colors.base)) {
         if (request != null && Build.VERSION.SDK_INT >= 31) {
             AsyncImage(
                 model = request,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().blur(80.dp).alpha(artAlpha),
+                modifier = Modifier.fillMaxSize().blur(80.dp).alpha((artAlpha * k).coerceIn(0f, 1f)),
             )
         }
         Box(
@@ -204,10 +228,11 @@ fun GlassBackground(colors: CoverColors, art: String?, modifier: Modifier = Modi
                     val t = if (Settings.animations) anim else 0.8f
                     val w = size.width
                     val h = size.height
-                    blob(colors.a.copy(alpha = 0.55f), w * (0.25f + 0.25f * cos(t)), h * (0.18f + 0.08f * sin(t * 2)), w * 1.0f)
-                    blob(colors.b.copy(alpha = 0.60f), w * (0.80f + 0.18f * sin(t)), h * (0.48f + 0.10f * cos(t)), w * 0.95f)
-                    blob(colors.c.copy(alpha = 0.40f), w * (0.30f + 0.25f * sin(t + 1.7f)), h * (0.86f + 0.06f * cos(t * 2)), w * 0.85f)
-                    blob(colors.a.copy(alpha = 0.25f), w * (0.70f + 0.20f * cos(t + 2.4f)), h * (0.10f + 0.05f * sin(t)), w * 0.6f)
+                    fun al(x: Float) = (x * k).coerceIn(0f, 1f)
+                    blob(colors.a.copy(alpha = al(0.55f)), w * (0.25f + 0.25f * cos(t)), h * (0.18f + 0.08f * sin(t * 2)), w * 1.0f)
+                    blob(colors.b.copy(alpha = al(0.60f)), w * (0.80f + 0.18f * sin(t)), h * (0.48f + 0.10f * cos(t)), w * 0.95f)
+                    blob(colors.c.copy(alpha = al(0.40f)), w * (0.30f + 0.25f * sin(t + 1.7f)), h * (0.86f + 0.06f * cos(t * 2)), w * 0.85f)
+                    blob(colors.a.copy(alpha = al(0.25f)), w * (0.70f + 0.20f * cos(t + 2.4f)), h * (0.10f + 0.05f * sin(t)), w * 0.6f)
                     drawRect(Brush.verticalGradient(listOf(Color(0x22000000), Color(0x99000000))))
                 },
         )
@@ -223,7 +248,8 @@ fun Modifier.glass(
     light: Float = 0.12f,
 ): Modifier = this
     .clip(shape)
-    .background(Color(0xFF0B0F18).copy(alpha = base))
+    // How solid the glass is (Settings > Look).
+    .background(Color(0xFF0B0F18).copy(alpha = (base * Settings.glassOpacity).coerceIn(0f, 0.95f)))
     .background(
         Brush.linearGradient(
             listOf(Color.White.copy(alpha = light), Color.White.copy(alpha = light * 0.25f)),
@@ -257,6 +283,7 @@ fun GText(
             color = color,
             fontSize = size.sp,
             fontWeight = weight,
+            fontFamily = AppFontFamily,
             // Big bold titles sit a little tighter, like Apple's.
             letterSpacing = if (size >= 22) (-0.4).sp else 0.sp,
         ),

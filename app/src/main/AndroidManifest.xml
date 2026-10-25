@@ -11,6 +11,11 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- In-app updates: hand a downloaded APK to Android's installer. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- "On this phone": play music files already on the phone. Only asked for on that page. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
 
     <queries>
         <!-- The phone's speech recognizer, for voice search. -->
@@ -61,6 +66,12 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Lets the player open songs on this phone even when Android starts it on its own. Shares nothing. -->
+        <provider
+            android:name=".PhoneMusicStarter"
+            android:authorities="${applicationId}.phonemusic"
+            android:exported="false" />
 
         <!-- Home-screen widget. -->
         <receiver
