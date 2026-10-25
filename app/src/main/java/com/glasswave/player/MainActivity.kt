@@ -35,6 +35,7 @@ class MainActivity : ComponentActivity() {
         )
         ps = PlayerState(applicationContext)
         ps.connect()
+        if (savedInstanceState == null) handleOpen(intent)
 
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -48,6 +49,21 @@ class MainActivity : ComponentActivity() {
             androidx.compose.runtime.LaunchedEffect(Settings.frameRate, Settings.highPerformance) { applyPerformance() }
             App(vm, ps, openInBrowser = ::openInBrowser, openEqualizer = ::openEqualizer)
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleOpen(intent)
+    }
+
+    /** Opened by tapping the song in the notification or the phone's media bar: show the full player. */
+    private fun handleOpen(i: Intent?) {
+        if (i?.action == OPEN_PLAYER && ::ps.isInitialized) ps.openFull = true
+    }
+
+    companion object {
+        const val OPEN_PLAYER = "com.glasswave.player.OPEN_PLAYER"
     }
 
     /**

@@ -11,6 +11,7 @@ class GlassApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         Settings.init(this)
+        LastPlayed.init(this)
         Accounts.init(this)
         Library.init(this)
         History.init(this)

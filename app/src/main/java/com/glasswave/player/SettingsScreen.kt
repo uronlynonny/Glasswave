@@ -309,6 +309,9 @@ private fun Audio(c: ScreenCtx) {
     Note("The next song starts under the end of this one and they blend for the length you pick. While Automix is on, it takes over from crossfade.")
     Group("Playback") {
         SwitchRow("Autoplay", "When the queue ends, keep playing similar songs.", Settings.autoplay) { Settings.updateAutoplay(it) }
+        SwitchRow("Remember what was playing", "When you open Glasswave again, the last song is waiting where you left off. Just tap play.", Settings.rememberPlaying) {
+            Settings.updateRememberPlaying(it)
+        }
         Divider()
         SwitchRow("Skip silence", "Skips quiet gaps at the start and end of songs.", Settings.skipSilence) { Settings.updateSkipSilence(it) }
         SwitchRow("Volume leveling", "Plays every song at the same loudness, so you don't have to keep changing the volume.", Settings.volumeLeveling) { Settings.updateVolumeLeveling(it) }

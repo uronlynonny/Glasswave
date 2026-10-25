@@ -79,6 +79,8 @@ object Settings {
     var keepHistory by mutableStateOf(true); private set
     var coverMotion by mutableStateOf(CoverMotion.WIFI); private set
     var autoplay by mutableStateOf(true); private set
+    /** Keep the queue and the spot in the song, so it's waiting (paused) next time the app opens. On by default. */
+    var rememberPlaying by mutableStateOf(true); private set
     /** Seconds the song fades out at its end and in at its start. 0 = off. */
     var crossfade by mutableIntStateOf(0); private set
     /** Quality for downloads made on Wi-Fi, and on mobile data. */
@@ -112,6 +114,7 @@ object Settings {
         keepHistory = prefs.getBoolean("history", true)
         coverMotion = enumPref("cover_motion", CoverMotion.WIFI)
         autoplay = prefs.getBoolean("autoplay", true)
+        rememberPlaying = prefs.getBoolean("remember_playing", true)
         crossfade = prefs.getInt("crossfade", 0)
         downloadWifi = enumPref("dl_wifi", Quality.HIGH)
         downloadData = enumPref("dl_data", Quality.NORMAL)
@@ -175,6 +178,12 @@ object Settings {
         autoplay = on
         prefs.edit { putBoolean("autoplay", on) }
         listeners.forEach { it() } // the player adds or removes Autoplay songs
+    }
+    /** Turning it off also forgets what was saved. */
+    fun updateRememberPlaying(on: Boolean) {
+        rememberPlaying = on
+        prefs.edit { putBoolean("remember_playing", on) }
+        if (!on) LastPlayed.clear()
     }
     fun updateAutomix(on: Boolean) { automix = on; prefs.edit { putBoolean("automix", on) } }
     fun updateMixSeconds(sec: Int) { mixSeconds = sec.coerceIn(3, 15); prefs.edit { putInt("mix_seconds", mixSeconds) } }

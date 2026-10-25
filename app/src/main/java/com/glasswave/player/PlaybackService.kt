@@ -1,6 +1,7 @@
 // Glasswave · created by nonny dev. Original work; see AUTHORS.md.
 package com.glasswave.player
 
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.media.audiofx.AudioEffect
@@ -346,6 +347,28 @@ class PlaybackService : MediaSessionService() {
         })
         SleepTimer.player = player
 
+        // Bring back what was playing last time (paused), and keep it saved as things change.
+        LastPlayed.restore(player)
+        player.addListener(object : Player.Listener {
+            override fun onEvents(p: Player, events: Player.Events) {
+                if (events.containsAny(
+                        Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_IS_PLAYING_CHANGED,
+                        Player.EVENT_TIMELINE_CHANGED, Player.EVENT_POSITION_DISCONTINUITY,
+                        Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED, Player.EVENT_REPEAT_MODE_CHANGED,
+                    )
+                ) saveSoon()
+                if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
+                    main.removeCallbacks(saveTick)
+                    if (p.isPlaying) main.postDelayed(saveTick, 15_000)
+                }
+            }
+
+            // A song brought back from last time isn't loaded yet: load it when play is pressed.
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (playWhenReady && player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0 && player.playerError == null) player.prepare()
+            }
+        })
+
         // Let the phone's equalizer attach to our audio.
         audioSessionId = player.audioSessionId
         sendBroadcast(
@@ -354,7 +377,15 @@ class PlaybackService : MediaSessionService() {
                 .putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
                 .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC),
         )
-        session = MediaSession.Builder(this, player).build()
+        // Tapping the song in the notification, lock screen or the phone's media bar opens the player.
+        val openPlayer = PendingIntent.getActivity(
+            this, 7,
+            Intent(this, MainActivity::class.java)
+                .setAction(MainActivity.OPEN_PLAYER)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        session = MediaSession.Builder(this, player).setSessionActivity(openPlayer).build()
 
         // The home-screen widget follows the song and the play state.
         livePlayer = player
@@ -374,6 +405,25 @@ class PlaybackService : MediaSessionService() {
         val item = p.currentMediaItem
         val md = item?.mediaMetadata
         Widget.update(this, md?.title?.toString(), md?.artist?.toString(), md?.artworkUri?.toString(), p.isPlaying, live = true)
+    }
+
+    /* ---- Remember what was playing (see LastPlayed) ---- */
+
+    private val saveNow = Runnable { session?.player?.let { LastPlayed.save(it) } }
+
+    /** Saves shortly after a change (several changes at once are saved together). */
+    private fun saveSoon() {
+        main.removeCallbacks(saveNow)
+        main.postDelayed(saveNow, 500)
+    }
+
+    /** While playing, saves the spot in the song every 15 seconds. */
+    private val saveTick = object : Runnable {
+        override fun run() {
+            val p = session?.player ?: return
+            LastPlayed.save(p)
+            if (p.isPlaying) main.postDelayed(this, 15_000)
+        }
     }
 
     /* ---- Make sure the song playing is the song you picked ---- */
@@ -704,7 +754,9 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
-        session?.player?.let { logPlay(it) }
+        main.removeCallbacks(saveNow)
+        main.removeCallbacks(saveTick)
+        session?.player?.let { LastPlayed.save(it); logPlay(it) }
         runCatching { boost?.release() }
         boost = null
         runCatching { mixer?.release() }

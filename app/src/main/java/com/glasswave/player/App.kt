@@ -80,6 +80,14 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
         Menus.closePlaylist()
     }
 
+    // Opened by tapping the song in the notification or the phone's media bar: show the full player.
+    LaunchedEffect(ps.openFull, ps.hasItem) {
+        if (ps.openFull && ps.hasItem) {
+            full = true
+            ps.openFull = false
+        }
+    }
+
     // Look for a new version when the app opens (at most every three hours), and after an update
     // say once what's new.
     LaunchedEffect(Unit) {
