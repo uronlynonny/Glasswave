@@ -312,7 +312,7 @@ class PlaybackService : MediaSessionService() {
             .setCache(AudioCache.get(this))
             .setUpstreamDataSourceFactory(resolving)
             // Same song at a different quality is stored separately.
-            .setCacheKeyFactory { spec -> spec.uri.toString() + "|" + Settings.quality.name }
+            .setCacheKeyFactory { spec -> spec.uri.toString() + "|" + Settings.streamQuality().name }
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
         val sources = DataSource.Factory { LocalFirstDataSource(cached.createDataSource(), FileDataSource()) }
         mediaSources = sources

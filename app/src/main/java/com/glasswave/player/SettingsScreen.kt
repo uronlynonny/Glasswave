@@ -335,6 +335,10 @@ private fun Audio(c: ScreenCtx) {
         Choices(Quality.entries, Settings.quality, { it.label }, { it.detail }) { Settings.updateQuality(it) }
     }
     Note("Streaming quality. Applies from the next song; higher quality uses more data. Download quality is under Storage.")
+    Group("Data saver") {
+        Choices(DataSaver.entries, Settings.dataSaver, { it.label }, { it.detail }) { Settings.updateDataSaver(it) }
+    }
+    Note("While saving data, songs stream at Low quality, music videos behind the cover are skipped and pictures load smaller. Songs you've downloaded play as they are.")
     Group("Crossfade") {
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(0, 2, 4, 6, 8, 12).forEach { s ->

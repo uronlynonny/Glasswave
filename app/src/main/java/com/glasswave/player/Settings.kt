@@ -124,6 +124,8 @@ object Settings {
     fun init(context: Context) {
         prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         quality = enumPref("quality", Quality.HIGH)
+        dataSaver = enumPref("data_saver", DataSaver.OFF)
+        Net.init(context)
         skipSilence = prefs.getBoolean("skip_silence", false)
         volumeLeveling = prefs.getBoolean("volume_leveling", true)
         reportProblems = prefs.getBoolean("report_problems", true)
@@ -197,6 +199,16 @@ object Settings {
     fun updateDownloadWifi(q: Quality) { downloadWifi = q; prefs.edit { putString("dl_wifi", q.name) } }
     fun updateDownloadData(q: Quality) { downloadData = q; prefs.edit { putString("dl_data", q.name) } }
     fun updateLivingCover(on: Boolean) { livingCover = on; prefs.edit { putBoolean("living_cover", on) } }
+
+    /** Data saver: low quality streaming, no music videos behind the cover, smaller pictures. */
+    var dataSaver by mutableStateOf(DataSaver.OFF); private set
+    fun updateDataSaver(d: DataSaver) { dataSaver = d; prefs.edit { putString("data_saver", d.name) } }
+
+    /** Whether data saver is cutting back right now (it may be waiting for mobile data). */
+    val savingData: Boolean get() = dataSaver == DataSaver.ALWAYS || (dataSaver == DataSaver.MOBILE && Net.metered)
+
+    /** The quality songs stream at right now: Low while data saver is cutting back, your choice otherwise. */
+    fun streamQuality(): Quality = if (savingData) Quality.LOW else quality
 
     fun updateQuality(q: Quality) {
         quality = q

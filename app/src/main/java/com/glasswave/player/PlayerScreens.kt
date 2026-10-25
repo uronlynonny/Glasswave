@@ -438,7 +438,7 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
             DevicesButton()
 
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                Badge(Settings.quality.label.uppercase())
+                Badge(if (Settings.savingData) "DATA SAVER" else Settings.quality.label.uppercase())
                 ps.currentId?.let { id ->
                     // On the phone: a small tick in the cover's colour. Downloading: a filling ring.
                     val pct = Downloads.progress[id]

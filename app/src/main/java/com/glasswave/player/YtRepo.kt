@@ -180,7 +180,7 @@ object YtRepo {
 
     /** Blocking. Called by the player on its loading thread, never on the main thread. */
     @Throws(IOException::class)
-    fun streamUrl(videoUrl: String, quality: Quality = Settings.quality): String {
+    fun streamUrl(videoUrl: String, quality: Quality = Settings.streamQuality()): String {
         init()
         val key = "$videoUrl|${quality.name}"
         urlCache[key]?.let { (u, at) -> if (System.currentTimeMillis() - at < URL_LIFETIME_MS) return u }
