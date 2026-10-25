@@ -1,11 +1,11 @@
 {
-  "lastTime": 1792902538,
+  "lastTime": 1792906031,
   "totals": {
     "visits": 62,
     "siteDownloads": 22,
-    "apk": 56
+    "apk": 58
   },
-  "apkTotal": 19,
+  "apkTotal": 21,
   "hours": [
     {
       "t": 1792763089,
@@ -264,9 +264,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1792909910,
+      "v": 0,
+      "d": 0,
+      "a": 2
     }
   ],
-  "updated": 1792906030,
+  "updated": 1792909910,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -281,7 +287,7 @@
       "m": "\"Nothing Compares 2 U\" by Sinéad O'Connor wouldn't play (tried 4 times).\nERROR_CODE_IO_UNSPECIFIED\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nXiaomi 2506BPN68G, Android 17, Glasswave 0.16.5\nhttps://music.youtube.com/watch?v=0-EF60neguk"
     }
   ],
-  "lastActiveTime": 1792901725,
+  "lastActiveTime": 1792907574,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -297,6 +303,7 @@
         "1acf6e0b-6faa-44ef-aab2-085f9b135094"
       ],
       "a": [
+        "36d58cc1-c393-490b-9440-241580552d0a",
         "9a1189fa-f5da-422c-a766-1b9a2be0d75a",
         "b801d80c-7a7c-4a90-9309-980696f742f7"
       ]
@@ -304,7 +311,7 @@
   },
   "active": {
     "today": {
-      "a": 2,
+      "a": 3,
       "w": 1
     },
     "week": {
@@ -323,7 +330,7 @@
       },
       {
         "d": "2026-10-25",
-        "a": 2,
+        "a": 3,
         "w": 1
       }
     ]
