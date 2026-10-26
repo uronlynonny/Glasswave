@@ -1,11 +1,11 @@
 {
-  "lastTime": 1792970485,
+  "lastTime": 1792975522,
   "totals": {
     "visits": 74,
     "siteDownloads": 26,
-    "apk": 81
+    "apk": 82
   },
-  "apkTotal": 44,
+  "apkTotal": 45,
   "hours": [
     {
       "t": 1792763089,
@@ -378,9 +378,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1792978945,
+      "v": 0,
+      "d": 0,
+      "a": 1
     }
   ],
-  "updated": 1792975521,
+  "updated": 1792978945,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -403,7 +409,7 @@
       "m": "\"One Dance (feat. WizKid & Kyla)\" by Drake wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nYoutubeMusicPremiumContentException: This video is a YouTube Music Premium video\n\nWindows 11 (10.0), Glasswave for Windows 1.2.1\nhttps://music.youtube.com/watch?v=5LFB3qdmZBM"
     }
   ],
-  "lastActiveTime": 1792973074,
+  "lastActiveTime": 1792978326,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -435,12 +441,15 @@
     "2026-10-26": {
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094"
+      ],
+      "a": [
+        "36d58cc1-c393-490b-9440-241580552d0a"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 0,
+      "a": 1,
       "w": 1
     },
     "week": {
@@ -464,7 +473,7 @@
       },
       {
         "d": "2026-10-26",
-        "a": 0,
+        "a": 1,
         "w": 1
       }
     ]
