@@ -1,11 +1,11 @@
 {
-  "lastTime": 1793042109,
+  "lastTime": 1793044252,
   "totals": {
-    "visits": 80,
+    "visits": 81,
     "siteDownloads": 29,
-    "apk": 94
+    "apk": 95
   },
-  "apkTotal": 57,
+  "apkTotal": 58,
   "hours": [
     {
       "t": 1792763089,
@@ -480,9 +480,15 @@
       "v": 2,
       "d": 0,
       "a": 0
+    },
+    {
+      "t": 1793046614,
+      "v": 1,
+      "d": 0,
+      "a": 1
     }
   ],
-  "updated": 1793043558,
+  "updated": 1793046614,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -551,9 +557,13 @@
     {
       "t": 1793042109,
       "m": "\"Insomnia\" by Takeoff wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nYoutubeMusicPremiumContentException: This video is a YouTube Music Premium video\n\nWindows 10 (10.0), Glasswave for Windows 1.2.1\nhttps://music.youtube.com/watch?v=OgFOyHxCGnk"
+    },
+    {
+      "t": 1793043832,
+      "m": "\"I Remember\" by Takeoff wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nYoutubeMusicPremiumContentException: This video is a YouTube Music Premium video\n\nWindows 10 (10.0), Glasswave for Windows 1.2.1\nhttps://music.youtube.com/watch?v=SSRjufffRiA"
     }
   ],
-  "lastActiveTime": 1793043425,
+  "lastActiveTime": 1793043876,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -586,7 +596,8 @@
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
         "2cde5f08-41b5-47f3-8920-6cc59cb3c0a8",
-        "d8dfbeea-6046-4a55-beb1-39a0e683240f"
+        "d8dfbeea-6046-4a55-beb1-39a0e683240f",
+        "ff5e4c03-6f4b-4aaf-9481-52797777d6ff"
       ],
       "a": [
         "06ad3a70-73ca-4155-a0e5-93217aae41ec",
@@ -603,15 +614,15 @@
   "active": {
     "today": {
       "a": 8,
-      "w": 3
+      "w": 4
     },
     "week": {
       "a": 15,
-      "w": 5
+      "w": 6
     },
     "month": {
       "a": 15,
-      "w": 5
+      "w": 6
     },
     "daily": [
       {
@@ -627,7 +638,7 @@
       {
         "d": "2026-10-26",
         "a": 8,
-        "w": 3
+        "w": 4
       }
     ]
   }
