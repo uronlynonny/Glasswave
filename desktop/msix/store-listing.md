@@ -40,7 +40,7 @@ from YouTube Music.
 music player, youtube music, lyrics, equalizer, playlists, music, offline
 
 ## Privacy policy URL
-https://uronlynonny.github.io/Glasswave/privacy.html (once the page below is on the website)
+https://uronlynonny.github.io/Glasswave/privacy.html (live)
 
 ## Notes for certification (Partner Center, "Notes for certification")
 Glasswave is a desktop (Win32) music player packaged as MSIX. It needs runFullTrust because it is a
@@ -56,7 +56,7 @@ full trust to run its own executable, play audio and use the network like any de
 
 ## Privacy policy (draft, for the website)
 
-**Glasswave privacy policy**
+**Glasswave for Windows privacy policy** (published as docs/privacy.html)
 
 Glasswave is made by nonny dev. This page says what Glasswave keeps, what it sends, and to whom.
 
