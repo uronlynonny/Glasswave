@@ -50,6 +50,28 @@ object Updater {
     var ready by mutableStateOf<File?>(null)
         private set
 
+    /**
+     * Installed from the Microsoft Store? Then the Store keeps Glasswave up to date and the app
+     * never downloads installers itself. (Windows says so: a Store app runs inside a "package".)
+     */
+    val fromStore: Boolean by lazy {
+        runCatching {
+            val k = com.sun.jna.Native.load("kernel32", StorePackage::class.java)
+            val len = com.sun.jna.ptr.IntByReference(0)
+            // 15700 = APPMODEL_ERROR_NO_PACKAGE: a normal (not Store) install.
+            k.GetCurrentPackageFullName(len, null) != 15700
+        }.getOrDefault(false)
+    }
+
+    private interface StorePackage : com.sun.jna.Library {
+        fun GetCurrentPackageFullName(length: com.sun.jna.ptr.IntByReference, name: CharArray?): Int
+    }
+
+    /** Opens the Store's Downloads and updates page. */
+    private fun openStoreUpdates() {
+        runCatching { java.awt.Desktop.getDesktop().browse(java.net.URI("ms-windows-store://downloadsandupdates")) }
+    }
+
     /** Closes the app (set by the window), so the installer can replace its files. */
     var exitApp: () -> Unit = {}
 
@@ -116,6 +138,13 @@ object Updater {
     }
 
     fun check(tell: Boolean = false) {
+        if (fromStore) {
+            if (tell) {
+                status = "Glasswave updates through the Microsoft Store."
+                openStoreUpdates()
+            }
+            return
+        }
         if (checking) return
         checking = true
         if (tell) status = null
@@ -140,6 +169,7 @@ object Updater {
     }
 
     fun checkIfDue() {
+        if (fromStore) return
         if (System.currentTimeMillis() - lastChecked > 3600_000L) check()
     }
 
@@ -265,6 +295,7 @@ object Updater {
 
     /** Called as the app closes: a downloaded update installs silently, ready for next time. */
     fun installOnExit() {
+        if (fromStore) return
         ready?.let { runInstaller(it, reopen = false) }
     }
 

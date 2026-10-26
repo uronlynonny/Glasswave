@@ -277,3 +277,88 @@ tasks.register<JavaExec>("makeIcon") {
     mainClass.set("com.glasswave.player.IconMakerKt")
     args(file("icons/glasswave.ico").absolutePath)
 }
+
+/* ---------------- Microsoft Store package (MSIX) ---------------- */
+
+// Glasswave in the Microsoft Store: the Store signs this package itself, so people installing from
+// there never see the "Windows protected your PC" warning, and the Store keeps it updated.
+// These three come from Partner Center (Apps and games > Glasswave > Product identity). Until
+// they're filled in, the package builds with stand-ins and can't be uploaded.
+val storeIdentityName = "TODO.Glasswave"
+val storePublisher = "CN=TODO"
+val storePublisherDisplayName = "nonny dev"
+
+// Microsoft's MakePri (it indexes the package's pictures), from their official NuGet package.
+// (Their MakeAppx won't start outside a full Windows SDK install, so msix/PackMsix.cs packs the
+// package with the packaging engine built into Windows instead.)
+val sdkBuildToolsVersion = "10.0.28000.2705"
+val sdkBuildToolsSha256 = "8bfdfb6ca2633f531cf80b5fa22512ba61a394d7988f0970db83baadc67929ed"
+
+val storeTools by tasks.registering {
+    val out = layout.buildDirectory.dir("storetools")
+    inputs.property("version", sdkBuildToolsVersion)
+    outputs.dir(out)
+    doLast {
+        val o = out.get().asFile.apply { mkdirs() }
+        val pkg = File(o, "buildtools-$sdkBuildToolsVersion.nupkg")
+        fun sha(f: File) = MessageDigest.getInstance("SHA-256").digest(f.readBytes()).joinToString("") { "%02x".format(it) }
+        if (!pkg.exists() || sha(pkg) != sdkBuildToolsSha256) {
+            val url = "https://api.nuget.org/v3-flatcontainer/microsoft.windows.sdk.buildtools/$sdkBuildToolsVersion/microsoft.windows.sdk.buildtools.$sdkBuildToolsVersion.nupkg"
+            URI(url).toURL().openStream().use { input -> pkg.outputStream().use { input.copyTo(it) } }
+            check(sha(pkg) == sdkBuildToolsSha256) { "The Windows SDK build tools download doesn't match its expected hash" }
+        }
+        ZipFile(pkg).use { z ->
+            z.entries().asSequence().filter { !it.isDirectory && it.name.contains("/x64/") }.forEach { e ->
+                z.getInputStream(e).use { i -> File(o, e.name.substringAfterLast('/')).outputStream().use { i.copyTo(it) } }
+            }
+        }
+    }
+}
+
+// Remakes the Store package's pictures (msix/Assets) from the icon design (see IconMaker.kt).
+tasks.register<JavaExec>("makeStoreAssets") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.IconMakerKt")
+    args("--store", file("msix/Assets").absolutePath)
+}
+
+// The Store package: build/msix/Glasswave-<version>.msix, ready to upload in Partner Center.
+tasks.register("packageMsix") {
+    dependsOn(storeTools, "createDistributable")
+    doLast {
+        val image = layout.buildDirectory.dir("compose/binaries/main/app/Glasswave").get().asFile
+        val work = layout.buildDirectory.dir("msix").get().asFile.apply { deleteRecursively(); mkdirs() }
+        val root = File(work, "layout")
+        image.copyRecursively(root)
+        file("msix/Assets").copyRecursively(File(root, "Assets"))
+        // The Store wants four numbers, the last one 0.
+        val version = (appVersion.split('.') + listOf("0", "0", "0")).take(3).joinToString(".") + ".0"
+        File(root, "AppxManifest.xml").writeText(
+            file("msix/AppxManifest.xml").readText()
+                .replace("@IDENTITY_NAME@", storeIdentityName)
+                .replace("@PUBLISHER@", storePublisher)
+                .replace("@PUBLISHER_DISPLAY_NAME@", storePublisherDisplayName)
+                .replace("@VERSION@", version),
+        )
+        val tools = layout.buildDirectory.dir("storetools").get().asFile
+        fun run(vararg cmd: String) {
+            val p = ProcessBuilder(*cmd).directory(work).redirectErrorStream(true).start()
+            val log = p.inputStream.bufferedReader().readText()
+            check(p.waitFor() == 0) { "${File(cmd[0]).name} failed:\n$log" }
+        }
+        // resources.pri lets Windows pick the right size of each picture (all sizes in one file:
+        // no separate resource packages).
+        val pri = File(work, "priconfig.xml")
+        run(File(tools, "makepri.exe").path, "createconfig", "/cf", pri.path, "/dq", "en-US", "/pv", "10.0.0", "/o")
+        pri.writeText(pri.readText().replace(Regex("<packaging>[\\s\\S]*?</packaging>"), ""))
+        run(File(tools, "makepri.exe").path, "new", "/pr", root.path, "/cf", pri.path, "/mn", File(root, "AppxManifest.xml").path, "/of", File(root, "resources.pri").path, "/o")
+        // Pack it with Windows' own packaging engine (see msix/PackMsix.cs).
+        val packer = File(tools, "PackMsix.exe")
+        val csc = File(System.getenv("WINDIR") ?: "C:\\Windows", "Microsoft.NET/Framework64/v4.0.30319/csc.exe")
+        run(csc.path, "-nologo", "-platform:x64", "-optimize", "-out:" + packer.path, file("msix/PackMsix.cs").path)
+        val msix = File(work, "Glasswave-$appVersion.msix")
+        run(packer.path, root.path, msix.path)
+        println("Store package: ${msix.absolutePath} (${msix.length() / (1 shl 20)} MB)")
+        if (storePublisher == "CN=TODO") println("Note: Store identity not filled in yet (see storeIdentityName in build.gradle.kts), so this one can't be uploaded.")
+    }
+}
