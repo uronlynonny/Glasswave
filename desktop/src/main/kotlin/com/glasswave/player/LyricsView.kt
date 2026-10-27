@@ -31,7 +31,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
@@ -102,6 +101,8 @@ import kotlinx.coroutines.delay
  *  - The lyrics with the closest length to the song are chosen (the same song has many cuts).
  *  - If the chosen lyrics were timed to a slightly longer or shorter cut, their timing is stretched
  *    to fit this recording.
+ *  - When the lyrics time each word, the light follows the voice word by word: it moves across a
+ *    word as it's sung, waits between words, and finishes each word on time.
  *
  * Two looks, clearly different:
  *  - Liquid glass on: lines glide into place one after another like a wave with a soft overshoot,
@@ -149,7 +150,7 @@ fun LyricsScreen(ps: PlayerState, onClose: () -> Unit) {
                 }
                 Box(Modifier.weight(1f).fillMaxHeight().padding(end = 24.dp)) { LyricsBody(ps, state, fancy, accent) }
             }
-            Box(Modifier.padding(16.dp).size(46.dp).pressable(0.85f, onClick = onClose), contentAlignment = Alignment.Center) {
+            Box(Modifier.statusBarsPadding().padding(16.dp).size(46.dp).pressable(0.85f, onClick = onClose), contentAlignment = Alignment.Center) {
                 Ico(Icons.Rounded.Close, Color.White, 26.dp)
             }
         } else {
@@ -177,6 +178,11 @@ fun LyricsScreen(ps: PlayerState, onClose: () -> Unit) {
 @Composable
 private fun MiniControls(ps: PlayerState) {
     Column(Modifier.fillMaxWidth()) {
+        // Bars that dance under the lyrics (Settings > Look).
+        if (Settings.visualizer != VisualizerStyle.OFF) {
+            Visualizer(ps.playing, CoverTint.accent, Modifier.fillMaxWidth().height(28.dp))
+            Spacer(Modifier.height(6.dp))
+        }
         AppleSeekBar(ps)
         Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(52.dp).pressable(0.85f) { ps.previous() }, contentAlignment = Alignment.Center) { Ico(Icons.Rounded.FastRewind, Color.White, 34.dp) }
@@ -425,10 +431,29 @@ private fun SyncedLyrics(ps: PlayerState, ly: Lyrics, fancy: Boolean, accent: Co
                     }
                 }
                 Spacer(Modifier.height(420.dp))
-                GText(ly.source + if (stretch != 1f) " · timing fitted to this cut" else "", 12, Faint, modifier = Modifier.padding(horizontal = 26.dp))
+                GText(
+                    ly.source + (if (ly.wordTimed) " · word by word" else "") + (if (stretch != 1f) " · timing fitted to this cut" else ""),
+                    12, Faint, modifier = Modifier.padding(horizontal = 26.dp),
+                )
             }
         }
 
+    }
+}
+
+/** A line's word timings, ready for drawing: [letters] are the timed letters' places in the text. */
+private class WordFill(val words: List<LyricWord>, val first: IntArray, val count: IntArray, val letters: IntArray) {
+    /**
+     * How far the singing is at [p], counted in [letters] (2.5 = halfway through the third). Inside a
+     * word the fill moves across its letters in time; between words it waits where the last one ended.
+     */
+    fun progress(p: Long): Float {
+        for (i in words.indices) {
+            val w = words[i]
+            if (p < w.ms) return first[i].toFloat()
+            if (p < w.endMs) return first[i] + count[i] * (p - w.ms).toFloat() / (w.endMs - w.ms)
+        }
+        return letters.size.toFloat()
     }
 }
 
@@ -445,9 +470,23 @@ private fun LyricText(line: LyricLine, nextMs: Long, index: Int, active: () -> I
     val layout = remember { arrayOfNulls<TextLayoutResult>(1) }
     val big = WindowSize.widthDp >= 1100f
     val fontSize = if (big) 40.sp else 32.sp
-    val base = TextStyle(fontSize = fontSize, fontFamily = DisplayFont, fontWeight = FontWeight.Bold, lineHeight = fontSize * 1.18f, letterSpacing = (-0.6).sp)
+    val base = TextStyle(fontSize = fontSize, fontFamily = AppFontFamily ?: DisplayFont, fontWeight = FontWeight.Bold, lineHeight = fontSize * 1.18f, letterSpacing = (-0.6).sp)
     // Letters that count for timing (spaces are skipped, so the fill doesn't pause between words).
     val letterAt = remember(text) { text.indices.filter { !text[it].isWhitespace() } }
+    // With word timing: each timed word's letters in order, where each word's letters start in that
+    // list, and how many it has. Times are on the lyrics' clock, the same one pos() uses.
+    val timed = remember(line) {
+        val words = if (line.text.isBlank()) emptyList() else line.words.filter { it.from >= 0 && it.to <= text.length }
+        val first = IntArray(words.size)
+        val count = IntArray(words.size)
+        val letters = ArrayList<Int>()
+        words.forEachIndexed { i, w ->
+            first[i] = letters.size
+            for (c in w.from until w.to) if (!text[c].isWhitespace()) letters += c
+            count[i] = letters.size - first[i]
+        }
+        if (letters.isEmpty()) null else WordFill(words, first, count, letters.toIntArray())
+    }
 
     Box(Modifier.widthIn(max = 820.dp).padding(start = 28.dp, end = 40.dp, top = if (big) 16.dp else 12.dp, bottom = if (big) 16.dp else 12.dp)) {
         BasicText(text, style = base.copy(color = Color.White.copy(alpha = 0.4f)), onTextLayout = { layout[0] = it })
@@ -461,17 +500,30 @@ private fun LyricText(line: LyricLine, nextMs: Long, index: Int, active: () -> I
                     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                     .drawWithContent {
                         val tl = layout[0] ?: return@drawWithContent drawContent()
-                        // How far through the line the singing is, as a letter (with the part of the next letter).
-                        val span = ((nextMs - line.ms) * 0.92f).coerceIn(600f, 12_000f)
-                        val f = ((pos() - line.ms) / span).coerceIn(0f, 1f)
-                        val exact = f * letterAt.size
-                        val li = exact.toInt()
-                        if (li >= letterAt.size) return@drawWithContent drawContent()
-                        val c = letterAt[li]
+                        val c: Int
+                        val x: Float
+                        if (timed != null) {
+                            // Real word timing: follow the word being sung; between words, wait at
+                            // the end of the last one.
+                            val exact = timed.progress(pos())
+                            if (exact >= timed.letters.size) return@drawWithContent drawContent()
+                            val li = if (exact <= 0f) 0 else kotlin.math.ceil(exact).toInt() - 1
+                            c = timed.letters[li]
+                            val box = tl.getBoundingBox(c)
+                            x = box.left + (box.right - box.left) * (exact - li).coerceIn(0f, 1f)
+                        } else {
+                            // How far through the line the singing is, as a letter (with the part of the next letter).
+                            val span = ((nextMs - line.ms) * 0.92f).coerceIn(600f, 12_000f)
+                            val f = ((pos() - line.ms) / span).coerceIn(0f, 1f)
+                            val exact = f * letterAt.size
+                            val li = exact.toInt()
+                            if (li >= letterAt.size) return@drawWithContent drawContent()
+                            c = letterAt[li]
+                            val x0 = tl.getHorizontalPosition(c, true)
+                            val x1 = tl.getHorizontalPosition(c + 1, true)
+                            x = x0 + (x1 - x0) * (exact - li)
+                        }
                         val vline = tl.getLineForOffset(c)
-                        val x0 = tl.getHorizontalPosition(c, true)
-                        val x1 = tl.getHorizontalPosition(c + 1, true)
-                        val x = x0 + (x1 - x0) * (exact - li)
                         val lineTop = tl.getLineTop(vline)
                         val lineBottom = tl.getLineBottom(vline)
                         val feather = 14.dp.toPx()

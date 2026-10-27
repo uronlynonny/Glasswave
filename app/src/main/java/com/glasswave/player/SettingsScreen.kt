@@ -38,12 +38,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Equalizer
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Palette
@@ -71,6 +73,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.input.pointer.pointerInput
 import java.text.DateFormat
 import java.util.Date
 import kotlinx.coroutines.Dispatchers
@@ -78,8 +85,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private enum class SettingsPage(val title: String, val subtitle: String, val icon: ImageVector, val color: Color) {
-    LOOK("Look", "Player style, buttons, music videos, glass", Icons.Rounded.Palette, Color(0xFFAF52DE)),
-    AUDIO("Player & audio", "Quality, crossfade, autoplay, equalizer", Icons.Rounded.MusicNote, Color(0xFFFF375F)),
+    LOOK("Look", "Colours, wallpaper, fonts, visualizer, player style", Icons.Rounded.Palette, Color(0xFFAF52DE)),
+    AUDIO("Player & audio", "Quality, crossfade, autoplay", Icons.Rounded.MusicNote, Color(0xFFFF375F)),
+    SOUND("Sound & effects", "10-band equalizer, bass, pitch, reverb", Icons.Rounded.GraphicEq, Color(0xFFFF9F0A)),
     PERFORMANCE("Performance", "Frame rate, high performance mode", Icons.Rounded.Speed, Color(0xFF64D2FF)),
     ACCOUNTS("Accounts", "YouTube Music and Spotify", Icons.Rounded.AccountCircle, Color(0xFF0A84FF)),
     SYNC("Sync", "Bring your playlists in", Icons.Rounded.Sync, Color(0xFF30D158)),
@@ -172,6 +180,28 @@ private fun NavRow(title: String, detail: String, icon: ImageVector, color: Colo
     }
 }
 
+/** Puts the colours back as they came: cover colours on, normal colour strength and glass. */
+@Composable
+private fun ResetColours() {
+    val same = Settings.accentColor == null && Settings.colorStrength == 1f && Settings.glassOpacity == 1f
+    Row(
+        Modifier.fillMaxWidth().pressable(0.98f) {
+            Settings.updateAccentColor(null)
+            Settings.updateColorStrength(1f)
+            Settings.updateGlassOpacity(1f)
+            Menus.say("Colours are back to default")
+        }.padding(horizontal = 18.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            GText("Reset to default colours", 16, if (same) Faint else Color.White, FontWeight.Medium)
+            GText("Cover colours on, normal colour strength and glass", 13, Dim)
+        }
+        Spacer(Modifier.width(12.dp))
+        Ico(Icons.Rounded.RestartAlt, if (same) Faint else Color.White, 22.dp)
+    }
+}
+
 @Composable
 private fun Divider() {
     Box(Modifier.padding(start = 18.dp).fillMaxWidth().height(0.5.dp).background(Color.White.copy(alpha = 0.12f)))
@@ -211,6 +241,7 @@ fun SettingsScreen(c: ScreenCtx) {
                 when (p) {
                     SettingsPage.LOOK -> Look()
                     SettingsPage.AUDIO -> Audio(c)
+                    SettingsPage.SOUND -> SoundPage(c)
                     SettingsPage.PERFORMANCE -> Performance()
                     SettingsPage.ACCOUNTS -> AccountsPage(c)
                     SettingsPage.SYNC -> SyncPage(c)
@@ -243,6 +274,60 @@ private fun Main(c: ScreenCtx, open: (SettingsPage) -> Unit) {
 
 @Composable
 private fun Look() {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    Group("App colours") {
+        SwitchRow("Colours from the cover", "The app takes each song's cover colours", Settings.accentColor == null) { on ->
+            Settings.updateAccentColor(if (on) null else Settings.lastOwnAccent() ?: AccentSwatches[0])
+        }
+        if (Settings.accentColor != null) AccentPicker()
+        Divider()
+        ResetColours()
+    }
+    Note("On: the background, buttons, lyrics and visualizer change with each song's cover. Off: the whole app stays one plain colour you pick (lime is Glasswave's own look).")
+    Group("Wallpaper") {
+        val pick = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
+        ) { uri ->
+            if (uri != null) {
+                // Copied in the background (a video can be big), then shown.
+                scope.launch {
+                    val path = withContext(Dispatchers.IO) { WallpaperFile.save(ctx, uri) }
+                    if (path != null) Settings.updateWallpaper(path) else Menus.say("Couldn't open that file")
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Pill(if (Settings.wallpaper == null) "Choose picture, GIF or video" else "Change", true, Modifier.weight(1f)) {
+                pick.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+            }
+            if (Settings.wallpaper != null) {
+                Pill("Remove", false) {
+                    Settings.updateWallpaper(null)
+                    WallpaperFile.remove(ctx)
+                }
+            }
+        }
+        if (Settings.wallpaper != null) {
+            Divider()
+            SliderRow("Blur", "${(Settings.wallpaperBlur * 100).toInt()}%", Settings.wallpaperBlur, 0f..1f) { Settings.updateWallpaperBlur(it) }
+            SliderRow("Darken", "${(Settings.wallpaperDim * 100).toInt()}%", Settings.wallpaperDim, 0f..0.9f) { Settings.updateWallpaperDim(it) }
+        } else {
+            Divider()
+            SliderRow("Colour strength", "${(Settings.colorStrength * 100).toInt()}%", Settings.colorStrength, 0.3f..1.7f) { Settings.updateColorStrength(it) }
+        }
+        Divider()
+        SliderRow("Glass panels", glassWord(Settings.glassOpacity), Settings.glassOpacity, 0.3f..1.8f) { Settings.updateGlassOpacity(it) }
+    }
+    Note("Your own picture, moving GIF or video shows behind the app instead of the cover's colours. The full player still shows the song's cover.")
+    Group("Visualizer") {
+        Choices(VisualizerStyle.entries, Settings.visualizer, { it.label }, { it.detail }) { Settings.updateVisualizer(it) }
+    }
+    Note("Shown above the progress bar in the player, in your highlight colour. It only works while it's on screen, so it doesn't use battery otherwise.")
+    Group("Font") {
+        FontChoices()
+    }
+    Note("Import any font file (.ttf or .otf) from your phone, for example one you downloaded from Google Fonts.")
     Group("Player style") {
         Choices(PlayerStyle.entries, Settings.playerStyle, { it.label }, { it.detail }) { Settings.updatePlayerStyle(it) }
     }
@@ -278,6 +363,10 @@ private fun Audio(c: ScreenCtx) {
         Choices(Quality.entries, Settings.quality, { it.label }, { it.detail }) { Settings.updateQuality(it) }
     }
     Note("Streaming quality. Applies from the next song; higher quality uses more data. Download quality is under Storage.")
+    Group("Data saver") {
+        Choices(DataSaver.entries, Settings.dataSaver, { it.label }, { it.detail }) { Settings.updateDataSaver(it) }
+    }
+    Note("While saving data, songs stream at Low quality, music videos behind the cover are skipped and pictures load smaller. Songs you've downloaded play as they are.")
     Group("Crossfade") {
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(0, 2, 4, 6, 8, 12).forEach { s ->
@@ -309,6 +398,9 @@ private fun Audio(c: ScreenCtx) {
     Note("Automix listens to each song first to find its tempo, beats and key. Songs with a similar tempo are matched and lined up beat for beat, and their bass is handed over halfway, so it sounds like one continuous mix. Songs that are too far apart in tempo are handed over on the beat instead. It also picks which of the next few songs fits best, and skips silent endings. The length you pick is how long blends last. Flow always mixes this way. While Automix is on, it takes over from crossfade.")
     Group("Playback") {
         SwitchRow("Autoplay", "When the queue ends, keep playing similar songs.", Settings.autoplay) { Settings.updateAutoplay(it) }
+        SwitchRow("Remember what was playing", "When you open Glasswave again, the last song is waiting where you left off. Just tap play.", Settings.rememberPlaying) {
+            Settings.updateRememberPlaying(it)
+        }
         Divider()
         SwitchRow("Skip silence", "Skips quiet gaps at the start and end of songs.", Settings.skipSilence) { Settings.updateSkipSilence(it) }
         SwitchRow("Volume leveling", "Plays every song at the same loudness, so you don't have to keep changing the volume.", Settings.volumeLeveling) { Settings.updateVolumeLeveling(it) }
@@ -319,10 +411,7 @@ private fun Audio(c: ScreenCtx) {
             Settings.updateShowModeButtons(it)
         }
     }
-    Group("Sound") {
-        NavRow("Equalizer", "Opens your phone's equalizer for Glasswave", Icons.Rounded.Equalizer, Color.Transparent, c.openEqualizer)
-    }
-    Note("Sleep timer, speed and downloads are in the player's ••• menu.")
+    Note("Equalizer, bass, pitch and reverb are under Settings > Sound & effects. Sleep timer, speed and downloads are in the player's ••• menu.")
 }
 
 @Composable
@@ -365,10 +454,10 @@ private fun AccountsPage(c: ScreenCtx) {
             ) { Settings.updateSyncDevices(it) }
         }
     }
-    // Way 1: no account, no key. Paste a link, get the playlist.
-    Group("Spotify · quick import") {
+    // Way 1: no account, no key. Paste a link from any music app, get the playlist.
+    Group("Import from a link") {
         Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
-            GText("No sign-in needed. In Spotify, open a playlist or album, tap Share → Copy link, then paste it here.", 14, Dim)
+            GText("Paste a playlist or album link from ${LinkImport.servicesText}. No sign-in needed: in the other app, tap Share → Copy link, then paste it here.", 14, Dim)
             Spacer(Modifier.height(12.dp))
             var link by remember { mutableStateOf("") }
             val clip = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -376,7 +465,7 @@ private fun AccountsPage(c: ScreenCtx) {
                 Modifier.fillMaxWidth().height(48.dp).glass(RoundedCornerShape(14.dp), base = 0.35f, light = 0.05f).padding(horizontal = 14.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                if (link.isEmpty()) GText("open.spotify.com/playlist/…", 15, Faint)
+                if (link.isEmpty()) GText("Paste a link…", 15, Faint)
                 BasicTextField(
                     value = link,
                     onValueChange = { link = it },
@@ -390,13 +479,28 @@ private fun AccountsPage(c: ScreenCtx) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 GlassButton("Paste", c.bg) { link = clip.getText()?.text ?: "" }
                 GlassButton(if (vm.importing) "Importing…" else "Import", c.bg, accent = true) {
-                    vm.importSpotifyLink(link)
+                    vm.importLink(link)
                     link = ""
                 }
             }
         }
+        // One row per service, so it's clear where links can come from.
+        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+        LinkImport.SERVICES.forEach { service ->
+            Divider()
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                GText(service, 16, Color.White, modifier = Modifier.weight(1f))
+                Pill("Import", true) {
+                    val copied = LinkImport.supportedLink(runCatching { clipboard.getText()?.text }.getOrNull())
+                    Menus.importLink(copied ?: "", service) { vm.importLink(it) }
+                }
+            }
+        }
     }
-    Note("Imported playlists appear in Library under Yours. Private playlists can't be imported this way.")
+    Note("Imported playlists appear in Library under Yours. Songs play from YouTube Music. Private playlists can't be imported this way.")
 
     // Way 2: sync everything, with a one-time key. Each step has a button that does it for you.
     Group("Spotify · sync your whole library") {
@@ -756,5 +860,297 @@ private fun YtLoginWeb(email: String, onCookie: (String) -> Unit) {
                 ) { GText("Try again", 16, Color(0xFF1F1F1F), FontWeight.SemiBold, 1) }
             }
         }
+    }
+}
+
+/* ---------------- Sound & effects ---------------- */
+
+@Composable
+private fun SoundPage(c: ScreenCtx) {
+    Group("Equalizer") {
+        SwitchRow("Equalizer", "Shape the sound with 10 bands, from deep bass to sparkle.", Sound.eqOn) { Sound.updateEqOn(it) }
+        Box(Modifier.padding(horizontal = 6.dp)) { EqBands() }
+        LazyPills(EqPreset.entries.map { it.label }, Sound.preset?.label ?: "Custom") { label ->
+            EqPreset.entries.firstOrNull { it.label == label }?.let { Sound.applyPreset(it) }
+        }
+        Spacer(Modifier.height(10.dp))
+    }
+    Note("Drag a band up or down, or pick a ready-made sound. Moving a band turns the equalizer on.")
+    Group("Tone") {
+        SliderRow("Bass boost", pct(Sound.bass), Sound.bass, 0f..1f) { Sound.updateBass(it) }
+        SliderRow("Treble boost", pct(Sound.treble), Sound.treble, 0f..1f) { Sound.updateTreble(it) }
+        SliderRow("Stereo width", pct(Sound.width), Sound.width, 0f..1f) { Sound.updateWidth(it) }
+    }
+    Group("Speed & pitch") {
+        SliderRow("Speed", "${"%.2f".format(c.ps.speed)}x", c.ps.speed, 0.5f..2f, center = 1f, snap = 0.05f) { c.ps.changeSpeed(it) }
+        SliderRow("Pitch", semis(Sound.pitch), Sound.pitch, -12f..12f, center = 0f, snap = 1f) { Sound.updatePitch(it) }
+    }
+    Note("Pitch makes songs higher or lower without changing their speed. Speed resets when Glasswave closes; pitch is kept.")
+    Group("Effects") {
+        SliderRow("Reverb", pct(Sound.reverb), Sound.reverb, 0f..1f) { Sound.updateReverb(it) }
+        if (Sound.reverb > 0f) LazyPills(Room.entries.map { it.label }, Sound.room.label) { l -> Room.entries.firstOrNull { it.label == l }?.let { Sound.updateRoom(it) } }
+        SliderRow("Distortion", pct(Sound.drive), Sound.drive, 0f..1f) { Sound.updateDrive(it) }
+    }
+    Note("Reverb makes it sound like a room, a concert hall or an arena. Distortion goes from warm to fuzzy.")
+    Group("Balance") {
+        SliderRow("Left / right", balanceWord(Sound.balance), Sound.balance, -1f..1f, center = 0f, snap = 0.05f) { Sound.updateBalance(it) }
+        SwitchRow("Mono", "Both ears hear the same thing. Handy with one earbud.", Sound.mono) { Sound.updateMono(it) }
+    }
+    Group {
+        NavRow("Reset all sound settings", "Back to how the song was recorded", Icons.Rounded.Sync, Color.Transparent) { Sound.resetAll(); c.ps.changeSpeed(1f) }
+        NavRow("Phone's own equalizer", "Opens your phone's sound settings for Glasswave, if it has them", Icons.Rounded.Equalizer, Color.Transparent, c.openEqualizer)
+    }
+    Note("Everything here works inside Glasswave, on every phone, and during Automix too.")
+}
+
+private fun pct(v: Float) = if (v <= 0f) "Off" else "${(v * 100).toInt()}%"
+private fun semis(v: Float) = when { v == 0f -> "Normal"; v > 0 -> "+${v.toInt()}"; else -> "${v.toInt()}" }
+private fun balanceWord(v: Float) = when {
+    kotlin.math.abs(v) < 0.025f -> "Centre"
+    v < 0 -> "${(-v * 100).toInt()}% left"
+    else -> "${(v * 100).toInt()}% right"
+}
+private fun glassWord(v: Float) = when { v < 0.7f -> "Clear"; v < 1.25f -> "Normal"; else -> "Frosted" }
+
+/** A title, the value on the right, and a slider underneath. [center] fills from that point (for things like balance). */
+@Composable
+private fun SliderRow(
+    title: String,
+    value: String,
+    v: Float,
+    range: ClosedFloatingPointRange<Float>,
+    center: Float? = null,
+    snap: Float? = null,
+    onChange: (Float) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            GText(title, 16, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            GText(value, 14, Dim)
+        }
+        Spacer(Modifier.height(6.dp))
+        GlassSlider(v, range, center, snap, onChange = onChange)
+    }
+}
+
+@Composable
+private fun GlassSlider(
+    v: Float,
+    range: ClosedFloatingPointRange<Float>,
+    center: Float? = null,
+    snap: Float? = null,
+    brush: Brush? = null,
+    onChange: (Float) -> Unit,
+) {
+    val span = range.endInclusive - range.start
+    fun valueAt(x: Float, w: Float): Float {
+        var out = range.start + (x / w).coerceIn(0f, 1f) * span
+        if (snap != null) out = Math.round(out / snap) * snap
+        // A little pull towards the middle point, so it's easy to get back to "normal".
+        if (center != null && kotlin.math.abs(out - center) < span * 0.03f) out = center
+        return out.coerceIn(range.start, range.endInclusive)
+    }
+    var dragging by remember { mutableStateOf(false) }
+    val accent = Accent
+    val change by androidx.compose.runtime.rememberUpdatedState(onChange)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(28.dp)
+            .pointerInput(range) { detectTapGestures { o -> change(valueAt(o.x, size.width.toFloat())) } }
+            .pointerInput(range) {
+                detectHorizontalDragGestures(
+                    onDragStart = { o -> dragging = true; change(valueAt(o.x, size.width.toFloat())) },
+                    onDragEnd = { dragging = false },
+                    onDragCancel = { dragging = false },
+                    onHorizontalDrag = { ch, _ -> ch.consume(); change(valueAt(ch.position.x, size.width.toFloat())) },
+                )
+            }
+            .drawBehind {
+                val h = (if (dragging) 8.dp else 5.dp).toPx()
+                val top = (size.height - h) / 2
+                val f = ((v - range.start) / span).coerceIn(0f, 1f)
+                val r = androidx.compose.ui.geometry.CornerRadius(h / 2)
+                if (brush != null) {
+                    drawRoundRect(brush, androidx.compose.ui.geometry.Offset(0f, top), androidx.compose.ui.geometry.Size(size.width, h), r)
+                } else {
+                    drawRoundRect(Color.White.copy(alpha = 0.14f), androidx.compose.ui.geometry.Offset(0f, top), androidx.compose.ui.geometry.Size(size.width, h), r)
+                    val from = if (center != null) ((center - range.start) / span) else 0f
+                    val a = minOf(from, f) * size.width
+                    val b = maxOf(from, f) * size.width
+                    drawRoundRect(accent, androidx.compose.ui.geometry.Offset(a, top), androidx.compose.ui.geometry.Size(b - a, h), r)
+                }
+                val kr = (if (dragging) 11.dp else 9.dp).toPx()
+                drawCircle(Color.White, kr, androidx.compose.ui.geometry.Offset((f * size.width).coerceIn(kr, size.width - kr), size.height / 2))
+            },
+    )
+}
+
+/** Round buttons in a row that scroll sideways; the picked one is white. */
+@Composable
+private fun LazyPills(options: List<String>, selected: String, onPick: (String) -> Unit) {
+    androidx.compose.foundation.lazy.LazyRow(
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(options.size) { i ->
+            val o = options[i]
+            Pill(o, o == selected) { onPick(o) }
+        }
+    }
+}
+
+@Composable
+private fun Pill(text: String, on: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier.pressable(0.95f, onClick = onClick).clip(CircleShape)
+            .background(if (on) Color.White else Color.White.copy(alpha = 0.08f))
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        contentAlignment = Alignment.Center,
+    ) { GText(text, 13, if (on) Color.Black else Color.White, FontWeight.SemiBold, 1) }
+}
+
+/** The 10 equalizer bands as upright sliders, joined by a line showing the shape of the sound. */
+@Composable
+private fun EqBands() {
+    val labels = listOf("31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k")
+    val accent = if (Sound.eqOn) Accent else Color.White.copy(alpha = 0.45f)
+    var active by remember { mutableStateOf(-1) }
+    val g = Sound.gains
+    val max = Sound.MAX_DB
+    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .pointerInput(Unit) {
+                    fun band(x: Float) = (x / size.width * 10).toInt().coerceIn(0, 9)
+                    fun db(y: Float) = (Math.round((1f - (y / size.height).coerceIn(0f, 1f)) * 2 * max - max)).toFloat()
+                    detectDragGestures(
+                        onDragStart = { o -> active = band(o.x); Sound.setBand(active, db(o.y)) },
+                        onDragEnd = { active = -1 },
+                        onDragCancel = { active = -1 },
+                        onDrag = { ch, _ -> ch.consume(); if (active >= 0) Sound.setBand(active, db(ch.position.y)) },
+                    )
+                }
+                .pointerInput(Unit) {
+                    detectTapGestures { o ->
+                        val i = (o.x / size.width * 10).toInt().coerceIn(0, 9)
+                        Sound.setBand(i, (Math.round((1f - (o.y / size.height).coerceIn(0f, 1f)) * 2 * max - max)).toFloat())
+                    }
+                }
+                .drawBehind {
+                    val col = size.width / 10
+                    fun y(db: Float) = (1f - (db + max) / (2 * max)) * size.height
+                    // Middle line (no change).
+                    drawLine(Color.White.copy(alpha = 0.18f), androidx.compose.ui.geometry.Offset(0f, y(0f)), androidx.compose.ui.geometry.Offset(size.width, y(0f)), 1.dp.toPx())
+                    for (i in 0 until 10) {
+                        val x = col * i + col / 2
+                        drawLine(Color.White.copy(alpha = 0.12f), androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), 4.dp.toPx(), androidx.compose.ui.graphics.StrokeCap.Round)
+                        drawLine(accent, androidx.compose.ui.geometry.Offset(x, y(0f)), androidx.compose.ui.geometry.Offset(x, y(g[i])), 4.dp.toPx(), androidx.compose.ui.graphics.StrokeCap.Round)
+                    }
+                    // The shape of the sound, as a smooth line through the knobs.
+                    val path = androidx.compose.ui.graphics.Path()
+                    for (i in 0 until 10) {
+                        val x = col * i + col / 2
+                        if (i == 0) path.moveTo(x, y(g[i])) else {
+                            val px = col * (i - 1) + col / 2
+                            path.cubicTo((px + x) / 2, y(g[i - 1]), (px + x) / 2, y(g[i]), x, y(g[i]))
+                        }
+                    }
+                    drawPath(path, accent.copy(alpha = 0.55f), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+                    for (i in 0 until 10) {
+                        val x = col * i + col / 2
+                        drawCircle(Color.White, (if (i == active) 10.dp else 7.dp).toPx(), androidx.compose.ui.geometry.Offset(x, y(g[i])))
+                    }
+                },
+        )
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.fillMaxWidth()) {
+            labels.forEachIndexed { i, l ->
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    GText(if (i == active) "${if (g[i] > 0) "+" else ""}${g[i].toInt()}" else l, 11, if (i == active) Color.White else Faint, FontWeight.Medium, 1)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Two ways: the colours follow each song's cover (buttons, the side menu, the playing song...), or
+ * they stay one colour you pick, from the ready ones or the rainbow slider.
+ */
+@Composable
+private fun AccentPicker() {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+        if (Settings.accentColor == null) return@Column
+        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(AccentSwatches.size) { i ->
+                val c = AccentSwatches[i]
+                val on = Settings.accentColor == c
+                Box(
+                    Modifier.size(38.dp).pressable(0.9f) { Settings.updateAccentColor(c) }.clip(CircleShape).background(Color(c))
+                        .border(if (on) 3.dp else 0.dp, Color.White, CircleShape),
+                )
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        GText("Any colour", 13, Dim)
+        Spacer(Modifier.height(4.dp))
+        val hue = Settings.accentColor?.let { c -> FloatArray(3).also { android.graphics.Color.colorToHSV(c, it) }[0] } ?: 0f
+        GlassSlider(
+            hue, 0f..360f,
+            brush = Brush.horizontalGradient((0..6).map { Color(accentFromHue(it * 60f)) }),
+        ) { Settings.updateAccentColor(accentFromHue(it)) }
+    }
+}
+
+/** The standard font, or one you imported (shown written in itself). */
+@Composable
+private fun FontChoices() {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val pick = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) scope.launch {
+            val got = withContext(Dispatchers.IO) { FontFile.save(ctx, uri) }
+            if (got != null) Settings.updateFont(got.first, got.second) else Menus.say("That isn't a font file Glasswave can use")
+        }
+    }
+    fun import() = pick.launch(arrayOf("font/*", "application/x-font-ttf", "application/x-font-otf", "application/font-sfnt", "application/vnd.ms-opentype", "application/octet-stream"))
+    val own = Settings.fontFile
+    Row(
+        Modifier.fillMaxWidth().pressable(0.98f) { Settings.updateFont(null, Settings.fontName) }.padding(horizontal = 18.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            androidx.compose.foundation.text.BasicText("Default", style = TextStyle(color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium))
+            GText("Glasswave's own clean font.", 13, Dim)
+        }
+        AnimatedVisibility(own == null, enter = scaleIn(bouncy()), exit = scaleOut(smooth(120))) { Ico(Icons.Rounded.Check, Accent, 24.dp) }
+    }
+    Divider()
+    val saved = FontFile.saved(ctx)
+    Row(
+        Modifier.fillMaxWidth().pressable(0.98f) {
+            if (saved != null && own == null) Settings.updateFont(saved.path, Settings.fontName) else import()
+        }.padding(horizontal = 18.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            val family = remember(saved?.path) { saved?.let { runCatching { androidx.compose.ui.text.font.FontFamily(android.graphics.Typeface.createFromFile(it)) }.getOrNull() } }
+            androidx.compose.foundation.text.BasicText(
+                if (saved != null) Settings.fontName.ifBlank { "Your font" } else "Import a font",
+                style = TextStyle(color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, fontFamily = family),
+                maxLines = 1,
+            )
+            GText(if (saved != null) "Your own font. Tap Change to pick another." else "Use any font file from your phone.", 13, Dim)
+        }
+        if (saved != null) {
+            Pill("Change", false) { import() }
+            Spacer(Modifier.width(8.dp))
+        }
+        AnimatedVisibility(own != null, enter = scaleIn(bouncy()), exit = scaleOut(smooth(120))) { Ico(Icons.Rounded.Check, Accent, 24.dp) }
     }
 }

@@ -2,4 +2,6 @@
 <!-- Lets Android's installer read a downloaded update. -->
 <paths>
     <cache-path name="updates" path="updates/" />
+    <!-- A song's share card picture, sent to the app you pick. -->
+    <cache-path name="share" path="share/" />
 </paths>

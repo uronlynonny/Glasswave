@@ -35,8 +35,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -398,8 +396,9 @@ private fun WideStyle(ui: PlayerUi, panel: Boolean) {
                         .clip(RoundedCornerShape(corner)),
                 ) { CoverArt(ui.ps, Modifier.fillMaxSize()) }
             }
-            Spacer(Modifier.width(36.dp))
-            Box(Modifier.weight(0.55f), contentAlignment = Alignment.CenterStart) {
+            Spacer(Modifier.width(56.dp))
+            // The controls sit in the middle of their half, not pressed up against the cover.
+            Box(Modifier.weight(0.55f), contentAlignment = Alignment.Center) {
                 if (panel) {
                     Column(
                         Modifier
@@ -426,7 +425,7 @@ private fun MinimalStyle(ui: PlayerUi) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 GText(ui.ps.title, 28, Color.White, FontWeight.Bold, 2)
-                GText(ui.ps.artist, 18, Color.White.copy(alpha = 0.6f), maxLines = 1)
+                ArtistName(ui.ps, 18, 0.6f)
             }
             Spacer(Modifier.width(10.dp))
             LikeButton(ui.ps, CoverTint.accent)
@@ -436,6 +435,16 @@ private fun MinimalStyle(ui: PlayerUi) {
         Spacer(Modifier.weight(1f))
         Details(ui, showTitle = false)
     }
+}
+
+/** The artist under the song's title. Tap it to open the artist's page. */
+@Composable
+private fun ArtistName(ps: PlayerState, size: Int, alpha: Float) {
+    val canTap = !PcMusic.isPcSong(ps.currentTrack()?.url ?: "")
+    GText(
+        ps.artist, size, Color.White.copy(alpha = alpha), maxLines = 1,
+        modifier = Modifier.pressable(0.97f, enabled = canTap) { ps.currentTrack()?.let { Menus.artistOf = it } },
+    )
 }
 
 /** Title, progress bar, controls and the bottom row. Shared by every style. */
@@ -449,7 +458,7 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     GText(ps.title, if (compact) 20 else 22, Color.White, FontWeight.Bold, 1)
-                    GText(ps.artist, if (compact) 16 else 18, Color.White.copy(alpha = 0.62f), maxLines = 1)
+                    ArtistName(ps, if (compact) 16 else 18, 0.62f)
                 }
                 Spacer(Modifier.width(10.dp))
                 LikeButton(ps, CoverTint.accent)
@@ -457,6 +466,11 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
                 LyricsButton(ps.playing, ui.colors.a, ui.onLyrics)
             }
             Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
+        }
+        // Bars that dance to the music (Settings > Look).
+        if (Settings.visualizer != VisualizerStyle.OFF) {
+            Visualizer(ps.playing, CoverTint.accent, Modifier.fillMaxWidth().height(if (compact) 24.dp else 34.dp))
+            Spacer(Modifier.height(6.dp))
         }
         AppleSeekBar(ps)
         if (ps.error != null) {
@@ -736,6 +750,11 @@ private fun MoreSheet(ps: PlayerState, fp: Backdrop, colors: CoverColors, openEq
             ChoiceRow(listOf("0.75x", "1x", "1.25x", "1.5x", "2x"), "${if (ps.speed % 1f == 0f) ps.speed.toInt().toString() else ps.speed.toString()}x") {
                 ps.changeSpeed(it.removeSuffix("x").toFloat())
             }
+            // Higher or lower without changing the speed. More in Settings > Sound & effects.
+            SheetLabel("Pitch")
+            val pitches = listOf("-3", "-2", "-1", "Normal", "+1", "+2", "+3")
+            val now = Sound.pitch.toInt().let { if (it == 0) "Normal" else if (it > 0) "+$it" else "$it" }
+            ChoiceRow(pitches, now) { Sound.updatePitch(if (it == "Normal") 0f else it.toFloat()) }
         }
     }
 }

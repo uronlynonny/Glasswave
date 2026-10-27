@@ -96,6 +96,8 @@ object PlayerView {
     var lyrics by mutableStateOf(false)
     /** Set by the queue button: the full player opens on "Up next". */
     var queue by mutableStateOf(false)
+    /** Opens the full player from outside the app's screens (checks). */
+    var openFull by mutableStateOf(false)
 }
 
 /* ---------------- Sidebar: an icon rail that opens on hover ---------------- */
@@ -122,7 +124,7 @@ fun Sidebar(vm: MainViewModel, page: Backdrop, modifier: Modifier = Modifier) {
     Column(
         modifier
             .fillMaxHeight()
-            .padding(start = 12.dp, top = 12.dp, bottom = 12.dp)
+            .padding(start = 12.dp, top = 12.dp + TitleBar.inset, bottom = 12.dp)
             .width(w)
             .pointerInput(Unit) {
                 awaitPointerEventScope {

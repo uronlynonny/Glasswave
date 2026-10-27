@@ -12,6 +12,7 @@ object MixAudio : MixDecoder {
     fun source(url: String): AudioSource {
         Downloads.fileFor(url)?.let { return AudioSource.LocalFile(it) }
         SongCache.fileFor(url)?.let { return AudioSource.LocalFile(it) }
+        PcMusic.fileOf(url)?.let { return AudioSource.LocalFile(it) }
         val uri = android.net.Uri.parse(url)
         val page = if (uri.scheme == "gwmatch") {
             YtRepo.match(uri.getQueryParameter("q") ?: throw java.io.IOException("Empty song"), uri.getQueryParameter("d")?.toLongOrNull() ?: 0)

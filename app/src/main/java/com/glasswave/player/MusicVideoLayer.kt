@@ -58,6 +58,8 @@ private object VideoLookup {
  */
 private fun videoHeight(ctx: Context): Int? {
     if (Settings.coverMotion == CoverMotion.OFF) return null
+    // Data saver: the still cover only.
+    if (Settings.savingData) return null
     val cm = ctx.getSystemService(ConnectivityManager::class.java) ?: return null
     val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return null
     val unmetered = caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED)

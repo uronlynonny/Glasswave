@@ -113,7 +113,7 @@ fun DeskStatsPage(c: ScreenCtx) {
                     Ranking("Top artists", Modifier.weight(1f)) {
                         val max = d.topArtists.firstOrNull()?.plays ?: 1
                         d.topArtists.take(8).forEachIndexed { i, a ->
-                            RankRow(i, a.thumb, true, a.name, "${fmt(a.plays.toLong())} plays", a.plays.toFloat() / max, accent) {
+                            RankRow(i, artistPhoto(a.name, a.thumb), true, a.name, "${fmt(a.plays.toLong())} plays", a.plays.toFloat() / max, accent) {
                                 c.vm.selectTab(Tab.SEARCH)
                                 c.vm.pickRecent(a.name)
                             }
@@ -123,7 +123,7 @@ fun DeskStatsPage(c: ScreenCtx) {
                         val max = d.topSongs.firstOrNull()?.plays ?: 1
                         val songs = d.topSongs.take(5).map { it.track }
                         d.topSongs.take(5).forEachIndexed { i, r ->
-                            RankRow(i, r.track.thumb, false, r.track.title, r.track.artist, r.plays.toFloat() / max, accent, "${r.plays}×") {
+                            RankRow(i, r.track.thumb, false, r.track.title, r.track.artist, r.plays.toFloat() / max, accent, "${r.plays} plays") {
                                 c.ps.playList(songs, i)
                             }
                         }
@@ -277,7 +277,8 @@ private fun RankRow(i: Int, thumb: String?, circle: Boolean, title: String, sub:
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).pressable(0.98f, onClick = onClick).padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        GText("${i + 1}", if (i < 3) 22 else 16, if (i < 3) accent else Faint, FontWeight.ExtraBold, 1, Modifier.width(34.dp))
+        // A light rank number, so the list reads cleanly; the top three take the highlight colour.
+        GText("${i + 1}", 15, if (i < 3) accent else Faint, FontWeight.Medium, 1, Modifier.width(28.dp))
         Cover(thumb, Modifier.size(46.dp), 8.dp, circle = circle)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {

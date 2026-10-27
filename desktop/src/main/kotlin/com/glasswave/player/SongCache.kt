@@ -3,17 +3,13 @@ package com.glasswave.player
 
 import android.content.Context
 import java.io.File
-import java.io.RandomAccessFile
-import java.util.TreeMap
 import java.util.concurrent.ConcurrentHashMap
-import okhttp3.Request
 
 /**
  * The computer's song cache: songs you listen to are kept on disk, so they play again instantly
- * and still play with no internet. Nothing extra is downloaded to fill it: the sound the player
- * already fetched is saved as it plays, and only the small bits it skipped (like the last seconds
- * Automix mixed out of) are fetched afterwards. Capped by the cache size in Settings, dropping the
- * songs played longest ago first.
+ * and still play with no internet. Nothing extra is downloaded to fill it: the player already
+ * fetches each song whole ahead of the music ([AheadStream]), and that file is kept instead of
+ * thrown away. Capped by the cache size in Settings, dropping the songs played longest ago first.
  */
 object SongCache {
     private lateinit var dir: File
@@ -66,93 +62,20 @@ object SongCache {
         }
     }
 
-    /** Starts saving a song as it streams from [stream] ([length] bytes). Null when it's already kept, or the cache is off. */
-    fun recorder(t: Track, stream: String, length: Long): Recorder? {
-        if (!ready || length <= 0 || t.url.isEmpty() || t.title.isBlank()) return null
-        if (entries.containsKey(t.url) || Downloads.fileFor(t.url) != null) return null
-        if (Settings.cacheBytes(app) < length * 4) return null
-        return runCatching { Recorder(t, stream, length) }.getOrNull()
-    }
-
-    class Recorder internal constructor(private val track: Track, private val stream: String, private val length: Long) {
-        private val part = File(dir, "c" + Integer.toHexString(track.url.hashCode()) + "_" + System.nanoTime() + ".part")
-        private val file = RandomAccessFile(part, "rw").apply { setLength(length) }
-        /** Byte ranges saved so far: start -> end (exclusive), never overlapping. */
-        private val have = TreeMap<Long, Long>()
-        private var closed = false
-
-        @Synchronized
-        fun write(pos: Long, b: ByteArray, off: Int, n: Int) {
-            if (closed || n <= 0 || pos < 0 || pos + n > length) return
-            runCatching {
-                file.seek(pos)
-                file.write(b, off, n)
-                add(pos, pos + n)
-            }
+    /** Keeps a song that has fully arrived ([file] is moved into the cache). False if it isn't wanted. */
+    fun keep(t: Track, file: File): Boolean {
+        if (!ready || t.url.isEmpty() || t.title.isBlank()) return false
+        if (entries.containsKey(t.url) || Downloads.fileFor(t.url) != null) return false
+        val size = file.length()
+        if (size <= 0 || Settings.cacheBytes(app) < size * 4) return false
+        synchronized(lock) {
+            val out = File(dir, "c" + Integer.toHexString(t.url.hashCode()) + "_" + System.currentTimeMillis() + ".audio")
+            if (!file.renameTo(out)) return false
+            entries[t.url] = Entry(t, out, System.currentTimeMillis())
+            trim()
+            save()
         }
-
-        private fun add(a0: Long, z0: Long) {
-            var a = a0
-            var z = z0
-            have.floorEntry(a)?.let { if (it.value >= a) { a = it.key; z = maxOf(z, it.value) } }
-            while (true) {
-                val next = have.ceilingEntry(a) ?: break
-                if (next.key > z) break
-                z = maxOf(z, next.value)
-                have.remove(next.key)
-            }
-            have[a] = z
-        }
-
-        /** The song stopped (or ended): keep it if most of it was heard, fetching whatever bits are missing. */
-        @Synchronized
-        fun finish() {
-            if (closed) return
-            closed = true
-            val saved = have.entries.sumOf { it.value - it.key }
-            if (saved < length * 6 / 10) { runCatching { file.close() }; part.delete(); return }
-            val gaps = ArrayList<Pair<Long, Long>>()
-            var at = 0L
-            for ((a, z) in have) { if (a > at) gaps += at to a; at = z }
-            if (at < length) gaps += at to length
-            Thread({
-                try {
-                    for ((a, z) in gaps) fetch(a, z)
-                    file.close()
-                    commit()
-                } catch (e: Exception) {
-                    android.util.Log.w("Glasswave", "Couldn't keep ${track.title} in the cache", e)
-                    runCatching { file.close() }
-                    part.delete()
-                }
-            }, "song-cache").apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
-        }
-
-        private fun fetch(a: Long, z: Long) {
-            var p = a
-            while (p < z) {
-                val end = minOf(z, p + (1L shl 20)) - 1
-                val req = Request.Builder().url(stream).header("User-Agent", YtDownloader.USER_AGENT).header("Range", "bytes=$p-$end").build()
-                YtRepo.http.newCall(req).execute().use { r ->
-                    if (r.code != 206) throw java.io.IOException("The server answered ${r.code}")
-                    val bytes = r.body?.bytes() ?: throw java.io.IOException("Empty piece")
-                    file.seek(p)
-                    file.write(bytes, 0, minOf(bytes.size.toLong(), end - p + 1).toInt())
-                    p += bytes.size
-                }
-            }
-        }
-
-        private fun commit() {
-            synchronized(lock) {
-                if (entries.containsKey(track.url)) { part.delete(); return }
-                val out = File(dir, part.name.removeSuffix(".part") + ".audio")
-                if (!part.renameTo(out)) { part.delete(); return }
-                entries[track.url] = Entry(track.copy(seconds = track.seconds), out, System.currentTimeMillis())
-                trim()
-                save()
-            }
-        }
+        return true
     }
 
     /** Drops the songs played longest ago until the cache fits its size. */

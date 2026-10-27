@@ -4,16 +4,16 @@ import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 plugins {
-    kotlin("jvm") version "2.0.21"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.0.21"
-    id("org.jetbrains.compose") version "1.7.3"
+    kotlin("jvm") version "2.2.21"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.2.21"
+    id("org.jetbrains.compose") version "1.10.3"
 }
 
 // Same version and YouTube library as the phone app, read from its build file so the two stay in step.
 val appBuild = file("../app/build.gradle.kts").readText()
 // Glasswave for Windows has its own version number, separate from the phone app.
 // Raise it for every Windows release: installed copies update themselves to a higher number.
-val appVersion = "1.0.11"
+val appVersion = "1.2.10"
 val newPipe = Regex("NewPipeExtractor:(v?[0-9][0-9.]*)").find(appBuild)?.groupValues?.get(1)
     ?: error("Couldn't find the NewPipeExtractor version in app/build.gradle.kts")
 
@@ -22,11 +22,11 @@ dependencies {
     implementation(compose.foundation)
     implementation(compose.animation)
     implementation(compose.materialIconsExtended)
-    implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
+    implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.9.6")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
 
-    implementation("io.coil-kt.coil3:coil-compose:3.0.4")
-    implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
+    implementation("io.coil-kt.coil3:coil-compose:3.3.0")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.3.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.json:json:20240303")
 
@@ -77,6 +77,14 @@ tasks.register<JavaExec>("mixCheck") {
     args(listOfNotNull(out, project.findProperty("songs") as String?))
 }
 
+// For checks only, silent: runs an audio file through speed, pitch and the sound effects.
+// ./gradlew -p desktop fxCheck -Pfile=path/to/song.wav
+tasks.register<JavaExec>("fxCheck") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.FxCheckKt")
+    (project.findProperty("file") as String?)?.let { args(it) }
+}
+
 // For checks only: transcribes a WAV file with voice search's recogniser.
 // ./gradlew -p desktop voiceCheck -Pwav=path/to/file.wav
 tasks.register<JavaExec>("voiceCheck") {
@@ -103,9 +111,9 @@ compose.desktop {
         // "Serial" collector, which needs almost no memory of its own (G1 needed ~50 MB just for
         // bookkeeping), with a small heap that grows only when needed and shrinks back after.
         jvmArgs += listOf(
-            "-Xms24m", "-Xmx512m",
+            "-Xms24m", "-Xmx256m",
             "-XX:+UseSerialGC", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=30",
-            "-XX:ReservedCodeCacheSize=64m", "-XX:CICompilerCount=2", "-Xss512k",
+            "-XX:TieredStopAtLevel=1", "-XX:ReservedCodeCacheSize=32m", "-XX:CICompilerCount=1", "-Xss512k",
             "-Dsun.java2d.uiScale.enabled=true",
         )
         nativeDistributions {
@@ -223,6 +231,18 @@ tasks.register<JavaExec>("screenCheck") {
     }
 }
 
+// Opens the real app (with check data) and runs a script of steps, writing down memory use as it
+// goes (see MemScript.kt):  ./gradlew -p desktop memCheck -Pgwscript=path/to/script.txt
+tasks.register<JavaExec>("memCheck") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.MainKt")
+    jvmArgs(compose.desktop.application.jvmArgs)
+    (project.findProperty("gwscript") as String?)?.let { systemProperty("gw.memScript", it) }
+    systemProperty("gw.noCheckIn", "1")
+    (project.findProperty("renderApi") as String?)?.let { systemProperty("skiko.renderApi", it) }
+    (project.findProperty("extraJvm") as String?)?.let { jvmArgs(it.split(" ")) }
+}
+
 // Remakes the website's link preview picture, docs/og.png (see OgImage.kt).
 // Downloads the live update as an older copy would, with the connection dropping partway
 // (-Pdir: a sandbox folder for its files).
@@ -265,4 +285,89 @@ tasks.register<JavaExec>("makeIcon") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("com.glasswave.player.IconMakerKt")
     args(file("icons/glasswave.ico").absolutePath)
+}
+
+/* ---------------- Microsoft Store package (MSIX) ---------------- */
+
+// Glasswave in the Microsoft Store: the Store signs this package itself, so people installing from
+// there never see the "Windows protected your PC" warning, and the Store keeps it updated.
+// These three come from Partner Center (Apps and games > Glasswave > Product identity). Until
+// they're filled in, the package builds with stand-ins and can't be uploaded.
+val storeIdentityName = "TODO.Glasswave"
+val storePublisher = "CN=TODO"
+val storePublisherDisplayName = "nonny dev"
+
+// Microsoft's MakePri (it indexes the package's pictures), from their official NuGet package.
+// (Their MakeAppx won't start outside a full Windows SDK install, so msix/PackMsix.cs packs the
+// package with the packaging engine built into Windows instead.)
+val sdkBuildToolsVersion = "10.0.28000.2705"
+val sdkBuildToolsSha256 = "8bfdfb6ca2633f531cf80b5fa22512ba61a394d7988f0970db83baadc67929ed"
+
+val storeTools by tasks.registering {
+    val out = layout.buildDirectory.dir("storetools")
+    inputs.property("version", sdkBuildToolsVersion)
+    outputs.dir(out)
+    doLast {
+        val o = out.get().asFile.apply { mkdirs() }
+        val pkg = File(o, "buildtools-$sdkBuildToolsVersion.nupkg")
+        fun sha(f: File) = MessageDigest.getInstance("SHA-256").digest(f.readBytes()).joinToString("") { "%02x".format(it) }
+        if (!pkg.exists() || sha(pkg) != sdkBuildToolsSha256) {
+            val url = "https://api.nuget.org/v3-flatcontainer/microsoft.windows.sdk.buildtools/$sdkBuildToolsVersion/microsoft.windows.sdk.buildtools.$sdkBuildToolsVersion.nupkg"
+            URI(url).toURL().openStream().use { input -> pkg.outputStream().use { input.copyTo(it) } }
+            check(sha(pkg) == sdkBuildToolsSha256) { "The Windows SDK build tools download doesn't match its expected hash" }
+        }
+        ZipFile(pkg).use { z ->
+            z.entries().asSequence().filter { !it.isDirectory && it.name.contains("/x64/") }.forEach { e ->
+                z.getInputStream(e).use { i -> File(o, e.name.substringAfterLast('/')).outputStream().use { i.copyTo(it) } }
+            }
+        }
+    }
+}
+
+// Remakes the Store package's pictures (msix/Assets) from the icon design (see IconMaker.kt).
+tasks.register<JavaExec>("makeStoreAssets") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.IconMakerKt")
+    args("--store", file("msix/Assets").absolutePath)
+}
+
+// The Store package: build/msix/Glasswave-<version>.msix, ready to upload in Partner Center.
+tasks.register("packageMsix") {
+    dependsOn(storeTools, "createDistributable")
+    doLast {
+        val image = layout.buildDirectory.dir("compose/binaries/main/app/Glasswave").get().asFile
+        val work = layout.buildDirectory.dir("msix").get().asFile.apply { deleteRecursively(); mkdirs() }
+        val root = File(work, "layout")
+        image.copyRecursively(root)
+        file("msix/Assets").copyRecursively(File(root, "Assets"))
+        // The Store wants four numbers, the last one 0.
+        val version = (appVersion.split('.') + listOf("0", "0", "0")).take(3).joinToString(".") + ".0"
+        File(root, "AppxManifest.xml").writeText(
+            file("msix/AppxManifest.xml").readText()
+                .replace("@IDENTITY_NAME@", storeIdentityName)
+                .replace("@PUBLISHER@", storePublisher)
+                .replace("@PUBLISHER_DISPLAY_NAME@", storePublisherDisplayName)
+                .replace("@VERSION@", version),
+        )
+        val tools = layout.buildDirectory.dir("storetools").get().asFile
+        fun run(vararg cmd: String) {
+            val p = ProcessBuilder(*cmd).directory(work).redirectErrorStream(true).start()
+            val log = p.inputStream.bufferedReader().readText()
+            check(p.waitFor() == 0) { "${File(cmd[0]).name} failed:\n$log" }
+        }
+        // resources.pri lets Windows pick the right size of each picture (all sizes in one file:
+        // no separate resource packages).
+        val pri = File(work, "priconfig.xml")
+        run(File(tools, "makepri.exe").path, "createconfig", "/cf", pri.path, "/dq", "en-US", "/pv", "10.0.0", "/o")
+        pri.writeText(pri.readText().replace(Regex("<packaging>[\\s\\S]*?</packaging>"), ""))
+        run(File(tools, "makepri.exe").path, "new", "/pr", root.path, "/cf", pri.path, "/mn", File(root, "AppxManifest.xml").path, "/of", File(root, "resources.pri").path, "/o")
+        // Pack it with Windows' own packaging engine (see msix/PackMsix.cs).
+        val packer = File(tools, "PackMsix.exe")
+        val csc = File(System.getenv("WINDIR") ?: "C:\\Windows", "Microsoft.NET/Framework64/v4.0.30319/csc.exe")
+        run(csc.path, "-nologo", "-platform:x64", "-optimize", "-out:" + packer.path, file("msix/PackMsix.cs").path)
+        val msix = File(work, "Glasswave-$appVersion.msix")
+        run(packer.path, root.path, msix.path)
+        println("Store package: ${msix.absolutePath} (${msix.length() / (1 shl 20)} MB)")
+        if (storePublisher == "CN=TODO") println("Note: Store identity not filled in yet (see storeIdentityName in build.gradle.kts), so this one can't be uploaded.")
+    }
 }

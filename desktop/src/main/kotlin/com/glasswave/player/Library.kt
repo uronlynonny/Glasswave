@@ -263,6 +263,30 @@ object Library {
         }
     }
 
+    /**
+     * Songs that older versions gave their playlist's cover instead of their own picture (songs
+     * imported from a Spotify playlist link), by playlist. An album's songs share its cover on
+     * purpose, so only playlists with more than one artist count.
+     */
+    @Synchronized
+    fun songsWithPlaylistCover(): Map<String, List<Track>> {
+        val out = LinkedHashMap<String, List<Track>>()
+        for (p in ownPlaylists()) {
+            val cover = p.thumb ?: continue
+            val same = readTracks(p.id).filter { it.thumb == cover && it.url.startsWith("gwmatch") }
+            if (same.size < 2 || same.map { it.artist.substringBefore(',').trim().lowercase() }.distinct().size < 2) continue
+            out[p.id] = same
+        }
+        return out
+    }
+
+    /** Gives songs in a playlist their own pictures, by address. The playlist's cover stays as it is. */
+    @Synchronized
+    fun setThumbs(id: String, pics: Map<String, String>) {
+        writeTracks(id, readTracks(id).map { t -> pics[t.url]?.let { t.copy(thumb = it) } ?: t })
+        version++
+    }
+
     /* ---------------- Pins ---------------- */
 
     fun isPinned(id: String) = id in pins

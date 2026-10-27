@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -163,7 +165,7 @@ fun HomeScreen(c: ScreenCtx) {
 
             when (val h = vm.home) {
                 is Load.Loading -> item(key = "loading") { HomeSkeleton() }
-                is Load.Failed -> item(key = "error") { ErrorBox(h.message, c.bg) { vm.loadHome() } }
+                is Load.Failed -> item(key = "error") { ErrorBox(h.message, c.bg, { c.ps.playList(Downloads.tracks.toList().shuffled(), 0) }) { vm.loadHome() } }
                 is Load.Done -> {
                     // Songs you marked "Not interested" stay off Home.
                     val sections = NotInterested.hide(h.value)
@@ -171,6 +173,10 @@ fun HomeScreen(c: ScreenCtx) {
                     // The first section of albums or playlists becomes a big swipeable showcase.
                     val heroIndex = sections.indexOfFirst { s -> s.items.size >= 3 && s.items.count { it !is SongItem } * 2 > s.items.size }
                     val recent = History.tracks.take(15)
+                    // Flow first: the nonstop mix, right under the mood buttons.
+                    if (vm.homeChip == null) item(key = "flow") {
+                        FlowStrip(c, sections.flatMap { it.items }.filterIsInstance<SongItem>().map { it.track })
+                    }
                     sections.forEachIndexed { i, s ->
                         item(key = "s$i-${s.title}") {
                             Column(Modifier) {
@@ -178,8 +184,8 @@ fun HomeScreen(c: ScreenCtx) {
                                 if (i == heroIndex) Hero(c, s) else SectionBody(c, s)
                             }
                         }
-                        // After the first shelf: Made for you (Flow and your mixes).
-                        if (i == 0 && vm.homeChip == null) {
+                        // After the first shelf: Made for you (your mixes), when there are any.
+                        if (i == 0 && vm.homeChip == null && (Library.liked.size >= 3 || Downloads.tracks.size >= 3)) {
                             item(key = "madeForYou") {
                                 val seeds = sections.flatMap { it.items }.filterIsInstance<SongItem>().map { it.track }
                                 MadeForYou(c, seeds)
@@ -299,10 +305,7 @@ private fun RecentShelf(c: ScreenCtx, recent: List<Track>) {
     }
 }
 
-/**
- * Made for you: Flow (the nonstop mix that plays like a DJ set) leads, followed by quick mixes made
- * from your likes, downloads and history. Square tiles, like the album shelves around them.
- */
+/** Made for you: quick mixes from your likes and downloads. Square tiles, like the album shelves around them. */
 @Composable
 private fun MadeForYou(c: ScreenCtx, seeds: List<Track>) {
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -312,9 +315,8 @@ private fun MadeForYou(c: ScreenCtx, seeds: List<Track>) {
     Column {
         SectionTitle("Made for you")
         LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            item(key = "flow") { FlowTile(c, seeds) }
             if (liked >= 3) item(key = "liked") {
-                MixTile("Liked mix", " songs, shuffled", androidx.compose.material.icons.Icons.Rounded.Favorite, Lime) {
+                MixTile("Liked mix", "$liked songs, shuffled", androidx.compose.material.icons.Icons.Rounded.Favorite, Lime) {
                     scope.launch { c.ps.playList(Library.tracks(Library.LIKED_ID), 0, shuffle = true) }
                 }
             }
@@ -329,54 +331,93 @@ private fun MadeForYou(c: ScreenCtx, seeds: List<Track>) {
 
 private val tileSize = 150.dp
 
-/** Flow's tile: a slowly turning glow in the cover's colours. Shows the part playing while it's on. */
+/** The short line under Flow when it isn't playing: one picked at random each time Home opens. */
+private val flowLines = listOf(
+    "Press play and let it run",
+    "Your favourites and a few new ones",
+    "Music that keeps going",
+    "Made from what you play",
+    "One tap, hours of music",
+    "Old favourites, new finds",
+    "No skipping needed",
+)
+
+/** Flow at the top of Home: a wide bar with the sound-levels icon. Tap to start; tap again to switch it up. */
 @Composable
-private fun FlowTile(c: ScreenCtx, seeds: List<Track>) {
+private fun FlowStrip(c: ScreenCtx, seeds: List<Track>) {
     val accent = CoverTint.accent
-    val spin by rememberDrift(12_000)
     val active = Flow.active
-    Column(Modifier.width(tileSize).pressable { if (active) Flow.switchUp(c.ps) else Flow.start(c.ps, seeds) }) {
-        Box(
-            Modifier
-                .size(tileSize)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF0C0D0A))
-                .drawBehind {
-                    val s = size.minDimension
-                    val ctr = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
-                    for (k in 0..2) {
-                        val a = spin + k * 2.09f
-                        val r = s * (0.62f - k * 0.08f)
-                        val o = androidx.compose.ui.geometry.Offset(ctr.x + kotlin.math.cos(a) * s * 0.17f, ctr.y + kotlin.math.sin(a) * s * 0.17f)
-                        val col = if (k == 1) Color.White else accent
-                        drawCircle(Brush.radialGradient(listOf(col.copy(alpha = if (k == 1) 0.22f else 0.55f), Color.Transparent), o, r), r, o)
-                    }
-                }
-                .border(0.8.dp, Brush.linearGradient(listOf(accent.copy(alpha = 0.55f), Color.White.copy(alpha = 0.05f))), RoundedCornerShape(12.dp)),
-        ) {
-            GText("Flow", 26, Color.White, FontWeight.ExtraBold, 1, Modifier.align(Alignment.BottomStart).padding(12.dp))
-            Box(
-                Modifier.align(Alignment.TopEnd).padding(10.dp).size(34.dp).clip(androidx.compose.foundation.shape.CircleShape).background(accent),
-                contentAlignment = Alignment.Center,
-            ) {
-                Ico(
-                    if (active) androidx.compose.material.icons.Icons.Rounded.AutoAwesome else Icons.Rounded.PlayArrow,
-                    Color.Black, if (active) 17.dp else 22.dp,
-                )
-            }
+    val line = androidx.compose.runtime.remember { flowLines.random() }
+    val shape = RoundedCornerShape(18.dp)
+    Row(
+        Modifier.padding(horizontal = 20.dp).padding(top = 14.dp, bottom = 2.dp)
+            .widthIn(max = 560.dp)
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.2f), Color.White.copy(alpha = 0.06f), Color.White.copy(alpha = 0.04f))))
+            .border(1.dp, accent.copy(alpha = 0.35f), shape)
+            .pressable(0.98f) { if (active) Flow.switchUp(c.ps) else Flow.start(c.ps, seeds) }
+            .padding(start = 12.dp, end = 14.dp, top = 11.dp, bottom = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        FlowLevels(accent, active && c.ps.playing, Modifier.size(52.dp))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            GText("Flow", 19, Color.White, FontWeight.ExtraBold, 1)
+            val seg = Flow.now
+            GText(
+                when {
+                    Flow.building -> "Mixing your set…"
+                    active && seg != null -> "Now: " + seg.title
+                    active -> "Tap to switch it up"
+                    else -> line
+                },
+                13, Dim, maxLines = 1,
+            )
         }
-        Spacer(Modifier.height(8.dp))
-        val seg = Flow.now
-        GText(
-            when {
-                Flow.building -> "Mixing your set…"
-                active && seg != null -> "Now: " + seg.title
-                else -> "Your nonstop mix"
-            },
-            14, Color.White, FontWeight.Medium, 1,
-        )
-        GText(if (active) "Tap to switch it up" else "Like a DJ, no talking", 12, Dim, maxLines = 1)
+        Spacer(Modifier.width(10.dp))
+        Box(Modifier.size(40.dp).clip(androidx.compose.foundation.shape.CircleShape).background(accent), contentAlignment = Alignment.Center) {
+            Ico(
+                if (active) androidx.compose.material.icons.Icons.Rounded.AutoAwesome else Icons.Rounded.PlayArrow,
+                Color.Black, if (active) 18.dp else 22.dp,
+            )
+        }
     }
+}
+
+/** Flow's icon: five sound-level bars in a circle of the highlight colour. They bounce while Flow plays. */
+@Composable
+private fun FlowLevels(accent: Color, moving: Boolean, modifier: Modifier) {
+    // Only animates while moving, so a still icon costs nothing.
+    val phase = if (moving) levelsPhase() else 0f
+    val rest = floatArrayOf(0.29f, 0.71f, 1f, 0.59f, 0.24f)
+    androidx.compose.foundation.Canvas(modifier) {
+        val s = size.minDimension
+        drawCircle(accent)
+        val w = s * 0.07f
+        val gap = s * 0.117f
+        for (i in 0..4) {
+            val k = if (moving) 0.55f + 0.45f * ((kotlin.math.sin(phase * (1f + (i % 3) * 0.35f) + i * 1.3f) + 1f) / 2f) else 1f
+            val h = maxOf(w, s * 0.53f * rest[i] * k)
+            drawRoundRect(
+                Color.Black.copy(alpha = 0.88f),
+                topLeft = androidx.compose.ui.geometry.Offset(center.x + (i - 2) * gap - w / 2, center.y - h / 2),
+                size = androidx.compose.ui.geometry.Size(w, h),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(w / 2),
+            )
+        }
+    }
+}
+
+@Composable
+private fun levelsPhase(): Float {
+    val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "levels")
+    val p by t.animateFloat(
+        0f, (2 * Math.PI).toFloat(),
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(1100, easing = androidx.compose.animation.core.LinearEasing)),
+        label = "phase",
+    )
+    return p
 }
 
 /** A quick mix tile: a coloured gradient with an icon. */

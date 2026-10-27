@@ -24,6 +24,33 @@ object GenreArt {
     fun save(title: String, url: String) { prefs?.edit()?.putString(title, url)?.apply() }
 }
 
+/** Artists' own photos (for Top artists), looked up on YouTube Music once and remembered. */
+object ArtistArt {
+    private var prefs: android.content.SharedPreferences? = null
+    fun init(context: android.content.Context) { prefs = context.getSharedPreferences("artist_art", android.content.Context.MODE_PRIVATE) }
+    /** The remembered photo, or null if it hasn't been looked up (or there wasn't one). */
+    fun cached(name: String): String? = prefs?.getString(name.lowercase(), null)?.ifEmpty { null }
+    suspend fun photo(name: String): String? {
+        prefs?.getString(name.lowercase(), null)?.let { return it.ifEmpty { null } }
+        val found = try {
+            val hits = YtMusicApi.search(name, YtMusicApi.Filter.ARTISTS).sections.flatMap { it.items }.filterIsInstance<ArtistItem>()
+            (hits.firstOrNull { it.title.equals(name, true) } ?: hits.firstOrNull())?.thumb
+                ?.replace(Regex("=w\\d+-h\\d+"), "=w300-h300")
+        } catch (e: Exception) {
+            return null // offline: try again next time
+        }
+        prefs?.edit()?.putString(name.lowercase(), found ?: "")?.apply()
+        return found
+    }
+}
+
+/** An artist's photo for a list, falling back to [fallback] (a song cover) when there isn't one. */
+@androidx.compose.runtime.Composable
+fun artistPhoto(name: String, fallback: String?): String? {
+    val photo by androidx.compose.runtime.produceState(ArtistArt.cached(name), name) { value = ArtistArt.photo(name) ?: fallback }
+    return photo
+}
+
 enum class Tab(val label: String) { HOME("Home"), SEARCH("Search"), LIBRARY("Library"), SETTINGS("Settings") }
 
 /** A page opened on top of a tab. */
@@ -32,6 +59,8 @@ sealed interface Route {
     data class Saved(val info: PlaylistInfo) : Route
     /** Songs downloaded to the phone. */
     data object Offline : Route
+    /** Music files on this PC. */
+    data object Pc : Route
     /** Your listening stats: top songs and artists, history. */
     data object Stats : Route
 }
@@ -55,6 +84,7 @@ class MainViewModel : ViewModel() {
 
     fun selectTab(t: Tab) {
         if (t == tab && stack.isNotEmpty()) stack.clear()
+        if (t == Tab.HOME && tab != Tab.HOME) refreshHomeIfStale()
         tab = t
         stack.clear()
     }
@@ -77,6 +107,8 @@ class MainViewModel : ViewModel() {
     /* ---- Home ---- */
     var home by mutableStateOf<Load<List<Section>>>(Load.Loading)
         private set
+    /** For the test script: shows Home as it looks with no internet. */
+    internal fun homeOfflineForCheck() { home = Load.Failed("No internet connection.") }
     var homeChips by mutableStateOf<List<YtMusicApi.Chip>>(emptyList())
         private set
     var homeChip by mutableStateOf<YtMusicApi.Chip?>(null)
@@ -97,9 +129,24 @@ class MainViewModel : ViewModel() {
     }
 
     private var homeJob: Job? = null
+    private var homeAt = 0L
+    private var homePlayed = 0
+
+    /**
+     * Home's own shelves ("Picked for you", "Because you like"...) are made from what you play, so
+     * after a few songs (or half an hour) they're made again, quietly, the next time you come back
+     * to Home or close the player.
+     */
+    fun refreshHomeIfStale() {
+        if (home !is Load.Done || refreshing || homeChip != null) return
+        val stale = History.played - homePlayed >= 3 || System.currentTimeMillis() - homeAt > 30 * 60_000L
+        if (stale) loadHome(keep = true)
+    }
 
     fun loadHome(keep: Boolean = false) {
         if (!keep) home = Load.Loading
+        homeAt = System.currentTimeMillis()
+        homePlayed = History.played
         homeJob?.cancel()
         homeJob = viewModelScope.launch {
             val old = home
@@ -468,27 +515,35 @@ class MainViewModel : ViewModel() {
     var importing by mutableStateOf(false)
         private set
 
-    /** Imports a public Spotify playlist or album from its link into your own playlists. No sign-in needed. */
-    fun importSpotifyLink(link: String) {
+    /**
+     * Imports a public playlist, album or song from a link (Spotify, YouTube Music, YouTube, SoundCloud,
+     * Apple Music or Deezer) into your own playlists. No sign-in needed.
+     */
+    fun importLink(link: String) {
         if (importing || link.isBlank()) return
         importing = true
+        Menus.say("Getting the songs…")
         viewModelScope.launch {
             try {
-                val got = SpotifyApi.importLink(link.trim())
+                val got = LinkImport.importLink(link.trim())
                 withContext(Dispatchers.IO) { Library.createWith(got.name, got.cover, got.tracks) }
-                Menus.say(
-                    if (got.cut) "Imported the first ${got.tracks.size} songs of ${got.name}. Spotify only shares 100 by link; sign in to Spotify in Settings to get them all."
-                    else "Imported ${got.name} · ${got.tracks.size} songs",
-                )
+                val n = got.tracks.size
+                Menus.say(got.note ?: "Imported ${got.name} · ${if (n == 1) "1 song" else "$n songs"}")
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: ImportProblem) {
+                Menus.say(e.message ?: "Couldn't import that link")
             } catch (e: Exception) {
-                Menus.say(e.message?.takeIf { it.length < 70 } ?: "Couldn't import that link")
+                android.util.Log.w("Glasswave", "Link import failed", e)
+                Menus.say("Couldn't import that link. Check your internet and try again.")
             } finally {
                 importing = false
             }
         }
     }
+
+    /** Older name, kept so nothing breaks. */
+    fun importSpotifyLink(link: String) = importLink(link)
 
     fun signOutSpotify() {
         Accounts.signOutSpotify()

@@ -13,6 +13,33 @@ import java.util.concurrent.Executors
 /** Songs Autoplay added to the queue (by address), so they can be taken out again when it's turned off. */
 object Autoplay {
     val added: MutableSet<String> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
+
+    /**
+     * Picks what Autoplay adds from YouTube's similar songs. YouTube starts every such list with the
+     * same few popular songs, so taken in its order one song came back after almost everything you
+     * played. This leaves out songs you've heard lately (unless that leaves too few), mixes up the
+     * order, and keeps one artist from playing twice in a row. [taken]: songs already in the queue.
+     */
+    fun pick(radio: List<Track>, taken: MutableSet<String>, playingArtist: String): List<Track> {
+        val heard = History.tracks.take(50).mapTo(HashSet()) { YtRepo.songKey(it.title, it.artist) }
+        val all = radio.filter { taken.add(YtRepo.songKey(it.title, it.artist)) }
+        val unheard = all.filter { YtRepo.songKey(it.title, it.artist) !in heard }
+        val pool = (if (unheard.size >= 6) unheard else all).take(25).shuffled().toMutableList()
+        val out = mutableListOf<Track>()
+        var last = playingArtist
+        while (pool.isNotEmpty()) {
+            val i = pool.indexOfFirst { !sameArtist(it.artist, last) }.takeIf { it >= 0 } ?: 0
+            val t = pool.removeAt(i)
+            out += t
+            last = t.artist
+        }
+        return out
+    }
+
+    private fun mainArtist(a: String) =
+        a.lowercase().split(",", "&", " x ", " feat", " ft.", " and ").first().trim()
+
+    private fun sameArtist(a: String, b: String) = mainArtist(a).isNotEmpty() && mainArtist(a) == mainArtist(b)
 }
 
 /** Songs you queued yourself ("Play next", "Add to queue"). Automix never reorders these. */
@@ -47,8 +74,16 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     var repeat by mutableStateOf(Player.REPEAT_MODE_OFF)
     var speed by mutableStateOf(1f)
 
-    /** Playback speed isn't available on desktop yet; songs always play at normal speed. */
-    fun changeSpeed(s: Float) {}
+    /** Playing speed, 0.5x to 2x. Pitch comes from Settings > Sound & effects. */
+    fun changeSpeed(s: Float) {
+        speed = s.coerceIn(0.5f, 2f)
+        AudioDeck.speed = speed
+    }
+
+    init {
+        AudioDeck.pitch = Sound.pitchFactor()
+        Sound.listeners += { AudioDeck.pitch = Sound.pitchFactor() }
+    }
 
     /** Goes up whenever the queue changes, so the queue list knows to refresh. */
     var queueVersion by mutableStateOf(0)
@@ -220,7 +255,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
 
     /* ---- Transport ---- */
 
-    private var deck = AudioDeck("a")
+    private var deck = AudioDeck("a").also { AudioDeck.current = it }
+        set(v) { field = v; AudioDeck.current = v }
     private var spare = AudioDeck("b")
     /** The song finished and nothing came after it. */
     private var atEnd = false
@@ -319,7 +355,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     /** Looks up where a song's audio is. Blocking. */
     private fun resolve(t: Track): AudioSource {
         Downloads.fileFor(t.url)?.let { return AudioSource.LocalFile(it) }
-        SongCache.fileFor(t.url)?.let { return AudioSource.LocalFile(it) }
+        PcMusic.fileOf(t.url)?.let { return AudioSource.LocalFile(it) } // a music file on this PC
+        SongCache.fileFor(t.url)?.let { return AudioSource.LocalFile(it) } // played before, kept on this PC
         val uri = android.net.Uri.parse(t.url)
         val page = if (uri.scheme == "gwmatch") {
             YtRepo.match(uri.getQueryParameter("q") ?: throw java.io.IOException("Empty song"), uri.getQueryParameter("d")?.toLongOrNull() ?: 0)
@@ -413,14 +450,17 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
      */
     private fun recover(e: Exception) {
         val t = items.getOrNull(cur) ?: return fail(e)
-        if (!Problems.online()) {
+        // A music file on this PC doesn't need the internet: if it won't play, skip it.
+        val pc = PcMusic.isPcSong(t.url)
+        if (pc) recoveries = maxOf(recoveries, 3)
+        if (!pc && !Problems.online()) {
             // No internet: carry on with songs on this computer instead of stopping.
             if (offlineAdded.isEmpty() && goOffline(skip = true)) return
             if (offlineAdded.isNotEmpty() && nextIndex() != null) { next(); return }
             fail(java.net.UnknownHostException("offline"))
             return
         }
-        YtRepo.forgetStreamUrls()
+        if (!pc) YtRepo.forgetStreamUrls()
         if (recoveries < 3) {
             recoveries++
             val at = livePosition()
@@ -555,7 +595,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         val head = MixLibrary.profile(items[n].url, MixPart.HEAD)
         val had = (if (tail != null) 1 else 0) or (if (head != null) 2 else 0)
         plan?.let { if (planKey == key && (planLocked || had == planHad)) return it }
-        val p = MixPlanner.plan(dur, tail, head, Settings.mixSeconds)
+        // Tempo matching only at normal speed and pitch (a speed you set stays yours).
+        val p = MixPlanner.plan(dur, tail, head, Settings.mixSeconds, canStretch = AudioDeck.speed == 1f && AudioDeck.pitch == 1f)
         plan = p
         planKey = key
         planHad = had
@@ -637,7 +678,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         glideMs = 0
         mixOld!!.volume = mixOutGain
         deck.volume = levelGain
-        deck.speed = p.speed
+        deck.mixSpeed = p.speed
         mixNewStarted = p.inDelayMs <= 0
         if (mixNewStarted) deck.play()
         mixLog?.invoke("mix starts at $pos ms: ${p.description}")
@@ -658,8 +699,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
             // Phase lock: nudge the new song a touch faster or slower until its beats sit on the old song's.
             val e = p.phaseError(old.positionMs.toDouble(), deck.positionMs.toDouble())
             phaseEma = 0.6 * phaseEma + 0.4 * e
-            deck.speed = (p.speed * (1 - (0.25 * phaseEma).coerceIn(-0.04, 0.04))).toFloat()
-            mixLog?.invoke("  %5d ms: beats off by %+.3f beat (%+.0f ms), new song at %.4fx".format(heard, e, e * p.oldBeatMs, deck.speed))
+            deck.mixSpeed = (p.speed * (1 - (0.25 * phaseEma).coerceIn(-0.04, 0.04))).toFloat()
+            mixLog?.invoke("  %5d ms: beats off by %+.3f beat (%+.0f ms), new song at %.4fx".format(heard, e, e * p.oldBeatMs, deck.mixSpeed))
         }
         if (heard >= p.lengthMs + 200 || old.ended) endMix()
     }
@@ -676,8 +717,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         if (!mixNewStarted) { mixNewStarted = true; if (playing) deck.play() }
         // Ease back to the song's own tempo over a few bars.
         mixLog?.invoke("mix ends")
-        if (deck.speed != 1f) {
-            glideFrom = deck.speed
+        if (deck.mixSpeed != 1f) {
+            glideFrom = deck.mixSpeed
             glideAt = SystemClock.elapsedRealtime()
             glideMs = p?.glideMs?.coerceAtLeast(2_000) ?: 4_000
         }
@@ -686,8 +727,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     private fun glide() {
         if (glideMs <= 0) return
         val t = ((SystemClock.elapsedRealtime() - glideAt).toFloat() / glideMs).coerceIn(0f, 1f)
-        deck.speed = glideFrom + (1f - glideFrom) * t
-        if (t >= 1f) { deck.speed = 1f; glideMs = 0 }
+        deck.mixSpeed = glideFrom + (1f - glideFrom) * t
+        if (t >= 1f) { deck.mixSpeed = 1f; glideMs = 0 }
     }
 
 
@@ -698,7 +739,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     private var offlineCheckAt = 0L
     private var offlineBusy = false
 
-    private fun isLocal(url: String) = Downloads.fileFor(url) != null || SongCache.fileFor(url) != null
+    private fun isLocal(url: String) = Downloads.fileFor(url) != null || SongCache.fileFor(url) != null || PcMusic.fileOf(url) != null
 
     /**
      * Now and then near the end of a song: if the internet is gone and the next song isn't on this
@@ -880,10 +921,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
             main.post {
                 val queued = order.map { items[it].url }.toSet()
                 val keys = order.mapTo(HashSet()) { YtRepo.songKey(items[it].title, items[it].artist) }
-                val fresh = tracks
-                    .filter { it.url !in queued && keys.add(YtRepo.songKey(it.title, it.artist)) }
-                    .take(25)
-                    .let { if (mixOn()) it.shuffled() else it }
+                val fresh = Autoplay.pick(tracks.filter { it.url !in queued }, keys, items.getOrNull(cur)?.artist ?: "")
                 if (fresh.isNotEmpty() && Settings.autoplay) {
                     Autoplay.added += fresh.map { it.url }
                     appendTracks(fresh)

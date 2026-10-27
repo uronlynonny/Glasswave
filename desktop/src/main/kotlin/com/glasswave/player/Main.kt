@@ -147,10 +147,95 @@ object WinPower {
     }
 }
 
+/**
+ * While the window is minimized, Glasswave hands the memory it isn't using back to Windows (for
+ * games and other apps). The music keeps playing; anything needed again comes back by itself.
+ */
+private interface Psapi : JnaLibrary {
+    fun GetCurrentProcess(): Pointer
+    fun K32EmptyWorkingSet(process: Pointer): Boolean
+}
+
+object WinMemory {
+    private val kernel by lazy { runCatching { Native.load("kernel32", Psapi::class.java) }.getOrNull() }
+
+    /**
+     * Java keeps the room it grew into after a busy moment (a big search, a playlist import) until a
+     * full clean-up, which may not come for a long time. Every half minute, if it holds more than
+     * twice what it uses, it is cleaned up and shrinks back (a few hundredths of a second, unheard:
+     * the speaker has more than half a second of sound queued).
+     */
+    fun startGuard() {
+        Thread({
+            while (true) {
+                Thread.sleep(30_000)
+                val rt = Runtime.getRuntime()
+                val used = rt.totalMemory() - rt.freeMemory()
+                if (rt.totalMemory() > 48L * 1024 * 1024 && rt.totalMemory() > used * 2) System.gc()
+            }
+        }, "memory-guard").apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
+    }
+
+    fun giveBack() {
+        runCatching {
+            System.gc()
+            // Pictures that were let go are freed once the clean-up above has run.
+            Thread.sleep(300)
+            val k = kernel ?: return
+            k.K32EmptyWorkingSet(k.GetCurrentProcess())
+        }
+    }
+}
+
+/**
+ * The graphics card side of drawing keeps old pictures and scratch space around "in case", up to
+ * 256 MB, and never lets go of them: opening the lyrics once was enough to fill it. This keeps that
+ * store small. (The drawing library doesn't offer it directly, so it's found by name, and nothing
+ * happens if it isn't there.)
+ */
+object GpuMemory {
+    /** What the graphics store may keep between frames. */
+    private const val LIMIT = 32L * 1024 * 1024
+    private var done: Any? = null
+
+    private fun field(o: Any, name: String): Any? {
+        var c: Class<*>? = o.javaClass
+        while (c != null) {
+            runCatching { return c.getDeclaredField(name).apply { isAccessible = true }.get(o) }
+            c = c.superclass
+        }
+        return null
+    }
+
+    fun findLayer(c: java.awt.Component): org.jetbrains.skiko.SkiaLayer? {
+        if (c is org.jetbrains.skiko.SkiaLayer) return c
+        if (c is java.awt.Container) for (k in c.components) findLayer(k)?.let { return it }
+        return null
+    }
+
+    /** Call now and then: the store is made with the first frame, and again if the card resets. */
+    fun limit(window: java.awt.Window) {
+        runCatching {
+            val layer = findLayer(window) ?: return
+            val redrawer = layer.javaClass.methods.firstOrNull { it.name.startsWith("getRedrawer") && it.parameterCount == 0 }
+                ?.invoke(layer) ?: return
+            val handler = field(redrawer, "contextHandler") ?: return
+            val ctx = field(handler, "context") as? org.jetbrains.skia.DirectContext ?: return
+            if (done === ctx) return
+            ctx.resourceCacheLimit = LIMIT
+            android.util.Log.i("Glasswave", "Graphics memory limited to ${LIMIT shr 20} MB")
+            done = ctx
+        }.onFailure { android.util.Log.w("Glasswave", "Couldn't limit graphics memory", it) }
+    }
+}
+
 /** Everything the phone app set up when it started. */
 internal fun startUp() {
     val ctx = AppContext
     Settings.init(ctx)
+    Sound.init(ctx)
+    // Sound waits about 1.2 s at the speaker (see AudioDeck), so the visualizer shows readings from then.
+    Spectrum.latencyMs = 1220
     Accounts.init(ctx)
     Library.init(ctx)
     History.init(ctx)
@@ -158,6 +243,7 @@ internal fun startUp() {
     SongCache.init(ctx)
     NotInterested.init(ctx)
     GenreArt.init(ctx)
+    ArtistArt.init(ctx)
     LyricsRepo.init(ctx)
     Loudness.init(ctx)
     MixLibrary.init(ctx)
@@ -170,6 +256,7 @@ internal fun startUp() {
     Profile.refresh()
     YtRepo.initMatches(ctx)
     AppVolume.init()
+    WinMemory.startGuard()
     val lastPlayed = History.tracks.firstOrNull()?.url
     // Load FFmpeg now (it takes a few seconds), so the first song you pick starts quickly.
     Thread { runCatching { org.bytedeco.javacv.FFmpegFrameGrabber.tryLoad(); AudioDeck.warmUp() } }.apply { isDaemon = true }.start()
@@ -178,12 +265,14 @@ internal fun startUp() {
         History.repairOnce(ctx)
         // Warm up: the first YouTube lookup is slow; doing it now makes your first click play sooner.
         lastPlayed?.let { YtRepo.prefetch(android.net.Uri.parse(it)) }
+        // Give songs imported from Spotify playlists their own pictures (runs once).
+        History.fixCoversOnce()
     }.apply { isDaemon = true }.start()
 
     SingletonImageLoader.setSafe { pc ->
         ImageLoader.Builder(pc)
             .components { add(OkHttpNetworkFetcherFactory(callFactory = { YtRepo.http })) }
-            .memoryCache { MemoryCache.Builder().maxSizeBytes(40L * 1024 * 1024).build() }
+            .memoryCache { MemoryCache.Builder().maxSizeBytes(24L * 1024 * 1024).build() }
             .diskCache { DiskCache.Builder().directory(File(AppDirs.cache, "art").toOkioPath()).maxSizeBytes(256L * 1024 * 1024).build() }
             .crossfade(true)
             .build()
@@ -192,18 +281,25 @@ internal fun startUp() {
 
 /** 1280 × 840, or less if the screen's free area (without the taskbar) is smaller. */
 private fun startSize(): DpSize {
+    // For screenshots: -Dgw.size=420x860 starts the window at that size.
+    System.getProperty("gw.size")?.split("x")?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 }?.let { return DpSize(it[0].dp, it[1].dp) }
     val area = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
     return DpSize(minOf(1280, area.width - 40).dp, minOf(840, area.height - 40).dp)
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
+    // Draw with OpenGL: on Windows' default (Direct3D 12) the graphics driver takes memory in
+    // 64 MB blocks and keeps them, which alone pushed the app well past 300 MB. If OpenGL doesn't
+    // work on a PC, the drawing library moves on to another way by itself.
+    if (System.getProperty("skiko.renderApi") == null) System.setProperty("skiko.renderApi", "OPENGL")
     // Already open: that window comes to the front instead of a second copy starting.
     if (!SingleInstance.claim()) return
     startUp()
     application {
         val ps = remember { PlayerState().also { it.connect() } }
         val vm = remember { MainViewModel() }
+        remember { System.getProperty("gw.memScript")?.let { MemScript.start(ps, vm, File(it)) } }
         val quit = ::exitApplication
         remember { Updater.exitApp = { Discord.shutdown(); ps.release(); quit() } }
         // Open centred, and small enough to sit above the taskbar on any screen.
@@ -240,6 +336,22 @@ fun main() {
             LaunchedEffect(Unit) {
                 window.minimumSize = java.awt.Dimension(420, 640)
                 glassTitleBar(window)
+                TitleBar.install(window)
+            }
+            LaunchedEffect(Unit) {
+                while (true) {
+                    GpuMemory.limit(window)
+                    kotlinx.coroutines.delay(3_000)
+                }
+            }
+            // Minimized: give memory back now, and again now and then while it stays down.
+            LaunchedEffect(state.isMinimized) {
+                if (!state.isMinimized) return@LaunchedEffect
+                kotlinx.coroutines.delay(2_000)
+                while (true) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { WinMemory.giveBack() }
+                    kotlinx.coroutines.delay(60_000)
+                }
             }
             // Someone opened Glasswave again while it was already running: show this window.
             LaunchedEffect(SingleInstance.showRequests) {
@@ -267,6 +379,8 @@ fun main() {
                     .onPointerEvent(PointerEventType.Press) { if (it.button == PointerButton.Back) BackDispatcher.back() },
             ) {
                 App(vm, ps, openInBrowser = ::openInBrowser, openEqualizer = { Menus.say("Use Windows' sound settings for an equalizer") })
+                // Over everything, see-through: the app's colours show behind it.
+                TitleBar.Bar(window, Modifier.align(androidx.compose.ui.Alignment.TopStart))
             }
         }
     }

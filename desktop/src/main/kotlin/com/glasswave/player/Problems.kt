@@ -19,6 +19,8 @@ object Problems {
 
     fun songFailed(t: Track, error: Throwable, tries: Int) {
         if (!Settings.reportProblems) return
+        // Your own music files are private: never reported.
+        if (PcMusic.isPcSong(t.url)) return
         val url = t.url
         val prefs = android.content.AppContext.getSharedPreferences("problems", 0)
         val day = System.currentTimeMillis() / 86_400_000

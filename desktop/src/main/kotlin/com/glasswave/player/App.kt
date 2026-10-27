@@ -38,7 +38,6 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
@@ -71,7 +70,12 @@ import kotlinx.coroutines.launch
 @Composable
 fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, openEqualizer: () -> Unit) {
     var full by remember { mutableStateOf(false) }
+    // Back from the player: Home catches up with what you've been playing.
+    LaunchedEffect(full) { if (!full && vm.tab == Tab.HOME && vm.stack.isEmpty()) vm.refreshHomeIfStale() }
     BackHandler(enabled = full) { full = false }
+    LaunchedEffect(PlayerView.openFull) {
+        if (PlayerView.openFull) { full = true; PlayerView.openFull = false }
+    }
     BackHandler(enabled = !full && vm.showYtLogin) { vm.showYtLogin = false }
     BackHandler(enabled = !full && !vm.showYtLogin && vm.stack.isNotEmpty()) { vm.back() }
     BackHandler(enabled = vm.voiceOpen) { vm.voiceOpen = false }
@@ -153,7 +157,7 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
             },
     ) {
         Box(Modifier.fillMaxSize().drawWithContent { if (!covered) drawContent() }.backdropSource(page)) {
-            GlassBackground(colors, hiRes(ps.art), Modifier.backdropSource(bg), moving = !desk)
+            GlassBackground(colors, hiRes(ps.art), Modifier.backdropSource(bg), moving = !desk, wallpaper = true)
 
             val route = vm.stack.lastOrNull()
             Row(Modifier.fillMaxSize().padding(start = if (desk) RailSpace else 0.dp)) {
@@ -182,6 +186,7 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
                         is Route.Online -> OnlinePage(ctx, key.item)
                         is Route.Saved -> SavedPage(ctx, key.info)
                         Route.Offline -> DownloadsPage(ctx)
+                        Route.Pc -> PcMusicPage(ctx)
                         Route.Stats -> StatsPage(ctx)
                         Tab.HOME -> HomeScreen(ctx)
                         Tab.SEARCH -> SearchScreen(ctx)
@@ -233,7 +238,11 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
             enter = slideInVertically(smooth(250)) { it } + fadeIn(smooth(150)),
             exit = slideOutVertically(smooth(220)) { it } + fadeOut(smooth(220)),
         ) {
-            FullPlayer(ps, colors, onClose = { full = false; peeking = false; PlayerView.lyrics = false }, openEqualizer = openEqualizer, onPeek = { peeking = it })
+            FullPlayer(ps, colors, onClose = { full = false; peeking = false; PlayerView.lyrics = false }, openEqualizer = {
+                    // The player's Equalizer button opens Settings > Sound & effects.
+                    full = false; peeking = false; PlayerView.lyrics = false
+                    vm.openSettings("SOUND")
+                }, onPeek = { peeking = it })
         }
 
         // Your account, from the picture on the top right of Home.

@@ -4,6 +4,7 @@ package com.glasswave.player
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -49,8 +50,15 @@ enum class FrameRate(val label: String, val detail: String, val hz: Float) {
     F120("120 Hz", "Smoothest, if your screen supports it. Uses more battery.", 120f),
 }
 
+/** The moving bars in the player that dance to the music. */
+enum class VisualizerStyle(val label: String, val detail: String) {
+    OFF("Off", "No visualizer."),
+    BARS("Bars", "Bars that jump with each beat, bass on the left."),
+    MIRROR("Mirror", "Bars that grow up and down from the middle."),
+}
+
 enum class CacheSize(val label: String, val bytes: Long) {
-    S256("256 MB", 256L shl 20), S512("512 MB", 512L shl 20), G1("1 GB", 1L shl 30), G2("2 GB", 2L shl 30),
+    S256("256 MB", 256L shl 20), S512("512 MB", 512L shl 20), G1("1 GB", 1L shl 30), G2("2 GB", 2L shl 30), G4("4 GB", 4L shl 30),
 }
 
 /** App settings, saved on the phone. The values are Compose state so screens update right away. */
@@ -69,7 +77,7 @@ object Settings {
     var playerStyle by mutableStateOf(PlayerStyle.CARD); private set
     var buttonStyle by mutableStateOf(ButtonStyle.CLASSIC); private set
     var showModeButtons by mutableStateOf(false); private set
-    var cacheSize by mutableStateOf(CacheSize.S512); private set
+    var cacheSize by mutableStateOf(CacheSize.G1); private set
     var keepHistory by mutableStateOf(true); private set
     var coverMotion by mutableStateOf(CoverMotion.WIFI); private set
     var autoplay by mutableStateOf(true); private set
@@ -83,6 +91,53 @@ object Settings {
     var frameRate by mutableStateOf(FrameRate.OFF); private set
     /** Smoother everything at the cost of battery: every-frame motion, more preloading, sustained CPU. */
     var highPerformance by mutableStateOf(false); private set
+
+    /** Your own highlight colour (ARGB), or null to take it from each song's cover. */
+    var accentColor by mutableStateOf<Int?>(null); private set
+    var visualizer by mutableStateOf(VisualizerStyle.BARS); private set
+    /** A font file you imported (kept inside the app), or null for the standard font. */
+    var fontFile by mutableStateOf<String?>(null); private set
+    /** Its name, for Settings. */
+    var fontName by mutableStateOf(""); private set
+    /** Your own picture, GIF or video behind the app (a file inside the app), or null for the cover's colours. */
+    var wallpaper by mutableStateOf<String?>(null); private set
+    /** 0..1: how soft the wallpaper is. */
+    var wallpaperBlur by mutableFloatStateOf(0.25f); private set
+    /** 0..1: how much the wallpaper is darkened, so text stays readable. */
+    var wallpaperDim by mutableFloatStateOf(0.35f); private set
+    /** 0.3..1.7: how strong the colours behind everything are. */
+    var colorStrength by mutableFloatStateOf(1f); private set
+    /** 0.3..1.8: how see-through (low) or solid (high) the glass panels are. */
+    var glassOpacity by mutableFloatStateOf(1f); private set
+
+    fun updateAccentColor(argb: Int?) {
+        accentColor = argb
+        prefs.edit {
+            if (argb == null) remove("accent") else putInt("accent", argb)
+            // Kept, so going back to "My own colour" brings back the one you had.
+            if (argb != null) putInt("accent_last", argb)
+        }
+    }
+
+    /** The last colour you picked yourself (even while the colours follow the song). */
+    fun lastOwnAccent(): Int? = if (prefs.contains("accent_last")) prefs.getInt("accent_last", 0) else null
+    fun updateVisualizer(v: VisualizerStyle) { visualizer = v; prefs.edit { putString("visualizer", v.name) } }
+    fun updateFont(path: String?, name: String) {
+        fontFile = path
+        fontName = name
+        prefs.edit {
+            if (path == null) remove("font_file") else putString("font_file", path)
+            putString("font_name", name)
+        }
+    }
+    fun updateWallpaper(path: String?) {
+        wallpaper = path
+        prefs.edit { if (path == null) remove("wallpaper") else putString("wallpaper", path) }
+    }
+    fun updateWallpaperBlur(v: Float) { wallpaperBlur = v.coerceIn(0f, 1f); prefs.edit { putFloat("wallpaper_blur", wallpaperBlur) } }
+    fun updateWallpaperDim(v: Float) { wallpaperDim = v.coerceIn(0f, 0.9f); prefs.edit { putFloat("wallpaper_dim", wallpaperDim) } }
+    fun updateColorStrength(v: Float) { colorStrength = v.coerceIn(0.3f, 1.7f); prefs.edit { putFloat("color_strength", colorStrength) } }
+    fun updateGlassOpacity(v: Float) { glassOpacity = v.coerceIn(0.3f, 1.8f); prefs.edit { putFloat("glass_opacity", glassOpacity) } }
     /** Tell nonny dev when a song won't play (song, error, Windows version, app version). On by default. */
     var reportProblems by mutableStateOf(true); private set
     /** Phone and PC on the same YouTube Music account share listening stats and can control each other. On by default. */
@@ -117,7 +172,7 @@ object Settings {
         playerStyle = enumPref("player_style", PlayerStyle.CARD).let { if (it == PlayerStyle.PANEL) it else PlayerStyle.CARD }
         buttonStyle = enumPref("button_style", ButtonStyle.CLASSIC)
         showModeButtons = prefs.getBoolean("mode_buttons", false)
-        cacheSize = enumPref("cache_size", CacheSize.S512)
+        cacheSize = enumPref("cache_size", CacheSize.G1)
         keepHistory = prefs.getBoolean("history", true)
         coverMotion = enumPref("cover_motion", CoverMotion.WIFI)
         autoplay = prefs.getBoolean("autoplay", true)
@@ -132,6 +187,15 @@ object Settings {
         reportProblems = prefs.getBoolean("report_problems", true)
         syncDevices = prefs.getBoolean("sync_devices", true)
         countMe = prefs.getBoolean("count_me", true)
+        accentColor = if (prefs.contains("accent")) prefs.getInt("accent", 0) else null
+        visualizer = enumPref("visualizer", VisualizerStyle.BARS)
+        fontFile = prefs.getString("font_file", null)?.takeIf { java.io.File(it).exists() }
+        fontName = prefs.getString("font_name", "") ?: ""
+        wallpaper = prefs.getString("wallpaper", null)?.takeIf { java.io.File(it).exists() }
+        wallpaperBlur = prefs.getFloat("wallpaper_blur", 0.25f)
+        wallpaperDim = prefs.getFloat("wallpaper_dim", 0.35f)
+        colorStrength = prefs.getFloat("color_strength", 1f)
+        glassOpacity = prefs.getFloat("glass_opacity", 1f)
     }
 
     fun updateFrameRate(f: FrameRate) { frameRate = f; prefs.edit { putString("frame_rate", f.name) } }

@@ -50,6 +50,25 @@ object YtRepo {
 
     fun initMatches(context: Context) {
         matches = context.getSharedPreferences("matches", Context.MODE_PRIVATE)
+        explicit = context.getSharedPreferences("explicit", Context.MODE_PRIVATE)
+    }
+
+    /** Clean song -> its explicit version ("" when it has none). Saved so each song is checked once. */
+    private var explicit: SharedPreferences? = null
+    private val explicitNow = ConcurrentHashMap<String, String>()
+
+    /**
+     * No censored songs: a clean version plays as its explicit (original) version when YouTube
+     * Music has one. Blocking; asks the internet once per song, then remembers.
+     */
+    fun uncensored(videoUrl: String): String {
+        val id = android.net.Uri.parse(videoUrl).getQueryParameter("v") ?: return videoUrl
+        val known = explicitNow[id] ?: explicit?.getString(id, null)
+        val swap = known ?: (runCatching { YtMusicApi.explicitFor(id) ?: "" }.getOrNull() ?: return videoUrl).also {
+            explicitNow[id] = it
+            explicit?.edit { putString(id, it) }
+        }
+        return if (swap.isEmpty()) videoUrl else ytWatchUrl(swap)
     }
 
     private fun searchBlocking(query: String): List<Track> {
@@ -187,7 +206,7 @@ object YtRepo {
         synchronized(locks.getOrPut(key) { Any() }) {
             // Someone else may have just finished looking it up.
             urlCache[key]?.let { (u, at) -> if (System.currentTimeMillis() - at < URL_LIFETIME_MS) return u }
-            return lookUpAudio(videoUrl, quality, key)
+            return lookUpAudio(uncensored(videoUrl), quality, key)
         }
     }
 

@@ -37,7 +37,8 @@ sealed interface MusicItem {
 }
 
 /** [explicit]: YouTube Music marks it Explicit (the uncensored version). */
-data class SongItem(val track: Track, override val subtitle: String, val explicit: Boolean = false) : MusicItem {
+/** [plays]: how many times it's been played or watched on YouTube (0 when not shown). */
+data class SongItem(val track: Track, override val subtitle: String, val explicit: Boolean = false, val plays: Long = 0) : MusicItem {
     override val title get() = track.title
     override val thumb get() = track.thumb
 }
@@ -90,7 +91,9 @@ fun matchUrl(title: String, artist: String, seconds: Long): String =
 fun ytWatchUrl(videoId: String) = "https://music.youtube.com/watch?v=$videoId"
 
 /** A sharper version of a YouTube Music cover, for the big player. */
-fun hiRes(url: String?): String? = url?.replace(Regex("=w\\d+-h\\d+"), "=w720-h720")
+fun hiRes(url: String?): String? =
+    // Data saver: a smaller picture (about a quarter of the data).
+    url?.replace(Regex("=w\\d+-h\\d+"), if (Settings.savingData) "=w360-h360" else "=w720-h720")
 
 fun fmtTime(totalSeconds: Long): String {
     val s = if (totalSeconds < 0) 0 else totalSeconds

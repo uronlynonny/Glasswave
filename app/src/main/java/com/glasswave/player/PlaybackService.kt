@@ -1,6 +1,7 @@
 // Glasswave · created by nonny dev. Original work; see AUTHORS.md.
 package com.glasswave.player
 
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.media.audiofx.AudioEffect
@@ -22,9 +23,11 @@ import androidx.media3.datasource.FileDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.CacheWriter
 import androidx.media3.datasource.cache.ContentMetadata
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.AudioSink
@@ -61,6 +64,33 @@ object AudioCache {
 /** Songs Autoplay added to the queue (by address), so they can be taken out again when it's turned off. */
 object Autoplay {
     val added: MutableSet<String> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
+
+    /**
+     * Picks what Autoplay adds from YouTube's similar songs. YouTube starts every such list with the
+     * same few popular songs, so taken in its order one song came back after almost everything you
+     * played. This leaves out songs you've heard lately (unless that leaves too few), mixes up the
+     * order, and keeps one artist from playing twice in a row. [taken]: songs already in the queue.
+     */
+    fun pick(radio: List<Track>, taken: MutableSet<String>, playingArtist: String): List<Track> {
+        val heard = History.tracks.take(50).mapTo(HashSet()) { YtRepo.songKey(it.title, it.artist) }
+        val all = radio.filter { taken.add(YtRepo.songKey(it.title, it.artist)) }
+        val unheard = all.filter { YtRepo.songKey(it.title, it.artist) !in heard }
+        val pool = (if (unheard.size >= 6) unheard else all).take(25).shuffled().toMutableList()
+        val out = mutableListOf<Track>()
+        var last = playingArtist
+        while (pool.isNotEmpty()) {
+            val i = pool.indexOfFirst { !sameArtist(it.artist, last) }.takeIf { it >= 0 } ?: 0
+            val t = pool.removeAt(i)
+            out += t
+            last = t.artist
+        }
+        return out
+    }
+
+    private fun mainArtist(a: String) =
+        a.lowercase().split(",", "&", " x ", " feat", " ft.", " and ").first().trim()
+
+    private fun sameArtist(a: String, b: String) = mainArtist(a).isNotEmpty() && mainArtist(a) == mainArtist(b)
 }
 
 /** Automix is changing the tempo for a moment (to match beats), so the speed shown stays your own. */
@@ -73,17 +103,38 @@ object Queued {
     val ids: MutableSet<String> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
 }
 
-/** Reads a downloaded song from its file; everything else goes through the cache and the internet. */
+/**
+ * Reads a downloaded song from its file, and a song on this phone ("On this phone") straight from
+ * the phone; everything else goes through the cache and the internet.
+ */
 @OptIn(UnstableApi::class)
 private class LocalFirstDataSource(private val online: DataSource, private val file: FileDataSource) : DataSource {
     private var active: DataSource? = null
+    private val listeners = ArrayList<TransferListener>()
+    /** Opens content:// songs from the phone's music library. Made when first needed. */
+    private var phone: DataSource? = null
 
     override fun addTransferListener(listener: TransferListener) {
         online.addTransferListener(listener)
         file.addTransferListener(listener)
+        listeners += listener
+        phone?.addTransferListener(listener)
+    }
+
+    private fun phoneSource(): DataSource = phone ?: run {
+        val app = PhoneMusic.app ?: throw IOException("Glasswave isn't ready to open songs on this phone yet")
+        androidx.media3.datasource.ContentDataSource(app).also { s ->
+            listeners.forEach { s.addTransferListener(it) }
+            phone = s
+        }
     }
 
     override fun open(dataSpec: DataSpec): Long {
+        // Songs on this phone: open them directly, not through the cache or the internet.
+        when (dataSpec.uri.scheme) {
+            "content" -> phoneSource().let { active = it; return it.open(dataSpec) }
+            "file" -> { active = file; return file.open(dataSpec) }
+        }
         val local = Downloads.fileFor(dataSpec.uri.toString())
         return if (local != null) {
             active = file
@@ -194,9 +245,29 @@ class PlaybackService : MediaSessionService() {
 
     private var session: MediaSession? = null
     private val worker = Executors.newFixedThreadPool(2)
+    /** Saves the next songs whole, one at a time, so a bad connection doesn't stop the music. */
+    private val saver = Executors.newSingleThreadExecutor()
+    private var cacheFactory: CacheDataSource.Factory? = null
     private val main = Handler(Looper.getMainLooper())
     private val settingsListener: () -> Unit = { session?.player?.let { applySettings(it); maybeAutoplay(it); applyLevel(it); listenAhead(it) } }
     private val mixListener: (String) -> Unit = { url -> main.post { session?.player?.let { onMixKnown(it, url) } } }
+    private val soundListener: () -> Unit = { session?.player?.let { applyPitch(it) } }
+
+    /** A player whose sound goes through Glasswave's own effects (equalizer, bass, reverb...) and Automix's mix EQ. */
+    private fun withEffects(measure: Boolean, mix: MixFilter) = object : DefaultRenderersFactory(this) {
+        override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
+            DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                .setAudioProcessors(arrayOf(mix, SoundProcessor(measure)))
+                .build()
+    }
+
+    /** Pitch from Sound settings, keeping whatever speed is set. */
+    private fun applyPitch(p: Player) {
+        val want = Sound.pitchFactor()
+        if (p.playbackParameters.pitch != want) p.playbackParameters = PlaybackParameters(p.playbackParameters.speed, want)
+    }
 
     /* ---- Volume leveling: every song at the same loudness ---- */
 
@@ -279,8 +350,9 @@ class PlaybackService : MediaSessionService() {
             .setCache(AudioCache.get(this))
             .setUpstreamDataSourceFactory(resolving)
             // Same song at a different quality is stored separately.
-            .setCacheKeyFactory { spec -> spec.uri.toString() + "|" + Settings.quality.name }
+            .setCacheKeyFactory { spec -> spec.uri.toString() + "|" + Settings.streamQuality().name }
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        cacheFactory = cached
         val sources = DataSource.Factory { LocalFirstDataSource(cached.createDataSource(), FileDataSource()) }
         mediaSources = sources
         MixLibrary.decoder = MixAudio(sources)
@@ -295,7 +367,7 @@ class PlaybackService : MediaSessionService() {
             .setBackBuffer(15 * 60_000, true)
             .build()
 
-        val player = ExoPlayer.Builder(this, renderers(mainFilter))
+        val player = ExoPlayer.Builder(this, withEffects(measure = true, mix = mainFilter))
             .setMediaSourceFactory(DefaultMediaSourceFactory(sources))
             .setLoadControl(load)
             .setAudioAttributes(
@@ -311,7 +383,9 @@ class PlaybackService : MediaSessionService() {
             .setSeekForwardIncrementMs(10_000)
             .build()
         applySettings(player)
+        applyPitch(player)
         Settings.listeners += settingsListener
+        Sound.listeners += soundListener
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -369,6 +443,28 @@ class PlaybackService : MediaSessionService() {
         })
         SleepTimer.player = player
 
+        // Bring back what was playing last time (paused), and keep it saved as things change.
+        LastPlayed.restore(player)
+        player.addListener(object : Player.Listener {
+            override fun onEvents(p: Player, events: Player.Events) {
+                if (events.containsAny(
+                        Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_IS_PLAYING_CHANGED,
+                        Player.EVENT_TIMELINE_CHANGED, Player.EVENT_POSITION_DISCONTINUITY,
+                        Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED, Player.EVENT_REPEAT_MODE_CHANGED,
+                    )
+                ) saveSoon()
+                if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
+                    main.removeCallbacks(saveTick)
+                    if (p.isPlaying) main.postDelayed(saveTick, 15_000)
+                }
+            }
+
+            // A song brought back from last time isn't loaded yet: load it when play is pressed.
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (playWhenReady && player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0 && player.playerError == null) player.prepare()
+            }
+        })
+
         // Let the phone's equalizer attach to our audio.
         audioSessionId = player.audioSessionId
         sendBroadcast(
@@ -377,7 +473,15 @@ class PlaybackService : MediaSessionService() {
                 .putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
                 .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC),
         )
-        session = MediaSession.Builder(this, player).build()
+        // Tapping the song in the notification, lock screen or the phone's media bar opens the player.
+        val openPlayer = PendingIntent.getActivity(
+            this, 7,
+            Intent(this, MainActivity::class.java)
+                .setAction(MainActivity.OPEN_PLAYER)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        session = MediaSession.Builder(this, player).setSessionActivity(openPlayer).build()
 
         // The home-screen widget follows the song and the play state.
         livePlayer = player
@@ -397,6 +501,25 @@ class PlaybackService : MediaSessionService() {
         val item = p.currentMediaItem
         val md = item?.mediaMetadata
         Widget.update(this, md?.title?.toString(), md?.artist?.toString(), md?.artworkUri?.toString(), p.isPlaying, live = true)
+    }
+
+    /* ---- Remember what was playing (see LastPlayed) ---- */
+
+    private val saveNow = Runnable { session?.player?.let { LastPlayed.save(it) } }
+
+    /** Saves shortly after a change (several changes at once are saved together). */
+    private fun saveSoon() {
+        main.removeCallbacks(saveNow)
+        main.postDelayed(saveNow, 500)
+    }
+
+    /** While playing, saves the spot in the song every 15 seconds. */
+    private val saveTick = object : Runnable {
+        override fun run() {
+            val p = session?.player ?: return
+            LastPlayed.save(p)
+            if (p.isPlaying) main.postDelayed(this, 15_000)
+        }
     }
 
     /* ---- Make sure the song playing is the song you picked ---- */
@@ -464,7 +587,10 @@ class PlaybackService : MediaSessionService() {
         playingSince = if (p.isPlaying) now else 0
     }
 
-    /** Looks up the next two songs' audio in the background so skipping is instant. */
+    /**
+     * Looks up the next two songs' audio in the background so skipping is instant, and saves them
+     * whole (unless saving data), so with a bad connection the music keeps going for a few songs.
+     */
     private fun prefetchAhead(p: Player) {
         var i = p.currentMediaItemIndex
         repeat(2) {
@@ -472,7 +598,13 @@ class PlaybackService : MediaSessionService() {
                 ?: C.INDEX_UNSET
             if (i == C.INDEX_UNSET || i >= p.mediaItemCount) return
             val uri = p.getMediaItemAt(i).localConfiguration?.uri ?: return
-            if (Downloads.fileFor(uri.toString()) == null) worker.execute { YtRepo.prefetch(uri) }
+            if (Downloads.fileFor(uri.toString()) == null) {
+                worker.execute { YtRepo.prefetch(uri) }
+                val f = cacheFactory
+                if (f != null && !Settings.savingData) saver.execute {
+                    runCatching { CacheWriter(f.createDataSource(), DataSpec(uri), null, null).cache() }
+                }
+            }
         }
     }
 
@@ -490,7 +622,7 @@ class PlaybackService : MediaSessionService() {
         len > 0 && c.isCached(key, 0, len)
     }.getOrDefault(false)
 
-    private fun isLocal(url: String) = Downloads.fileFor(url) != null || cachedWhole(url)
+    private fun isLocal(url: String) = Downloads.fileFor(url) != null || PhoneMusic.isPhoneSong(url) || cachedWhole(url)
 
     /**
      * Now and then near the end of a song: if the internet is gone and the next song isn't on the
@@ -590,14 +722,17 @@ class PlaybackService : MediaSessionService() {
             recoveringFor = item.mediaId
             recoveries = 0
         }
-        if (!Problems.online(this)) {
+        // A song stored on the phone doesn't need the internet: if it won't play, skip it.
+        val phone = PhoneMusic.isPhoneSong(item.mediaId)
+        if (phone) recoveries = maxOf(recoveries, 3)
+        if (!phone && !Problems.online(this)) {
             // No internet: carry on with songs saved on the phone instead of stopping.
             if (offlineAdded.isEmpty()) { goOffline(p, skip = true); return }
             nextLocal(p)?.let { p.seekTo(it, 0); p.prepare(); return }
             Menus.say("No internet connection")
             return
         }
-        YtRepo.forgetStreamUrls()
+        if (!phone) YtRepo.forgetStreamUrls()
         if (recoveries < 3) {
             recoveries++
             main.postDelayed({
@@ -643,11 +778,8 @@ class PlaybackService : MediaSessionService() {
                 val keys = items.mapTo(HashSet()) {
                     YtRepo.songKey(it.mediaMetadata.title?.toString() ?: "", it.mediaMetadata.artist?.toString() ?: "")
                 }
-                val fresh = tracks
-                    .filter { it.url !in queued && keys.add(YtRepo.songKey(it.title, it.artist)) }
-                    .take(25)
-                    // With Automix on, the similar songs come in a fresh order each time.
-                    .let { if (mixOn(p)) it.shuffled() else it }
+                val playing = p.currentMediaItem?.mediaMetadata?.artist?.toString() ?: ""
+                val fresh = Autoplay.pick(tracks.filter { it.url !in queued }, keys, playing)
                     .map { it.toMediaItem() }
                 if (fresh.isNotEmpty() && Settings.autoplay) {
                     Autoplay.added += fresh.map { it.mediaId }
@@ -730,19 +862,10 @@ class PlaybackService : MediaSessionService() {
         return (Settings.automix || Flow.active) && p.repeatMode != Player.REPEAT_MODE_ONE && !SleepTimer.endOfSong
     }
 
-    private fun renderers(filter: MixFilter) = object : DefaultRenderersFactory(this) {
-        override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
-            DefaultAudioSink.Builder(context)
-                .setEnableFloatOutput(enableFloatOutput)
-                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                .setAudioProcessors(arrayOf(filter))
-                .build()
-    }
-
     private fun mixerFor(): ExoPlayer? {
         mixer?.let { return it }
         val src = mediaSources ?: return null
-        return ExoPlayer.Builder(this, renderers(mixerFilter))
+        return ExoPlayer.Builder(this, withEffects(measure = false, mix = mixerFilter))
             .setMediaSourceFactory(DefaultMediaSourceFactory(src))
             // Same sound settings as the main player, but it never takes audio focus of its own.
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), false)
@@ -795,6 +918,8 @@ class PlaybackService : MediaSessionService() {
             m.seekTo(handoff)
             m.playWhenReady = false
             m.volume = levelGain
+            // Same speed and pitch as the song it carries on.
+            m.playbackParameters = p.playbackParameters
             mixerFilter.bass = 1f
             mixerFilter.sweepHz = 0f
             mixPreparedFor = tag
@@ -880,7 +1005,8 @@ class PlaybackService : MediaSessionService() {
         if (kotlin.math.abs(s - setSpeedTo) < 0.0005f && p.playbackParameters.speed == setSpeedTo) return
         MixTempo.busy = s != 1f
         setSpeedTo = s
-        p.playbackParameters = androidx.media3.common.PlaybackParameters(s, 1f)
+        // Only the tempo: the pitch stays wherever Sound settings put it.
+        p.playbackParameters = PlaybackParameters(s, p.playbackParameters.pitch)
     }
 
     /** Eases the new song back to its own tempo after a mix, a step every 0.4 s. */
@@ -980,7 +1106,9 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
-        session?.player?.let { logPlay(it) }
+        main.removeCallbacks(saveNow)
+        main.removeCallbacks(saveTick)
+        session?.player?.let { LastPlayed.save(it); logPlay(it) }
         runCatching { boost?.release() }
         boost = null
         runCatching { mixer?.release() }
@@ -994,8 +1122,10 @@ class PlaybackService : MediaSessionService() {
         }
         livePlayer = null
         Settings.listeners -= settingsListener
+        Sound.listeners -= soundListener
         main.removeCallbacks(fader)
         worker.shutdownNow()
+        saver.shutdownNow()
         SleepTimer.cancel()
         SleepTimer.player = null
         sendBroadcast(

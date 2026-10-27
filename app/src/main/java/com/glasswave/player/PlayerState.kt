@@ -33,6 +33,9 @@ class PlayerState(private val context: Context) {
     var repeat by mutableStateOf(Player.REPEAT_MODE_OFF)
     var speed by mutableStateOf(1f)
 
+    /** Set when the app was opened from the notification, so the full player opens. */
+    var openFull by mutableStateOf(false)
+
     fun changeSpeed(s: Float) { controller?.setPlaybackSpeed(s) }
 
     /** Goes up whenever the queue changes, so the queue list knows to refresh. */

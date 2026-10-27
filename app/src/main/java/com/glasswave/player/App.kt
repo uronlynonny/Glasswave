@@ -70,6 +70,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, openEqualizer: () -> Unit) {
     var full by remember { mutableStateOf(false) }
+    // Back from the player: Home catches up with what you've been playing.
+    LaunchedEffect(full) { if (!full && vm.tab == Tab.HOME && vm.stack.isEmpty()) vm.refreshHomeIfStale() }
     BackHandler(enabled = full) { full = false }
     BackHandler(enabled = !full && vm.showYtLogin) { vm.showYtLogin = false }
     BackHandler(enabled = !full && !vm.showYtLogin && vm.stack.isNotEmpty()) { vm.back() }
@@ -78,6 +80,14 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
         Menus.closeName()
         Menus.closeSong()
         Menus.closePlaylist()
+    }
+
+    // Opened by tapping the song in the notification or the phone's media bar: show the full player.
+    LaunchedEffect(ps.openFull, ps.hasItem) {
+        if (ps.openFull && ps.hasItem) {
+            full = true
+            ps.openFull = false
+        }
     }
 
     // Look for a new version when the app opens (at most every three hours), and after an update
@@ -126,7 +136,7 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Box(Modifier.fillMaxSize().drawWithContent { if (!covered) drawContent() }.backdropSource(page)) {
-            GlassBackground(colors, hiRes(ps.art), Modifier.backdropSource(bg))
+            GlassBackground(colors, hiRes(ps.art), Modifier.backdropSource(bg), wallpaper = true)
 
             val route = vm.stack.lastOrNull()
             AnimatedContent(
@@ -153,6 +163,7 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
                         is Route.Online -> OnlinePage(ctx, key.item)
                         is Route.Saved -> SavedPage(ctx, key.info)
                         Route.Offline -> DownloadsPage(ctx)
+                        Route.Phone -> PhoneMusicPage(ctx)
                         Route.Stats -> StatsPage(ctx)
                         Tab.HOME -> HomeScreen(ctx)
                         Tab.SEARCH -> SearchScreen(ctx)

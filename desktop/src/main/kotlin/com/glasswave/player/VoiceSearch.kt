@@ -122,7 +122,7 @@ fun VoiceSearch(onResult: (String) -> Unit, onClose: () -> Unit) {
     Box(
         Modifier.fillMaxSize().background(Color(0xF20A0B08)).clickable(remember { MutableInteractionSource() }, null) { },
     ) {
-        Box(Modifier.align(Alignment.TopEnd).padding(16.dp).size(48.dp).pressable(0.85f, onClick = onClose), contentAlignment = Alignment.Center) {
+        Box(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp).size(48.dp).pressable(0.85f, onClick = onClose), contentAlignment = Alignment.Center) {
             Ico(Icons.Rounded.Close, Color.White, 26.dp)
         }
         Column(Modifier.align(Alignment.Center).width(560.dp).padding(horizontal = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {

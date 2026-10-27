@@ -12,17 +12,31 @@ import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** One lyric line and when it starts. [ms] is -1 for lyrics without timing. */
-data class LyricLine(val ms: Long, val text: String)
+/**
+ * One sung word (or part of a word): when it starts and ends, and which letters of the line it is
+ * ([from] up to, not including, [to]).
+ */
+data class LyricWord(val ms: Long, val endMs: Long, val from: Int, val to: Int)
+
+/**
+ * One lyric line and when it starts. [ms] is -1 for lyrics without timing.
+ * [words] has the timing of each word when the source has it (empty otherwise).
+ */
+data class LyricLine(val ms: Long, val text: String, val words: List<LyricWord> = emptyList())
 
 /** [durationSec] is the length of the recording these lyrics were timed to (0 if unknown). */
-data class Lyrics(val lines: List<LyricLine>, val synced: Boolean, val source: String, val durationSec: Int = 0)
+data class Lyrics(val lines: List<LyricLine>, val synced: Boolean, val source: String, val durationSec: Int = 0) {
+    /** True when the words themselves are timed, not just the lines. */
+    val wordTimed: Boolean get() = synced && lines.any { it.words.isNotEmpty() }
+}
 
 /**
  * Finds lyrics for a song, trying in order:
  * 1. LRCLIB, a free open lyrics library with time-synced lyrics,
  * 2. KuGou, a big lyrics catalogue (synced) that many open-source players use as a backup,
  * 3. YouTube Music's own lyrics (not timed).
+ * KuGou often times every word, not just every line. When LRCLIB only times lines, KuGou's
+ * word-by-word version is used instead if it's clearly the same song with the same timing.
  * Results are remembered for the session, and kept on the phone for downloaded songs so their
  * lyrics show offline too.
  */
@@ -49,12 +63,27 @@ object LyricsRepo {
         val a = mainArtist(artist)
         // Synced lyrics from anywhere beat unsynced ones; unsynced are the last resort.
         val fromLrclib = runCatching { lrclib(t, a, seconds) }.getOrNull()
-        val found = fromLrclib?.takeIf { it.synced }
-            ?: runCatching { kugou(t, a, seconds) }.getOrNull()
-                ?.takeIf { k -> seconds <= 0 || (k.lines.lastOrNull()?.ms ?: 0) / 1000 <= seconds + 3 }
-            ?: fromLrclib
-            ?: runCatching { youtube(url) }.getOrNull()
-        val clean = found?.let { ly -> ly.copy(lines = ly.lines.map { it.copy(text = uncensor(it.text)) }) }
+        fun fits(k: Lyrics) = seconds <= 0 || (k.lines.lastOrNull()?.ms ?: 0) / 1000 <= seconds + 3
+        val lrclibSynced = fromLrclib?.takeIf { it.synced }
+        val found = if (lrclibSynced != null) {
+            // LRCLIB usually times whole lines; KuGou often times every word. Use KuGou's only when
+            // it's clearly the same song with the same timing, otherwise keep LRCLIB's.
+            if (lrclibSynced.wordTimed) lrclibSynced
+            else runCatching { kugou(t, a, seconds) }.getOrNull()
+                ?.takeIf { k -> k.wordTimed && fits(k) && sameSong(lrclibSynced, k) }
+                ?: lrclibSynced
+        } else {
+            runCatching { kugou(t, a, seconds) }.getOrNull()?.takeIf { fits(it) }
+                ?: fromLrclib
+                ?: runCatching { youtube(url) }.getOrNull()
+        }
+        // Filling in starred words keeps the same number of letters, so word timings still line up.
+        val clean = found?.let { ly ->
+            ly.copy(lines = ly.lines.map { l ->
+                val t2 = uncensor(l.text)
+                l.copy(text = t2, words = if (t2.length == l.text.length) l.words else emptyList())
+            })
+        }
         if (clean != null && clean.lines.isNotEmpty()) {
             cache[url] = clean
             if (Downloads.isDownloaded(url)) writeSaved(url, clean)
@@ -78,7 +107,18 @@ object LyricsRepo {
         val f = savedFile(url)?.takeIf { it.exists() } ?: return null
         val o = JSONObject(f.readText())
         val arr = o.getJSONArray("l")
-        val lines = (0 until arr.length()).map { i -> arr.getJSONArray(i).let { LyricLine(it.getLong(0), it.getString(1)) } }
+        val lines = (0 until arr.length()).map { i ->
+            arr.getJSONArray(i).let { l ->
+                // Each line is [ms, text], plus [[start, end, from, to], ...] when the words are timed
+                // (older saves don't have that part).
+                val text = l.getString(1)
+                val w = l.optJSONArray(2)
+                val words = if (w == null) emptyList() else (0 until w.length()).mapNotNull { j ->
+                    w.optJSONArray(j)?.let { LyricWord(it.getLong(0), it.getLong(1), it.getInt(2), it.getInt(3)) }
+                }.filter { it.from >= 0 && it.to <= text.length && it.from < it.to }
+                LyricLine(l.getLong(0), text, words)
+            }
+        }
         Lyrics(lines, o.optBoolean("s"), o.optString("src"), o.optInt("d"))
     }.getOrNull()?.takeIf { it.lines.isNotEmpty() }
 
@@ -86,7 +126,15 @@ object LyricsRepo {
         runCatching {
             val f = savedFile(url) ?: return
             val arr = JSONArray()
-            ly.lines.forEach { arr.put(JSONArray().put(it.ms).put(it.text)) }
+            ly.lines.forEach { l ->
+                val line = JSONArray().put(l.ms).put(l.text)
+                if (l.words.isNotEmpty()) {
+                    val w = JSONArray()
+                    l.words.forEach { w.put(JSONArray().put(it.ms).put(it.endMs).put(it.from).put(it.to)) }
+                    line.put(w)
+                }
+                arr.put(line)
+            }
             val o = JSONObject().put("s", ly.synced).put("src", ly.source).put("d", ly.durationSec).put("l", arr)
             val tmp = java.io.File(f.path + ".tmp")
             tmp.writeText(o.toString())
@@ -258,17 +306,127 @@ object LyricsRepo {
                 "https://lyrics.kugou.com/search?ver=1&man=yes&client=pc&keyword=${enc("$artist - $title")}&duration=$dur&hash=$hash",
             )?.let { JSONObject(it).optJSONArray("candidates") } ?: continue
             val c = cands.optJSONObject(0) ?: continue
-            val body = fetch(
-                "https://lyrics.kugou.com/download?fmt=lrc&charset=utf8&client=pc&ver=1&id=${c.optString("id")}&accesskey=${c.optString("accesskey")}",
-            )?.let { JSONObject(it) } ?: continue
-            val text = String(Base64.decode(body.optString("content"), Base64.DEFAULT), Charsets.UTF_8)
+            val dl = "https://lyrics.kugou.com/download?charset=utf8&client=pc&ver=1&id=${c.optString("id")}&accesskey=${c.optString("accesskey")}"
             // KuGou starts with credit lines ("作词 : ..."); leave those out.
-            val lines = parseLrc(text).filterNot { l ->
+            fun credits(lines: List<LyricLine>) = lines.filterNot { l ->
                 l.text.contains("：") || l.text.contains(" : ") || Regex("作词|作曲|编曲|制作|Lyricist|Composer|Producer", RegexOption.IGNORE_CASE).containsMatchIn(l.text)
             }
+            // The word-by-word version (KRC) first; the plain timed version if that doesn't work out.
+            val krc = runCatching {
+                fetch("$dl&fmt=krc")?.let { JSONObject(it).optString("content") }
+                    ?.let { krcText(Base64.decode(it, Base64.DEFAULT)) }
+                    ?.let { credits(parseKrc(it)) }
+            }.getOrNull()
+            val lines = krc?.takeIf { it.size >= 4 } ?: run {
+                val body = fetch("$dl&fmt=lrc")?.let { JSONObject(it) } ?: return@run null
+                credits(parseLrc(String(Base64.decode(body.optString("content"), Base64.DEFAULT), Charsets.UTF_8)))
+            } ?: continue
             if (lines.size >= 4) return Lyrics(lines, true, "KuGou", s.optLong("duration").toInt())
         }
         return null
+    }
+
+    /**
+     * Is KuGou's [other] the same song, timed the same way, as LRCLIB's [lrc]? Many of the same lines
+     * must turn up at about the same time, so a different song, a translation or another cut is
+     * turned down.
+     */
+    private fun sameSong(lrc: Lyrics, other: Lyrics): Boolean {
+        // A line's words, lower case, without punctuation. Chinese and Japanese have no spaces, so
+        // each of their characters counts as a word.
+        fun words(s: String): Set<String> {
+            val out = HashSet<String>()
+            for (w in uncensor(s).lowercase().split(nonWord)) {
+                val t = w.replace("'", "").replace("’", "")
+                if (t.isEmpty()) continue
+                if (t.any { Character.UnicodeScript.of(it.code) in cjk }) t.forEach { out += it.toString() } else out += t
+            }
+            return out
+        }
+        val a = lrc.lines.map { it to words(it.text) }.filter { it.second.isNotEmpty() }
+        val b = other.lines.map { it to words(it.text) }.filter { it.second.isNotEmpty() }
+        if (a.size < 4 || b.size < a.size * 0.5 || b.size > a.size * 2) return false
+        // For each LRCLIB line: KuGou's lines that say mostly the same words, and how far apart in
+        // time the nearest of those is. ("I must've called" and "I must have called" count as alike.)
+        val gaps = a.mapNotNull { (l, w) ->
+            b.filter { (_, v) -> 2.0 * w.count { it in v } / (w.size + v.size) >= 0.6 }
+                .minOfOrNull { abs(it.first.ms - l.ms) }
+        }.sorted()
+        if (gaps.size < maxOf(4.0, a.size * 0.5)) return false
+        return gaps[gaps.size / 2] <= 1500
+    }
+
+    private val nonWord = Regex("[^\\p{L}\\p{N}'’]+")
+    private val cjk = setOf(Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA)
+
+    /* ---------------- KuGou word timing (KRC) ---------------- */
+
+    private val krcKey = intArrayOf(64, 71, 97, 119, 94, 50, 116, 71, 81, 54, 49, 45, 206, 210, 110, 105)
+
+    /** Unpacks a KRC file: "krc1", then the rest scrambled with a fixed key and zipped. */
+    fun krcText(raw: ByteArray): String? {
+        if (raw.size <= 4 || String(raw, 0, 4, Charsets.US_ASCII) != "krc1") return null
+        val data = ByteArray(raw.size - 4) { i -> (raw[i + 4].toInt() xor krcKey[i % krcKey.size]).toByte() }
+        val inflater = java.util.zip.Inflater()
+        return try {
+            inflater.setInput(data)
+            val out = java.io.ByteArrayOutputStream(data.size * 3)
+            val buf = ByteArray(8192)
+            while (!inflater.finished()) {
+                val n = inflater.inflate(buf)
+                if (n == 0) break // ran out (or a broken file)
+                out.write(buf, 0, n)
+            }
+            if (!inflater.finished()) null else String(out.toByteArray(), Charsets.UTF_8).removePrefix("﻿")
+        } catch (e: Exception) {
+            null
+        } finally {
+            inflater.end()
+        }
+    }
+
+    private val krcLine = Regex("^\\[(\\d+),(\\d+)](.*)$")
+    private val krcWord = Regex("<(\\d+),(\\d+),\\d+>")
+
+    /**
+     * Reads KRC lines: "[12345,3000]<0,500,0>Hel<500,400,0>lo" is a line starting at 12.345s, with
+     * "Hel" sung from its start for half a second, then "lo". Word times count from the line's start.
+     * Other lines ("[ti:...]", "[language:...]") are left out.
+     */
+    fun parseKrc(krc: String): List<LyricLine> {
+        val offset = offsetTag.find(krc)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+        val out = mutableListOf<LyricLine>()
+        for (raw in krc.lines()) {
+            val m = krcLine.find(raw.trim()) ?: continue
+            val start = m.groupValues[1].toLongOrNull() ?: continue
+            val body = m.groupValues[3]
+            val tags = krcWord.findAll(body).toList()
+            val sb = StringBuilder()
+            val words = mutableListOf<LyricWord>()
+            sb.append(body, 0, tags.firstOrNull()?.range?.first ?: body.length)
+            tags.forEachIndexed { i, t ->
+                val seg = body.substring(t.range.last + 1, tags.getOrNull(i + 1)?.range?.first ?: body.length)
+                val ws = start + t.groupValues[1].toLong() - offset
+                val we = ws + t.groupValues[2].toLong()
+                val from = sb.length
+                sb.append(seg)
+                if (seg.isNotBlank()) words += LyricWord(ws.coerceAtLeast(0), we.coerceAtLeast(0), from, sb.length)
+            }
+            out += trimmed((start - offset).coerceAtLeast(0), sb.toString(), words)
+        }
+        return out.sortedBy { it.ms }
+    }
+
+    /** Trims spaces off a line, keeping its word positions pointing at the same letters. */
+    private fun trimmed(ms: Long, text: String, words: List<LyricWord>): LyricLine {
+        val lead = text.length - text.trimStart().length
+        val t = text.trim()
+        val w = if (t.isEmpty()) emptyList() else words.mapNotNull { x ->
+            val from = (x.from - lead).coerceIn(0, t.length)
+            val to = (x.to - lead).coerceIn(0, t.length)
+            if (from < to && t.substring(from, to).isNotBlank()) x.copy(from = from, to = to) else null
+        }
+        return LyricLine(ms, t, w)
     }
 
     /* ---------------- YouTube Music ---------------- */
@@ -282,30 +440,69 @@ object LyricsRepo {
     /* ---------------- LRC ---------------- */
 
     private val tag = Regex("\\[(\\d{1,2}):(\\d{1,2})(?:[.:](\\d{1,3}))?]")
-    private val wordTag = Regex("<\\d{1,2}:\\d{1,2}(?:[.:]\\d{1,3})?>")
+    private val wordTag = Regex("<(\\d{1,2}):(\\d{1,2})(?:[.:](\\d{1,3}))?>")
     private val offsetTag = Regex("\\[offset:\\s*([+-]?\\d+)]", RegexOption.IGNORE_CASE)
 
-    /** Reads "[01:02.34] words" lines. A line can carry several times; word timings are dropped. */
+    /** "mm", "ss" and the fraction of a time tag, in milliseconds. */
+    private fun tagMs(m: MatchResult): Long {
+        val min = m.groupValues[1].toLong()
+        val sec = m.groupValues[2].toLong()
+        val frac = m.groupValues[3]
+        val ms = when (frac.length) {
+            0 -> 0L
+            1 -> frac.toLong() * 100
+            2 -> frac.toLong() * 10
+            else -> frac.take(3).toLong()
+        }
+        return min * 60_000 + sec * 1000 + ms
+    }
+
+    /**
+     * Reads "[01:02.34] words" lines. A line can carry several times. Lines can also time each word
+     * ("enhanced" LRC): "[00:12.00]<00:12.00>Hello <00:12.50>world <00:13.10>", where each <time>
+     * is when the next word starts (and the last one is when the line's singing ends).
+     */
     fun parseLrc(lrc: String): List<LyricLine> {
         val offset = offsetTag.find(lrc)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
         val out = mutableListOf<LyricLine>()
         for (raw in lrc.lines()) {
             val times = tag.findAll(raw).toList()
             if (times.isEmpty()) continue
-            val text = raw.substring(times.last().range.last + 1).replace(wordTag, "").trim()
+            val body = raw.substring(times.last().range.last + 1)
+            val wt = wordTag.findAll(body).toList()
+            if (wt.isEmpty()) {
+                val text = body.trim()
+                for (m in times) out += LyricLine((tagMs(m) - offset).coerceAtLeast(0), text)
+                continue
+            }
+            // Word times, as written for the line's first time; -1 = end not given (filled in below).
+            val sb = StringBuilder()
+            val words = mutableListOf<LyricWord>()
+            sb.append(body, 0, wt.first().range.first)
+            wt.forEachIndexed { i, t ->
+                val seg = body.substring(t.range.last + 1, wt.getOrNull(i + 1)?.range?.first ?: body.length)
+                val from = sb.length
+                sb.append(seg)
+                if (seg.isNotBlank()) words += LyricWord(tagMs(t), wt.getOrNull(i + 1)?.let { tagMs(it) } ?: -1L, from, sb.length)
+            }
+            val first = tagMs(times.first())
             for (m in times) {
-                val min = m.groupValues[1].toLong()
-                val sec = m.groupValues[2].toLong()
-                val frac = m.groupValues[3]
-                val ms = when (frac.length) {
-                    0 -> 0L
-                    1 -> frac.toLong() * 100
-                    2 -> frac.toLong() * 10
-                    else -> frac.take(3).toLong()
+                // A repeated line (several times up front) sings its words the same way each time.
+                val shift = tagMs(m) - first - offset
+                val moved = words.map { w ->
+                    w.copy(ms = (w.ms + shift).coerceAtLeast(0), endMs = if (w.endMs < 0) -1 else (w.endMs + shift).coerceAtLeast(0))
                 }
-                out += LyricLine((min * 60_000 + sec * 1000 + ms - offset).coerceAtLeast(0), text)
+                out += trimmed((tagMs(m) - offset).coerceAtLeast(0), sb.toString(), moved)
             }
         }
-        return out.sortedBy { it.ms }
+        val sorted = out.sortedBy { it.ms }
+        // A last word with no end time ends when the next line starts (at most a few seconds on).
+        return sorted.mapIndexed { i, l ->
+            if (l.words.none { it.endMs < 0 }) l
+            else {
+                val next = sorted.getOrNull(i + 1)?.ms ?: Long.MAX_VALUE
+                l.copy(words = l.words.map { w -> if (w.endMs >= 0) w else w.copy(endMs = minOf(next, w.ms + 3000).coerceAtLeast(w.ms)) })
+            }
+        }
     }
 }

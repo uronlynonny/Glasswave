@@ -11,12 +11,15 @@ class GlassApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         Settings.init(this)
+        LastPlayed.init(this)
+        Sound.init(this)
         Accounts.init(this)
         Library.init(this)
         History.init(this)
         Downloads.init(this)
         NotInterested.init(this)
         GenreArt.init(this)
+        ArtistArt.init(this)
         LyricsRepo.init(this)
         Loudness.init(this)
         MixLibrary.init(this)
@@ -37,6 +40,8 @@ class GlassApp : Application(), ImageLoaderFactory {
             // Warm up: the first YouTube lookup loads YouTube's player code, which is slow.
             // Doing it now (with the song you played last) makes your first tap play sooner.
             lastPlayed?.let { YtRepo.prefetch(android.net.Uri.parse(it)) }
+        // Give songs imported from Spotify playlists their own pictures (runs once).
+        History.fixCoversOnce()
         }.start()
     }
 
@@ -49,5 +54,9 @@ class GlassApp : Application(), ImageLoaderFactory {
             .okHttpClient(YtRepo.http)
             .respectCacheHeaders(false)
             .crossfade(true)
+            // GIF wallpapers move.
+            .components {
+                if (android.os.Build.VERSION.SDK_INT >= 28) add(coil.decode.ImageDecoderDecoder.Factory()) else add(coil.decode.GifDecoder.Factory())
+            }
             .build()
 }
