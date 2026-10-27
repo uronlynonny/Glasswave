@@ -155,10 +155,13 @@ internal fun startUp() {
     Library.init(ctx)
     History.init(ctx)
     Downloads.init(ctx)
+    SongCache.init(ctx)
     NotInterested.init(ctx)
     GenreArt.init(ctx)
     LyricsRepo.init(ctx)
     Loudness.init(ctx)
+    MixLibrary.init(ctx)
+    MixLibrary.decoder = MixAudio
     GlassTier.init(ctx)
     Stats.init(ctx)
     Sync.init(ctx)

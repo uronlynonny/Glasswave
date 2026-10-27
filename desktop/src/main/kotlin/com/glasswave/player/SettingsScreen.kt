@@ -286,7 +286,7 @@ private fun Audio(c: ScreenCtx) {
     }
     Note("Each song fades out over its last seconds and the next fades in, so songs blend instead of cutting.")
     Group("Automix") {
-        SwitchRow("Automix", "Blends each song into the next, like a DJ. Also in the player's ••• menu.", Settings.automix) { Settings.updateAutomix(it) }
+        SwitchRow("Automix", "Mixes each song into the next like a DJ: on the beat, tempos matched. Also in the player's ••• menu.", Settings.automix) { Settings.updateAutomix(it) }
         if (Settings.automix) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(4, 6, 8, 10, 12).forEach { s ->
@@ -300,7 +300,7 @@ private fun Audio(c: ScreenCtx) {
             }
         }
     }
-    Note("The next song starts under the end of this one and they blend for the length you pick. While Automix is on, it takes over from crossfade.")
+    Note("Automix listens to each song first to find its tempo, beats and key. Songs with a similar tempo are matched and lined up beat for beat, and their bass is handed over halfway, so it sounds like one continuous mix. Songs that are too far apart in tempo are handed over on the beat instead. It also picks which of the next few songs fits best, and skips silent endings. The length you pick is how long blends last. Flow always mixes this way. While Automix is on, it takes over from crossfade.")
     Group("Playback") {
         SwitchRow("Autoplay", "When the queue ends, keep playing similar songs.", Settings.autoplay) { Settings.updateAutoplay(it) }
         Divider()
@@ -505,7 +505,7 @@ private fun StoragePage(c: ScreenCtx) {
     Group("Space for played songs") {
         Choices(CacheSize.entries, Settings.cacheSize, { it.label }, { "" }) { Settings.updateCacheSize(it) }
     }
-    Note("A new size takes effect the next time Glasswave starts.")
+    Note("Songs you listen to are kept here, so they play again instantly and still play with no internet. When it's full, the ones played longest ago make room.")
     Group("Privacy") {
         SwitchRow("Remember what I play", "Powers \"Recently played\" on Home. Stays on this phone.", Settings.keepHistory) { Settings.updateKeepHistory(it) }
         Divider()

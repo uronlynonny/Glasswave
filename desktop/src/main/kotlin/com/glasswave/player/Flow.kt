@@ -152,6 +152,7 @@ object Flow {
      * Builds the segments. Nothing here is in a fixed order: the seeds are drawn at random from what
      * you play, each segment mixes several radios, songs are shuffled and artists spread out, and
      * the segments themselves come in a different order each time (On repeat always opens a set).
+     * Within a segment, songs Automix has already listened to are ordered to flow by tempo and key.
      */
     private suspend fun buildSegments(seeds: List<Track>, first: Boolean): List<Segment> = coroutineScope {
         if (seeds.isEmpty()) return@coroutineScope emptyList()
@@ -179,7 +180,7 @@ object Flow {
         if (first) {
             val byTop = topRadio.filter { t -> topArtists.any { a -> t.artist.contains(a, true) } }
             val rotation = fresh(history.take(12).shuffled().take(3) + byTop + topRadio, used, 6, allowHeard = true)
-            if (rotation.size >= 3) out += Segment("On repeat", if (topArtist != null) "Opening with  and the songs you keep coming back to" else "The songs you keep coming back to", rotation)
+            if (rotation.size >= 3) out += Segment("On repeat", if (topArtist != null) "Opening with $topArtist and the songs you keep coming back to" else "The songs you keep coming back to", rotation)
         }
         val rest = mutableListOf<Segment>()
         val newOnes = fresh(freshRadio, used, 6)
@@ -194,6 +195,9 @@ object Flow {
         if (deeper.size >= 3) rest += Segment("Deeper cuts", "More in the same vein", deeper)
         val blend = fresh((freshRadio + wildRadio + topRadio).shuffled(), used, 7)
         if (blend.size >= 4) rest += Segment("The blend", "A bit of everything you like, mixed up", blend)
-        out + rest.shuffled()
+        // Within each segment, songs flow into each other by tempo and key where Automix already knows them.
+        val segs = out + rest.shuffled()
+        withContext(Dispatchers.IO) { MixLibrary.loadSaved(segs.flatMap { s -> s.tracks.map { it.url } }) }
+        segs.mapIndexed { i, s -> s.copy(tracks = MixPlanner.chain(s.tracks, i * 101 + s.tracks.size)) }
     }
 }

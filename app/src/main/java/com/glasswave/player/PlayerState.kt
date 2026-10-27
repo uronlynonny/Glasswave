@@ -136,7 +136,8 @@ class PlayerState(private val context: Context) {
         currentId = id
         shuffle = c.shuffleModeEnabled
         repeat = c.repeatMode
-        speed = c.playbackParameters.speed
+        // Automix nudges the tempo for a moment while it matches beats; the speed shown stays yours.
+        if (!MixTempo.busy) speed = c.playbackParameters.speed
         val d = c.duration
         durationMs = if (d == C.TIME_UNSET || d < 0) 0L else d
         positionMs = c.currentPosition

@@ -79,7 +79,7 @@ object Downloads {
     fun isDownloading(url: String) = progress.containsKey(url)
 
     /** Wi-Fi (or another unmetered network) right now? */
-    private fun onWifi(): Boolean {
+    fun onWifi(): Boolean {
         val cm = app.getSystemService(ConnectivityManager::class.java) ?: return false
         val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)

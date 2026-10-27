@@ -13,7 +13,7 @@ plugins {
 val appBuild = file("../app/build.gradle.kts").readText()
 // Glasswave for Windows has its own version number, separate from the phone app.
 // Raise it for every Windows release: installed copies update themselves to a higher number.
-val appVersion = "1.0.10"
+val appVersion = "1.0.11"
 val newPipe = Regex("NewPipeExtractor:(v?[0-9][0-9.]*)").find(appBuild)?.groupValues?.get(1)
     ?: error("Couldn't find the NewPipeExtractor version in app/build.gradle.kts")
 
@@ -66,6 +66,15 @@ tasks.register<JavaExec>("deckCheck") {
     mainClass.set("com.glasswave.player.DeckCheckKt")
     val song = (project.findProperty("song") as String?) ?: "daft punk get lucky"
     args(listOfNotNull(song, project.findProperty("only") as String?))
+}
+
+// Listens to a few songs like Automix does (tempo, beats, key) and renders each planned transition
+// to a WAV file. ./gradlew -p desktop mixCheck [-Psongs="song one;song two"] [-Pout=folder]
+tasks.register<JavaExec>("mixCheck") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.MixCheckKt")
+    val out = (project.findProperty("out") as String?) ?: layout.buildDirectory.dir("mixcheck").get().asFile.absolutePath
+    args(listOfNotNull(out, project.findProperty("songs") as String?))
 }
 
 // For checks only: transcribes a WAV file with voice search's recogniser.

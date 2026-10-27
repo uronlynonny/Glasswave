@@ -709,7 +709,7 @@ private fun MoreSheet(ps: PlayerState, fp: Backdrop, colors: CoverColors, openEq
                 // Automix: blend each song into the next. Off until you switch it on.
                 SheetTile(Icons.Rounded.MergeType, "Automix", Settings.automix) {
                     Settings.updateAutomix(!Settings.automix)
-                    Menus.say(if (Settings.automix) "Automix on: songs blend into each other" else "Automix off")
+                    Menus.say(if (Settings.automix) "Automix on: songs mix on the beat, like a DJ" else "Automix off")
                 }
             }
             AnimatedVisibility(showSleep) {

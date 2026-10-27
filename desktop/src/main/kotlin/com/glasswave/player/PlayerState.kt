@@ -20,10 +20,10 @@ object Queued {
     val ids: MutableSet<String> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
 }
 
-/** The desktop app streams songs without keeping a separate audio cache (yet). */
+/** The songs kept on disk as they play (see [SongCache]), for Settings' storage page. */
 object AudioCache {
-    fun sizeBytes(@Suppress("UNUSED_PARAMETER") context: Any?): Long = 0
-    fun clear(@Suppress("UNUSED_PARAMETER") context: Any?) {}
+    fun sizeBytes(@Suppress("UNUSED_PARAMETER") context: Any?): Long = SongCache.sizeBytes()
+    fun clear(@Suppress("UNUSED_PARAMETER") context: Any?) = SongCache.clear()
 }
 
 /**
@@ -88,6 +88,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         queueVersion++
         maybeAutoplay()
         prefetchAhead()
+        listenAhead()
     }
 
     fun upcoming(limit: Int = 5000): List<QueueEntry> {
@@ -259,6 +260,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
 
     fun seekTo(ms: Long) {
         if (mixing) endMix()
+        deck.automation = null
         atEnd = false
         deck.seekTo(ms)
         positionMs = ms
@@ -276,11 +278,13 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         deck.listener = deckListener
         spare.listener = deckListener
         Settings.listeners += { maybeAutoplay(); applyLevel() }
+        MixLibrary.listeners += { url -> main.post { onMixKnown(url) } }
         SleepTimer.player = this
     }
 
     fun release() {
         logPlay()
+        SongCache.flush()
         deck.stop()
         spare.stop()
         worker.shutdownNow()
@@ -315,11 +319,12 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     /** Looks up where a song's audio is. Blocking. */
     private fun resolve(t: Track): AudioSource {
         Downloads.fileFor(t.url)?.let { return AudioSource.LocalFile(it) }
+        SongCache.fileFor(t.url)?.let { return AudioSource.LocalFile(it) }
         val uri = android.net.Uri.parse(t.url)
         val page = if (uri.scheme == "gwmatch") {
             YtRepo.match(uri.getQueryParameter("q") ?: throw java.io.IOException("Empty song"), uri.getQueryParameter("d")?.toLongOrNull() ?: 0)
         } else t.url
-        return AudioSource.Remote(YtRepo.streamUrl(page))
+        return AudioSource.Remote(YtRepo.streamUrl(page), t)
     }
 
     /** Each song change gets a number, so a slow lookup for a song you've skipped past is ignored. */
@@ -351,6 +356,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         Queued.ids.remove(t.url)
         recoveries = 0
         val req = ++request
+        if (changedSong) { plan = null; planKey = ""; planLocked = false }
+        if (!auto) glideMs = 0
 
         if (spare.tag == i && spare.ready && !mixing && startMs == 0L) {
             // The next song is already loaded on the other deck: swap over, no wait.
@@ -360,6 +367,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
             old.stop()
             buffering = false
             if (deck.durationMs > 0) durationMs = deck.durationMs
+            deck.automation = null
             deck.volume = startVolume()
             if (play) deck.play()
             markPlaying(play)
@@ -372,7 +380,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         }
 
         if (auto) SleepTimer.onSongEnded(this)
-        if (Settings.automix) pickNextForMix()
+        if (mixOn()) pickNextForMix()
+        listenAhead()
         verifyCurrent(t)
         applyLevel()
         changed()
@@ -389,6 +398,9 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
             main.post {
                 if (req != request) return@post
                 d.volume = startVolume()
+                d.eqReady = mixOn()
+                d.stretchReady = false
+                d.automation = null
                 d.load(src, startMs, play && playing, i)
             }
         }
@@ -402,6 +414,9 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     private fun recover(e: Exception) {
         val t = items.getOrNull(cur) ?: return fail(e)
         if (!Problems.online()) {
+            // No internet: carry on with songs on this computer instead of stopping.
+            if (offlineAdded.isEmpty() && goOffline(skip = true)) return
+            if (offlineAdded.isNotEmpty() && nextIndex() != null) { next(); return }
             fail(java.net.UnknownHostException("offline"))
             return
         }
@@ -474,17 +489,38 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
 
     /* ---- Getting the next song ready, crossfade and Automix ---- */
 
-    private fun mixOn() = Settings.automix && repeat != Player.REPEAT_MODE_ONE && !SleepTimer.endOfSong
+    /** Automix is on (or Flow is playing, which always mixes), and nothing asks for songs to end on their own. */
+    private fun mixOn() = (Settings.automix || Flow.active) && repeat != Player.REPEAT_MODE_ONE && !SleepTimer.endOfSong
 
     private var mixing = false
     private var mixOld: AudioDeck? = null
-    private var mixStartAt = 0L
-    private var mixLength = 0L
+    private var mixPlan: MixPlan? = null
+    /** When (elapsed ms) the old song was heard at the mix point. */
+    private var mixT0 = 0L
+    private var mixNewStarted = false
     private var mixOutGain = 1f
     private var levelGain = 1f
+    private var phaseEma = 0.0
+
+    /** The planned change from this song to the next (see [MixPlanner]), and whether the next song is already loaded for it. */
+    private var plan: MixPlan? = null
+    private var planKey = ""
+    private var planHad = 0
+    private var planLocked = false
+    /** Where in the next song the spare deck was loaded to start. */
+    private var spareStart = 0L
+
+    /** After a tempo-matched mix, the new song eases back to its own tempo. */
+    private var glideFrom = 1f
+    private var glideAt = 0L
+    private var glideMs = 0L
 
     /** The volume a song starts at: silent when it's going to fade in. */
     private fun startVolume() = if (Settings.crossfade > 0 && !mixing) 0f else levelGain
+
+    /** For the checks: told what each mix does, step by step. */
+    internal var mixLog: ((String) -> Unit)? = null
+    internal val nextPlan: MixPlan? get() = plan
 
     private val fader = object : Runnable {
         override fun run() {
@@ -493,9 +529,11 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
                 val pos = deck.positionMs
                 val dur = deck.durationMs
                 prepareNext(pos, dur)
+                armOld(pos)
+                offlineWatch(pos, dur)
                 if (!mixStep(pos, dur)) {
                     val fadeMs = Settings.crossfade * 1000L
-                    if (fadeMs > 0 && deck.ready) {
+                    if (fadeMs > 0 && deck.ready && !mixOn()) {
                         var v = 1f
                         if (pos < fadeMs) v = pos.toFloat() / fadeMs
                         if (dur > 0 && dur - pos < fadeMs) v = minOf(v, (dur - pos).toFloat() / fadeMs)
@@ -504,80 +542,268 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
                         deck.volume = levelGain
                     }
                 }
+                glide()
             }
             if (playing || mixing) main.postDelayed(this, 40)
         }
     }
 
-    /** About 15 seconds before the end, load the next song on the spare deck (paused), so it starts at once. */
+    /** The plan for moving from this song to song [n], made again whenever more becomes known about either (until the next song is loaded for it). */
+    private fun planFor(n: Int, dur: Long): MixPlan {
+        val key = "$cur>$n"
+        val tail = MixLibrary.profile(items[cur].url, MixPart.TAIL)
+        val head = MixLibrary.profile(items[n].url, MixPart.HEAD)
+        val had = (if (tail != null) 1 else 0) or (if (head != null) 2 else 0)
+        plan?.let { if (planKey == key && (planLocked || had == planHad)) return it }
+        val p = MixPlanner.plan(dur, tail, head, Settings.mixSeconds)
+        plan = p
+        planKey = key
+        planHad = had
+        planLocked = false
+        return p
+    }
+
+    /** Before the mix (or about 15 seconds before the end), load the next song on the spare deck, paused, right where it should start. */
     private fun prepareNext(pos: Long, dur: Long) {
-        if (dur <= 0 || dur - pos > 15_000 || repeat == Player.REPEAT_MODE_ONE) return
+        if (dur <= 0 || repeat == Player.REPEAT_MODE_ONE) return
         val n = nextIndex() ?: return
-        if (spare.tag == n || n == cur) return
+        if (n == cur) return
+        val p = if (mixOn() && dur >= 45_000) planFor(n, dur) else null
+        val lead = if (p != null) p.outStartMs - 15_000 else dur - 15_000
+        if (pos < lead) return
+        val startAt = p?.inStartMs ?: 0L
+        if (spare.tag == n && spareStart == startAt) { planLocked = p != null; return }
         val t = items[n]
         spare.stop()
         spare.tag = n
+        spareStart = startAt
+        planLocked = p != null
         val req = request
         worker.execute {
             val src = runCatching { resolve(t) }.getOrNull() ?: return@execute
             main.post {
                 if (req != request || spare.tag != n) return@post
                 spare.volume = 0f
-                spare.load(src, 0, false, n)
+                spare.eqReady = p != null
+                spare.stretchReady = p?.locksBeat == true
+                spare.automation = p?.let { inAutomation(it) }
+                spare.load(src, startAt, false, n)
             }
         }
     }
 
-    /** Starts a mix at the right moment. True if it did. */
+    /** A few seconds before the mix, once the next song is ready, the old song's side of the mix is set up, so it's exact even for the sound already queued. */
+    private fun armOld(pos: Long) {
+        val p = plan ?: return
+        if (!planLocked || deck.automation != null || !spare.ready || spareStart != p.inStartMs) return
+        if (pos < p.outStartMs - 3_000 || pos > p.outStartMs) return
+        deck.automation = outAutomation(p)
+    }
+
+    private fun outAutomation(p: MixPlan) = AudioDeck.Automation { ms, out ->
+        if (ms < p.outStartMs) { out[0] = 1f; out[1] = 1f; out[2] = 0f; return@Automation }
+        val lv = p.levels(((ms - p.outStartMs) / p.lengthMs).toFloat())
+        out[0] = lv.oldGain; out[1] = lv.oldBass; out[2] = lv.oldSweepHz
+    }
+
+    private fun inAutomation(p: MixPlan) = AudioDeck.Automation { ms, out ->
+        val wall = (ms - p.inStartMs) / p.speed + p.inDelayMs
+        val lv = p.levels((wall / p.lengthMs).toFloat())
+        out[0] = lv.newGain; out[1] = lv.newBass; out[2] = 0f
+    }
+
+    /** Starts a mix right at the planned moment. True if it did. */
     private fun mixStep(pos: Long, dur: Long): Boolean {
         if (!mixOn() || !playing || dur < 45_000) return false
         val n = nextIndex() ?: return false
-        val len = minOf(Settings.mixSeconds * 1000L, dur / 5)
-        val at = dur - len
-        if (pos < at || pos > at + 1_500) return false
-        if (spare.tag != n || !spare.ready) return false // not loaded in time: a plain change
+        val p = plan?.takeIf { planKey == "$cur>$n" } ?: return false
+        val at = p.outStartMs
+        if (pos < at - 20) return false
+        if (pos > at + 1_500) { deck.automation = null; return false }
+        if (spare.tag != n || !spare.ready || spareStart != p.inStartMs) {
+            // Not loaded in time: a plain change at the end instead.
+            deck.automation = null
+            return false
+        }
+        if (deck.automation == null) deck.automation = outAutomation(p)
+        mixPlan = p
         mixOutGain = levelGain
         mixOld = deck
         deck = spare
         spare = mixOld!!
         mixing = true
-        mixStartAt = SystemClock.elapsedRealtime()
-        mixLength = dur - pos
-        deck.volume = 0f
-        deck.play()
+        mixT0 = SystemClock.elapsedRealtime() - (pos - at)
+        phaseEma = 0.0
+        glideMs = 0
+        mixOld!!.volume = mixOutGain
+        deck.volume = levelGain
+        deck.speed = p.speed
+        mixNewStarted = p.inDelayMs <= 0
+        if (mixNewStarted) deck.play()
+        mixLog?.invoke("mix starts at $pos ms: ${p.description}")
         moveTo(n, play = true, auto = true)
         return true
     }
 
-    /** One step of a mix: the old song fades out as the new one fades in, on an equal-power curve. */
+    /** One step of a mix: start the new song when it's due, and keep the beats lined up. The decks do the fades themselves. */
     private fun stepMix() {
-        val k = ((SystemClock.elapsedRealtime() - mixStartAt).toFloat() / mixLength).coerceIn(0f, 1f)
-        val a = (k * Math.PI / 2).toFloat()
-        mixOld?.volume = kotlin.math.cos(a) * mixOutGain
-        deck.volume = kotlin.math.sin(a) * levelGain
-        if (k >= 1f || mixOld?.ended == true) endMix()
+        val p = mixPlan ?: return endMix()
+        val old = mixOld ?: return endMix()
+        val heard = SystemClock.elapsedRealtime() - mixT0
+        if (!mixNewStarted && heard >= p.inDelayMs) {
+            deck.play()
+            mixNewStarted = true
+        }
+        if (p.locksBeat && mixNewStarted && heard > p.inDelayMs + 300 && deck.ready) {
+            // Phase lock: nudge the new song a touch faster or slower until its beats sit on the old song's.
+            val e = p.phaseError(old.positionMs.toDouble(), deck.positionMs.toDouble())
+            phaseEma = 0.6 * phaseEma + 0.4 * e
+            deck.speed = (p.speed * (1 - (0.25 * phaseEma).coerceIn(-0.04, 0.04))).toFloat()
+            mixLog?.invoke("  %5d ms: beats off by %+.3f beat (%+.0f ms), new song at %.4fx".format(heard, e, e * p.oldBeatMs, deck.speed))
+        }
+        if (heard >= p.lengthMs + 200 || old.ended) endMix()
     }
 
     private fun endMix() {
+        val p = mixPlan
         mixing = false
-        mixOld?.stop()
+        mixPlan = null
+        mixOld?.let { it.automation = null; it.stop() }
         mixOld = null
+        deck.automation = null
+        deck.bass = 1f
         deck.volume = levelGain
+        if (!mixNewStarted) { mixNewStarted = true; if (playing) deck.play() }
+        // Ease back to the song's own tempo over a few bars.
+        mixLog?.invoke("mix ends")
+        if (deck.speed != 1f) {
+            glideFrom = deck.speed
+            glideAt = SystemClock.elapsedRealtime()
+            glideMs = p?.glideMs?.coerceAtLeast(2_000) ?: 4_000
+        }
     }
 
-    /** Automix, like a DJ: the next song is picked from the next few, preferring a different artist. */
+    private fun glide() {
+        if (glideMs <= 0) return
+        val t = ((SystemClock.elapsedRealtime() - glideAt).toFloat() / glideMs).coerceIn(0f, 1f)
+        deck.speed = glideFrom + (1f - glideFrom) * t
+        if (t >= 1f) { deck.speed = 1f; glideMs = 0 }
+    }
+
+
+    /* ---- No internet: carry on with songs on this computer ---- */
+
+    /** Songs put in the queue because the internet went (taken out again when it's back). */
+    private val offlineAdded = HashSet<String>()
+    private var offlineCheckAt = 0L
+    private var offlineBusy = false
+
+    private fun isLocal(url: String) = Downloads.fileFor(url) != null || SongCache.fileFor(url) != null
+
+    /**
+     * Now and then near the end of a song: if the internet is gone and the next song isn't on this
+     * computer, line up songs that are, so the music carries on. Once it's back, take them out again.
+     */
+    private fun offlineWatch(pos: Long, dur: Long) {
+        val now = SystemClock.elapsedRealtime()
+        if (offlineBusy || now - offlineCheckAt < if (offlineAdded.isNotEmpty()) 10_000 else 4_000) return
+        if (offlineAdded.isEmpty()) {
+            if (dur <= 0 || dur - pos > 30_000) return
+            val next = nextIndex()?.let { items[it].url }
+            if (next != null && isLocal(next)) return
+        }
+        offlineCheckAt = now
+        offlineBusy = true
+        worker.execute {
+            val online = Problems.online()
+            main.post {
+                offlineBusy = false
+                if (online && offlineAdded.isNotEmpty()) backOnline()
+                else if (!online && offlineAdded.isEmpty()) goOffline(skip = false)
+            }
+        }
+    }
+
+    /** Lines up songs on this computer to play next, in an order that flows ([MixPlanner.offlineMix]). [skip] moves on to them now. */
+    private fun goOffline(skip: Boolean): Boolean {
+        val current = items.getOrNull(cur)
+        val available = (Downloads.tracks.toList() + SongCache.tracks).filter { isLocal(it.url) }
+        val recent = History.tracks.take(15).map { it.url }.toSet()
+        val list = MixPlanner.offlineMix(current, available, recent)
+        if (list.isEmpty()) return false
+        for ((k, t) in list.withIndex()) {
+            items += t
+            val i = items.lastIndex
+            base.add(base.indexOf(cur) + 1 + k, i)
+            shuf.add(shuf.indexOf(cur) + 1 + k, i)
+            offlineAdded += t.url
+        }
+        spare.stop()
+        Menus.say("No internet, so songs saved on this computer are playing next")
+        changed()
+        if (skip) next()
+        return true
+    }
+
+    /** The internet is back: take out the saved songs that haven't played yet, so your queue carries on. */
+    private fun backOnline() {
+        for (o in listOf(base, shuf)) {
+            val now = o.indexOf(cur)
+            val drop = o.filterIndexed { i, p -> i > now && items[p].url in offlineAdded }.toSet()
+            o.removeAll { it in drop }
+        }
+        offlineAdded.clear()
+        spare.stop()
+        Menus.say("Back online")
+        changed()
+    }
+
+    /* ---- Listening ahead: what Automix needs to know about the songs coming up ---- */
+
+    /** Asks for this song's ending and the next few songs' starts to be listened to. */
+    private fun listenAhead() {
+        if (!mixOn() || cur < 0) return
+        val jobs = ArrayList<Pair<String, MixPart>>()
+        items.getOrNull(cur)?.let { jobs += it.url to MixPart.TAIL }
+        var i = cur
+        repeat(LOOK_AHEAD) {
+            i = nextIndex(i, Player.REPEAT_MODE_OFF) ?: return@repeat
+            jobs += items[i].url to MixPart.HEAD
+        }
+        MixLibrary.request(jobs)
+    }
+
+    /** Something new is known about a song: if it's this one or one coming up, the order and the plan may get better. */
+    private fun onMixKnown(url: String) {
+        if (!mixOn() || mixing || planLocked) return
+        val upcoming = upcoming(LOOK_AHEAD).map { it.track.url }
+        if (url != items.getOrNull(cur)?.url && url !in upcoming) return
+        val before = nextIndex()
+        pickNextForMix()
+        if (nextIndex() != before) { spare.stop(); queueVersion++ }
+    }
+
+    /**
+     * Automix, like a DJ: the next song is picked from the next few by how well it follows this one
+     * (tempo, key, energy), preferring a different artist, with a pinch of chance. Songs you queued
+     * yourself, and shuffle, are left alone.
+     */
     private fun pickNextForMix() {
         if (shuffle || repeat == Player.REPEAT_MODE_ONE) return
         val p = base.indexOf(cur)
         if (p < 0 || p + 2 >= base.size) return
         if (items[base[p + 1]].url in Queued.ids) return
-        fun artist(i: Int) = items[i].artist.substringBefore(",").trim().lowercase()
-        val now = artist(cur)
         val window = (p + 1 until minOf(base.size, p + 9)).filter { items[base[it]].url !in Queued.ids }
         if (window.size < 2) return
-        val pool = window.filter { artist(base[it]) != now }.ifEmpty { window }
-        val pick = pool.random()
+        val c = items[cur]
+        val i = MixPlanner.choose(c.url, c.artist, window.map { items[base[it]].let { t -> t.url to t.artist } }, cur)
+        val pick = window.getOrNull(i) ?: return
         if (pick != p + 1) base.add(p + 1, base.removeAt(pick))
+    }
+
+    private companion object {
+        /** How many songs ahead Automix listens to, to pick the best next one. */
+        const val LOOK_AHEAD = 8
     }
 
     /* ---- Volume leveling ---- */
@@ -657,7 +883,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
                 val fresh = tracks
                     .filter { it.url !in queued && keys.add(YtRepo.songKey(it.title, it.artist)) }
                     .take(25)
-                    .let { if (Settings.automix) it.shuffled() else it }
+                    .let { if (mixOn()) it.shuffled() else it }
                 if (fresh.isNotEmpty() && Settings.autoplay) {
                     Autoplay.added += fresh.map { it.url }
                     appendTracks(fresh)
