@@ -130,6 +130,20 @@ object MemScript {
                             onUi { ps.playList(hits.take(1), 0) }
                         }
                         "full" -> onUi { PlayerView.openFull = true }
+                        // artisttap: like tapping the artist's name in the full player.
+                        "artisttap" -> onUi { ps.currentTrack()?.let { Menus.artistOf = it } }
+                        // spimport link: reads a Spotify link without saving it, and says how many different song pictures it got.
+                        // covers: what the one-time picture repair would fix, then runs it now and counts again.
+                        "covers" -> {
+                            fun count() = Library.ownPlaylists().joinToString { p -> val t = kotlinx.coroutines.runBlocking { Library.tracks(p.id) }; "${p.name.take(20)}: ${t.size} songs/${t.mapNotNull { it.thumb }.distinct().size} pictures" }
+                            System.err.println("GW covers dir=${android.content.AppDirs.data} lib=${java.io.File(android.content.AppDirs.data, "library").list()?.size} before: ${count()} | needs fixing: ${Library.songsWithPlaylistCover().mapValues { it.value.size }}")
+                            History.fixCoversNow()
+                            System.err.println("GW covers after: ${count()}")
+                        }
+                        "spimport" -> {
+                            val got = kotlinx.coroutines.runBlocking { SpotifyApi.importLink(arg) }
+                            System.err.println("GW spimport ${got.name}: ${got.tracks.size} songs, ${got.tracks.mapNotNull { it.thumb }.distinct().size} pictures, ${got.tracks.count { it.thumb == got.cover }} with the playlist cover")
+                        }
                         "back" -> onUi { BackDispatcher.back() }
                         "lyrics" -> onUi { PlayerView.lyrics = arg == "on" }
                         "vis" -> onUi { Settings.updateVisualizer(VisualizerStyle.valueOf(arg)) }

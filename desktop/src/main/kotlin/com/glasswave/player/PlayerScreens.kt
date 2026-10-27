@@ -425,7 +425,7 @@ private fun MinimalStyle(ui: PlayerUi) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 GText(ui.ps.title, 28, Color.White, FontWeight.Bold, 2)
-                GText(ui.ps.artist, 18, Color.White.copy(alpha = 0.6f), maxLines = 1)
+                ArtistName(ui.ps, 18, 0.6f)
             }
             Spacer(Modifier.width(10.dp))
             LikeButton(ui.ps, CoverTint.accent)
@@ -435,6 +435,16 @@ private fun MinimalStyle(ui: PlayerUi) {
         Spacer(Modifier.weight(1f))
         Details(ui, showTitle = false)
     }
+}
+
+/** The artist under the song's title. Tap it to open the artist's page. */
+@Composable
+private fun ArtistName(ps: PlayerState, size: Int, alpha: Float) {
+    val canTap = !PcMusic.isPcSong(ps.currentTrack()?.url ?: "")
+    GText(
+        ps.artist, size, Color.White.copy(alpha = alpha), maxLines = 1,
+        modifier = Modifier.pressable(0.97f, enabled = canTap) { ps.currentTrack()?.let { Menus.artistOf = it } },
+    )
 }
 
 /** Title, progress bar, controls and the bottom row. Shared by every style. */
@@ -448,7 +458,7 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     GText(ps.title, if (compact) 20 else 22, Color.White, FontWeight.Bold, 1)
-                    GText(ps.artist, if (compact) 16 else 18, Color.White.copy(alpha = 0.62f), maxLines = 1)
+                    ArtistName(ps, if (compact) 16 else 18, 0.62f)
                 }
                 Spacer(Modifier.width(10.dp))
                 LikeButton(ps, CoverTint.accent)

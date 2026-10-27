@@ -99,6 +99,41 @@ object History {
         }.start()
     }
 
+    /**
+     * Older versions gave every song imported from a Spotify playlist link the playlist's cover.
+     * This gives each one its own picture, from the song YouTube Music matches it to. Runs once
+     * (again next launch if the internet didn't answer). Call it off the main thread.
+     */
+    fun fixCoversOnce() {
+        if (prefs.getBoolean("covers_v1", false)) return
+        fixCoversNow()
+    }
+
+    /** The work behind [fixCoversOnce]. */
+    fun fixCoversNow() {
+        val pics = HashMap<String, String>()
+        var failed = 0
+        for ((id, songs) in Library.songsWithPlaylistCover()) {
+            // A few at a time, so a long playlist doesn't take minutes.
+            val got = java.util.concurrent.ConcurrentHashMap<String, String>()
+            val pool = java.util.concurrent.Executors.newFixedThreadPool(6)
+            songs.map { t ->
+                pool.submit {
+                    runCatching { YtRepo.videoIdFor(t.url)?.let { YtMusicApi.trackInfo(it)?.thumb } }.getOrNull()?.let { got[t.url] = it }
+                }
+            }.forEach { runCatching { it.get() } }
+            pool.shutdown()
+            android.util.Log.i("Glasswave", "Gave ${got.size} of ${songs.size} imported songs their own pictures")
+            if (got.isEmpty()) failed++ else Library.setThumbs(id, got)
+            pics += got
+        }
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            for (i in tracks.indices) pics[tracks[i].url]?.let { tracks[i] = tracks[i].copy(thumb = it) }
+            if (pics.isNotEmpty()) save()
+            if (failed == 0) prefs.edit { putBoolean("covers_v1", true) }
+        }
+    }
+
     private fun save() {
         val arr = JSONArray()
         tracks.forEach {

@@ -113,6 +113,8 @@ object Menus {
 
     fun openSong(t: Track, playlistId: String? = null) { song = SongTarget(t, playlistId) }
     fun closeSong() { song = null }
+    /** A song whose artist page should open (tapping the artist's name in the full player). */
+    var artistOf by mutableStateOf<Track?>(null)
     fun openPlaylist(p: PlaylistInfo) { playlist = p }
     fun closePlaylist() { playlist = null }
     fun askName(r: NameRequest) { naming = r }
@@ -153,6 +155,19 @@ object Menus {
 @Composable
 fun BoxScope.MenuLayer(ps: PlayerState, backdrop: Backdrop, open: (MusicItem) -> Unit) {
     val sheetOpen = Menus.song != null || Menus.playlist != null
+    // The full player's artist name: find the artist and open their page.
+    Menus.artistOf?.let { t ->
+        LaunchedEffect(t) {
+            val item = try {
+                val id = withContext(Dispatchers.IO) { YtRepo.videoIdFor(t.url) }
+                id?.let { YtMusicApi.songLinks(it) }?.artists?.firstOrNull()
+            } catch (e: Exception) {
+                null
+            }
+            Menus.artistOf = null
+            if (item == null) Menus.say("Couldn't find the artist") else open(item)
+        }
+    }
     if (desktopLayout()) {
         // PC: a small menu right where you clicked, like Spotify. The bottom stays for the player.
         AnimatedVisibility(sheetOpen, enter = fadeIn(tween(90)), exit = fadeOut(tween(90))) {

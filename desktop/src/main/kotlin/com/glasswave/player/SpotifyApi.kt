@@ -10,6 +10,11 @@ import java.net.SocketTimeoutException
 import java.security.MessageDigest
 import java.security.SecureRandom
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.Request
@@ -296,18 +301,47 @@ object SpotifyApi {
         val data = JSONObject(html.substring(jsonStart, jsonEnd))
         val entity = findObject(data, "entity")
         val name = entity?.optString("name")?.ifEmpty { null } ?: entity?.optString("title")?.ifEmpty { null } ?: "Spotify playlist"
+        // Playlists keep their picture under "sources"; albums under "visualIdentity" (biggest one wins).
         val cover = entity?.let { findArray(it, "sources") }?.optJSONObject(0)?.optString("url")?.ifEmpty { null }
+            ?: entity?.optJSONObject("visualIdentity")?.optJSONArray("image")?.let { imgs ->
+                (0 until imgs.length()).mapNotNull { imgs.optJSONObject(it) }.maxByOrNull { it.optInt("maxWidth") }?.optString("url")?.ifEmpty { null }
+            }
         val list = findArray(data, "trackList") ?: throw java.io.IOException("No songs found")
-        val tracks = (0 until list.length()).mapNotNull { i ->
-            val t = list.optJSONObject(i) ?: return@mapNotNull null
-            val title = t.optString("title").ifEmpty { return@mapNotNull null }
+        val rows = (0 until list.length()).mapNotNull { list.optJSONObject(it) }.filter { it.optString("title").isNotEmpty() }
+        // An album's songs all have the album's cover. A playlist's page leaves out each song's
+        // picture, so each one is looked up, instead of every song getting the playlist's cover.
+        val arts = if (type == "album") null else songArt(rows.map { it.optString("uri") })
+        val tracks = rows.mapIndexed { i, t ->
+            val title = t.optString("title")
             val artist = t.optString("subtitle").replace(" ", " ")
             val seconds = t.optLong("duration") / 1000
-            Track(matchUrl(title, artist, seconds), title, artist, seconds, cover)
+            Track(matchUrl(title, artist, seconds), title, artist, seconds, if (arts == null) cover else arts[i])
         }
         if (tracks.isEmpty()) throw java.io.IOException("No songs found")
         // Spotify's public page lists at most 100 songs.
         Imported(name, cover, tracks, cut = type == "playlist" && list.length() >= 100)
+    }
+
+    /** Each song's own picture, from Spotify's public link preview, 8 at a time (null where it didn't answer). */
+    private suspend fun songArt(uris: List<String>): List<String?> = coroutineScope {
+        val gate = Semaphore(8)
+        uris.map { uri ->
+            async(Dispatchers.IO) {
+                if (!uri.startsWith("spotify:track:")) return@async null
+                gate.withPermit {
+                    runCatching {
+                        val req = Request.Builder()
+                            .url("https://open.spotify.com/oembed?url=$uri")
+                            .header("User-Agent", YtDownloader.USER_AGENT)
+                            .build()
+                        YtRepo.http.newCall(req).execute().use { r ->
+                            if (!r.isSuccessful) null
+                            else JSONObject(r.body?.string() ?: "").optString("thumbnail_url").takeIf { it.startsWith("http") }
+                        }
+                    }.getOrNull()
+                }
+            }
+        }.awaitAll()
     }
 
     private fun findObject(node: Any?, key: String): JSONObject? {
