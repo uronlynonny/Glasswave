@@ -129,6 +129,27 @@ object MemScript {
                             val hits = kotlinx.coroutines.runBlocking { YtRepo.search(arg) }
                             onUi { ps.playList(hits.take(1), 0) }
                         }
+                        // size w h: resizes the window (in pixels), e.g. to phone size to see the phone layout.
+                        "size" -> onUi {
+                            val (w, h) = arg.split(" ").map { it.toInt() }
+                            java.awt.Window.getWindows().first { it is java.awt.Frame && it.isDisplayable }.apply { minimumSize = java.awt.Dimension(300, 400); setSize(w, h) }
+                        }
+                        // stats: opens your listening stats.
+                        "stats" -> onUi { vm.open(Route.Stats) }
+                        // pcfolder path: adds a music folder on this PC. pcplay title: plays one of its songs.
+                        "pcfolder" -> onUi { PcMusic.addFolder(File(arg)) }
+                        "pcplay" -> onUi {
+                            val all = PcMusic.songs.map { it.track }
+                            val i = all.indexOfFirst { it.title.equals(arg, true) }
+                            if (i >= 0) ps.playList(all, i) else System.err.println("GW pcplay: no song called $arg (${all.size} songs)")
+                        }
+                        // wheel n: scrolls the mouse wheel n notches over the middle of the window.
+                        "wheel" -> {
+                            val w = java.awt.Window.getWindows().first { it is java.awt.Frame && it.isDisplayable }
+                            val r = java.awt.Robot()
+                            r.mouseMove(w.x + w.width / 2, w.y + w.height / 2)
+                            r.mouseWheel(arg.toInt())
+                        }
                         "full" -> onUi { PlayerView.openFull = true }
                         // artisttap: like tapping the artist's name in the full player.
                         "artisttap" -> onUi { ps.currentTrack()?.let { Menus.artistOf = it } }

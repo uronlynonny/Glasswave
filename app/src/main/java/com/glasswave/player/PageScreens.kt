@@ -226,11 +226,11 @@ fun StatsPage(c: ScreenCtx) {
                         val a = d.topArtists[i]
                         Column(Modifier.width(104.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Box {
-                                Cover(a.thumb, Modifier.size(104.dp), 0.dp, circle = true)
+                                Cover(artistPhoto(a.name, a.thumb), Modifier.size(104.dp), 0.dp, circle = true)
                                 Box(
-                                    Modifier.align(Alignment.BottomStart).size(30.dp).clip(CircleShape).background(Color(0xE6000000)),
+                                    Modifier.align(Alignment.BottomStart).size(24.dp).clip(CircleShape).background(Color(0xCC000000)),
                                     contentAlignment = Alignment.Center,
-                                ) { GText("${i + 1}", 13, accent, FontWeight.Bold) }
+                                ) { GText("${i + 1}", 11, accent, FontWeight.Medium) }
                             }
                             Spacer(Modifier.height(8.dp))
                             GText(a.name, 14, weight = FontWeight.SemiBold, maxLines = 1)
@@ -246,9 +246,9 @@ fun StatsPage(c: ScreenCtx) {
         val songs = top5.map { it.track }
         itemsIndexed(top5, key = { i, r -> "top$i|${r.track.url}" }) { i, r ->
             Row(Modifier.padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                GText("${i + 1}", 16, if (i < 3) accent else Faint, FontWeight.Bold, modifier = Modifier.width(30.dp))
+                GText("${i + 1}", 14, if (i < 3) accent else Faint, FontWeight.Medium, modifier = Modifier.width(26.dp))
                 Box(Modifier.weight(1f)) { TrackRow(r.track, r.track.url == c.ps.currentId, c.ps.playing) { c.ps.playList(songs, i) } }
-                GText("${r.plays}×", 12, Faint, modifier = Modifier.padding(end = 6.dp))
+                GText("${r.plays} plays", 12, Faint, modifier = Modifier.padding(end = 6.dp))
             }
         }
         // Listening history, day by day

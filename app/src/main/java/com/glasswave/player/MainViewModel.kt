@@ -24,6 +24,33 @@ object GenreArt {
     fun save(title: String, url: String) { prefs?.edit()?.putString(title, url)?.apply() }
 }
 
+/** Artists' own photos (for Top artists), looked up on YouTube Music once and remembered. */
+object ArtistArt {
+    private var prefs: android.content.SharedPreferences? = null
+    fun init(context: android.content.Context) { prefs = context.getSharedPreferences("artist_art", android.content.Context.MODE_PRIVATE) }
+    /** The remembered photo, or null if it hasn't been looked up (or there wasn't one). */
+    fun cached(name: String): String? = prefs?.getString(name.lowercase(), null)?.ifEmpty { null }
+    suspend fun photo(name: String): String? {
+        prefs?.getString(name.lowercase(), null)?.let { return it.ifEmpty { null } }
+        val found = try {
+            val hits = YtMusicApi.search(name, YtMusicApi.Filter.ARTISTS).sections.flatMap { it.items }.filterIsInstance<ArtistItem>()
+            (hits.firstOrNull { it.title.equals(name, true) } ?: hits.firstOrNull())?.thumb
+                ?.replace(Regex("=w\\d+-h\\d+"), "=w300-h300")
+        } catch (e: Exception) {
+            return null // offline: try again next time
+        }
+        prefs?.edit()?.putString(name.lowercase(), found ?: "")?.apply()
+        return found
+    }
+}
+
+/** An artist's photo for a list, falling back to [fallback] (a song cover) when there isn't one. */
+@androidx.compose.runtime.Composable
+fun artistPhoto(name: String, fallback: String?): String? {
+    val photo by androidx.compose.runtime.produceState(ArtistArt.cached(name), name) { value = ArtistArt.photo(name) ?: fallback }
+    return photo
+}
+
 enum class Tab(val label: String) { HOME("Home"), SEARCH("Search"), LIBRARY("Library"), SETTINGS("Settings") }
 
 /** A page opened on top of a tab. */

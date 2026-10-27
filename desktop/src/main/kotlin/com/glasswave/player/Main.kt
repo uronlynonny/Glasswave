@@ -242,6 +242,7 @@ internal fun startUp() {
     Downloads.init(ctx)
     NotInterested.init(ctx)
     GenreArt.init(ctx)
+    ArtistArt.init(ctx)
     LyricsRepo.init(ctx)
     Loudness.init(ctx)
     GlassTier.init(ctx)
@@ -277,6 +278,8 @@ internal fun startUp() {
 
 /** 1280 × 840, or less if the screen's free area (without the taskbar) is smaller. */
 private fun startSize(): DpSize {
+    // For screenshots: -Dgw.size=420x860 starts the window at that size.
+    System.getProperty("gw.size")?.split("x")?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 }?.let { return DpSize(it[0].dp, it[1].dp) }
     val area = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
     return DpSize(minOf(1280, area.width - 40).dp, minOf(840, area.height - 40).dp)
 }
