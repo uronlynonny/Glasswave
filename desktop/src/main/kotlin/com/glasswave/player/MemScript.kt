@@ -137,7 +137,13 @@ object MemScript {
                         // stats: opens your listening stats.
                         "stats" -> onUi { vm.open(Route.Stats) }
                         // pcfolder path: adds a music folder on this PC. pcplay title: plays one of its songs.
-                        "pcfolder" -> onUi { PcMusic.addFolder(File(arg)) }
+                        "pcfolder" -> {
+                            onUi { PcMusic.addFolder(File(arg)); PcMusic.refresh() }
+                            // Wait (up to 30 s) for the songs to be found.
+                            var n = 0
+                            while (PcMusic.songs.isEmpty() && n++ < 60) Thread.sleep(500)
+                            System.err.println("GW pcfolder: ${PcMusic.songs.size} songs")
+                        }
                         "pcplay" -> onUi {
                             val all = PcMusic.songs.map { it.track }
                             val i = all.indexOfFirst { it.title.equals(arg, true) }
@@ -149,6 +155,56 @@ object MemScript {
                             val r = java.awt.Robot()
                             r.mouseMove(w.x + w.width / 2, w.y + w.height / 2)
                             r.mouseWheel(arg.toInt())
+                        }
+                        // seedlyrics title|file: gives a song on this PC lyrics from a saved-lyrics file (for recordings).
+                        "seedlyrics" -> {
+                            val (title, path) = arg.split("|")
+                            val t = PcMusic.songs.map { it.track }.firstOrNull { it.title.equals(title, true) }
+                            if (t == null) System.err.println("GW seedlyrics: no song called $title") else {
+                                val sha = java.security.MessageDigest.getInstance("SHA-1").digest(t.url.toByteArray()).joinToString("") { "%02x".format(it) }
+                                File(File(android.content.AppDirs.data, "lyrics").apply { mkdirs() }, "$sha.json").writeText(File(path).readText())
+                            }
+                        }
+                        // rec seconds file: records the window (as it shows on screen, mouse included unless "nomouse") with ffmpeg.
+                        "rec" -> {
+                            val parts = arg.split(" ")
+                            val w = java.awt.Window.getWindows().first { it is java.awt.Frame && it.isDisplayable }
+                            onUi { w.isAlwaysOnTop = true; w.toFront() }
+                            Thread.sleep(400)
+                            val at = w.locationOnScreen
+                            val ff = System.getProperty("gw.ffmpeg") ?: "ffmpeg"
+                            ProcessBuilder(
+                                ff, "-y", "-loglevel", "error", "-f", "gdigrab", "-framerate", "30",
+                                "-offset_x", "${at.x}", "-offset_y", "${at.y}", "-video_size", "${w.width / 2 * 2}x${w.height / 2 * 2}",
+                                "-draw_mouse", if ("nomouse" in parts) "0" else "1", "-t", parts[0], "-i", "desktop",
+                                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "16", parts[1],
+                            ).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.INHERIT).start()
+                        }
+                        // glide x y ms: moves the mouse smoothly to a spot in the window. click: clicks there.
+                        "glide" -> {
+                            val (x, y, ms) = arg.split(" ").map { it.toInt() }
+                            val w = java.awt.Window.getWindows().first { it is java.awt.Frame && it.isDisplayable }
+                            val at = w.locationOnScreen
+                            val r = java.awt.Robot()
+                            val from = java.awt.MouseInfo.getPointerInfo().location
+                            val steps = maxOf(1, ms / 16)
+                            for (k in 1..steps) {
+                                val f = k / steps.toDouble()
+                                val e = if (f < .5) 4 * f * f * f else 1 - Math.pow(-2 * f + 2, 3.0) / 2
+                                r.mouseMove((from.x + (at.x + x - from.x) * e).toInt(), (from.y + (at.y + y - from.y) * e).toInt())
+                                Thread.sleep(16)
+                            }
+                        }
+                        "click" -> {
+                            val r = java.awt.Robot()
+                            r.mousePress(java.awt.event.InputEvent.BUTTON1_DOWN_MASK); Thread.sleep(70); r.mouseRelease(java.awt.event.InputEvent.BUTTON1_DOWN_MASK)
+                        }
+                        // mouse x y: puts the mouse at a spot in the window straight away.
+                        "mouse" -> {
+                            val (x, y) = arg.split(" ").map { it.toInt() }
+                            val w = java.awt.Window.getWindows().first { it is java.awt.Frame && it.isDisplayable }
+                            val at = w.locationOnScreen
+                            java.awt.Robot().mouseMove(at.x + x, at.y + y)
                         }
                         "full" -> onUi { PlayerView.openFull = true }
                         // artisttap: like tapping the artist's name in the full player.
