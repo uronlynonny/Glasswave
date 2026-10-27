@@ -13,6 +13,33 @@ import java.util.concurrent.Executors
 /** Songs Autoplay added to the queue (by address), so they can be taken out again when it's turned off. */
 object Autoplay {
     val added: MutableSet<String> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
+
+    /**
+     * Picks what Autoplay adds from YouTube's similar songs. YouTube starts every such list with the
+     * same few popular songs, so taken in its order one song came back after almost everything you
+     * played. This leaves out songs you've heard lately (unless that leaves too few), mixes up the
+     * order, and keeps one artist from playing twice in a row. [taken]: songs already in the queue.
+     */
+    fun pick(radio: List<Track>, taken: MutableSet<String>, playingArtist: String): List<Track> {
+        val heard = History.tracks.take(50).mapTo(HashSet()) { YtRepo.songKey(it.title, it.artist) }
+        val all = radio.filter { taken.add(YtRepo.songKey(it.title, it.artist)) }
+        val unheard = all.filter { YtRepo.songKey(it.title, it.artist) !in heard }
+        val pool = (if (unheard.size >= 6) unheard else all).take(25).shuffled().toMutableList()
+        val out = mutableListOf<Track>()
+        var last = playingArtist
+        while (pool.isNotEmpty()) {
+            val i = pool.indexOfFirst { !sameArtist(it.artist, last) }.takeIf { it >= 0 } ?: 0
+            val t = pool.removeAt(i)
+            out += t
+            last = t.artist
+        }
+        return out
+    }
+
+    private fun mainArtist(a: String) =
+        a.lowercase().split(",", "&", " x ", " feat", " ft.", " and ").first().trim()
+
+    private fun sameArtist(a: String, b: String) = mainArtist(a).isNotEmpty() && mainArtist(a) == mainArtist(b)
 }
 
 /** Songs you queued yourself ("Play next", "Add to queue"). Automix never reorders these. */
@@ -667,10 +694,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
             main.post {
                 val queued = order.map { items[it].url }.toSet()
                 val keys = order.mapTo(HashSet()) { YtRepo.songKey(items[it].title, items[it].artist) }
-                val fresh = tracks
-                    .filter { it.url !in queued && keys.add(YtRepo.songKey(it.title, it.artist)) }
-                    .take(25)
-                    .let { if (Settings.automix) it.shuffled() else it }
+                val fresh = Autoplay.pick(tracks.filter { it.url !in queued }, keys, items.getOrNull(cur)?.artist ?: "")
                 if (fresh.isNotEmpty() && Settings.autoplay) {
                     Autoplay.added += fresh.map { it.url }
                     appendTracks(fresh)

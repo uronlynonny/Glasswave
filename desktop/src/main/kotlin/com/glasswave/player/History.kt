@@ -31,7 +31,12 @@ object History {
         }
     }
 
+    /** How many songs have been played since the app opened (Home uses it to know when to refresh). */
+    var played = 0
+        private set
+
     fun add(t: Track) {
+        played++
         if (!Settings.keepHistory || t.title.isBlank()) return
         tracks.removeAll { it.url == t.url }
         tracks.add(0, t)

@@ -57,6 +57,7 @@ class MainViewModel : ViewModel() {
 
     fun selectTab(t: Tab) {
         if (t == tab && stack.isNotEmpty()) stack.clear()
+        if (t == Tab.HOME && tab != Tab.HOME) refreshHomeIfStale()
         tab = t
         stack.clear()
     }
@@ -99,9 +100,24 @@ class MainViewModel : ViewModel() {
     }
 
     private var homeJob: Job? = null
+    private var homeAt = 0L
+    private var homePlayed = 0
+
+    /**
+     * Home's own shelves ("Picked for you", "Because you like"...) are made from what you play, so
+     * after a few songs (or half an hour) they're made again, quietly, the next time you come back
+     * to Home or close the player.
+     */
+    fun refreshHomeIfStale() {
+        if (home !is Load.Done || refreshing || homeChip != null) return
+        val stale = History.played - homePlayed >= 3 || System.currentTimeMillis() - homeAt > 30 * 60_000L
+        if (stale) loadHome(keep = true)
+    }
 
     fun loadHome(keep: Boolean = false) {
         if (!keep) home = Load.Loading
+        homeAt = System.currentTimeMillis()
+        homePlayed = History.played
         homeJob?.cancel()
         homeJob = viewModelScope.launch {
             val old = home

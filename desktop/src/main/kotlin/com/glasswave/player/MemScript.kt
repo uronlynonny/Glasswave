@@ -122,6 +122,13 @@ object MemScript {
                             onUi { ps.playList(hits.take(10), 0) }
                         }
                         "next" -> onUi { ps.next() }
+                        // upnext: what's coming up after the song playing (Autoplay's picks).
+                        "upnext" -> onUi { System.err.println("GW upnext after '${ps.title}' by ${ps.artist}: " + ps.upcoming(8).joinToString(" | ") { "${it.track.title} - ${it.track.artist}" }) }
+                        // tap: plays one song from a search on its own, like tapping it on Home (Autoplay follows).
+                        "tap" -> {
+                            val hits = kotlinx.coroutines.runBlocking { YtRepo.search(arg) }
+                            onUi { ps.playList(hits.take(1), 0) }
+                        }
                         "full" -> onUi { PlayerView.openFull = true }
                         "back" -> onUi { BackDispatcher.back() }
                         "lyrics" -> onUi { PlayerView.lyrics = arg == "on" }
@@ -207,7 +214,7 @@ object MemScript {
                             var t = 0.0
                             while (t < total) {
                                 Thread.sleep((every * 1000).toLong()); t += every
-                                System.err.println(line("${t.toInt()}s '${ps.title}' playing=${ps.playing}"))
+                                System.err.println(line("${t.toInt()}s '${ps.title}' playing=${ps.playing} gaps=${AudioDeck.underruns}"))
                             }
                         }
                         "quit" -> { onUi { ps.release() }; System.exit(0) }

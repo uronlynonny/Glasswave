@@ -234,8 +234,8 @@ internal fun startUp() {
     val ctx = AppContext
     Settings.init(ctx)
     Sound.init(ctx)
-    // Sound waits about 0.6 s at the speaker (see AudioDeck), so the visualizer shows readings from then.
-    Spectrum.latencyMs = 620
+    // Sound waits about 1.2 s at the speaker (see AudioDeck), so the visualizer shows readings from then.
+    Spectrum.latencyMs = 1220
     Accounts.init(ctx)
     Library.init(ctx)
     History.init(ctx)

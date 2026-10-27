@@ -396,8 +396,9 @@ private fun WideStyle(ui: PlayerUi, panel: Boolean) {
                         .clip(RoundedCornerShape(corner)),
                 ) { CoverArt(ui.ps, Modifier.fillMaxSize()) }
             }
-            Spacer(Modifier.width(36.dp))
-            Box(Modifier.weight(0.55f), contentAlignment = Alignment.CenterStart) {
+            Spacer(Modifier.width(56.dp))
+            // The controls sit in the middle of their half, not pressed up against the cover.
+            Box(Modifier.weight(0.55f), contentAlignment = Alignment.Center) {
                 if (panel) {
                     Column(
                         Modifier

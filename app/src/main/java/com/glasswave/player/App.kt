@@ -70,6 +70,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, openEqualizer: () -> Unit) {
     var full by remember { mutableStateOf(false) }
+    // Back from the player: Home catches up with what you've been playing.
+    LaunchedEffect(full) { if (!full && vm.tab == Tab.HOME && vm.stack.isEmpty()) vm.refreshHomeIfStale() }
     BackHandler(enabled = full) { full = false }
     BackHandler(enabled = !full && vm.showYtLogin) { vm.showYtLogin = false }
     BackHandler(enabled = !full && !vm.showYtLogin && vm.stack.isNotEmpty()) { vm.back() }

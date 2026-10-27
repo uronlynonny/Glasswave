@@ -26,6 +26,8 @@ sealed interface AudioSource {
  * request starting at that byte. Nothing is downloaded before it's needed.
  */
 internal class HttpSeekStream(private val url: String) : InputStream() {
+    /** How long the last request to the server took to answer (for spotting slow connections). */
+    @Volatile var lastOpenMs = 0L
     private var pos = 0L
     private var body: InputStream? = null
     private var response: Response? = null
@@ -56,7 +58,9 @@ internal class HttpSeekStream(private val url: String) : InputStream() {
             .header("Range", if (end == Long.MAX_VALUE) "bytes=$at-" else "bytes=$at-${end - 1}")
             .build()
         pieceEnd = end
+        val asked = System.nanoTime()
         val r = YtRepo.http.newCall(req).execute()
+        lastOpenMs = (System.nanoTime() - asked) / 1_000_000
         if (!r.isSuccessful) {
             r.close()
             throw HttpStatus(r.code)
@@ -129,6 +133,9 @@ internal class HttpSeekStream(private val url: String) : InputStream() {
     }
     override fun available() = 0
     override fun close() = closeBody()
+
+    /** Moves where the next read starts (used by [AheadStream]'s download). */
+    fun seek(at: Long) { pos = at }
 }
 
 private const val PIECE = 2L * 1024 * 1024
@@ -233,6 +240,9 @@ class AudioDeck(private val name: String) {
 
     private fun run(gen: Int, source: AudioSource, startMs: Long) {
         var grabber: FFmpegFrameGrabber? = null
+        var net: AheadStream? = null
+        var lastReadMs = 0L
+        var lastWriteAt = 0L
         var out: SourceDataLine? = null
         // Speed and pitch go through FFmpeg's own tempo filter (only while they're not normal).
         var chain: FFmpegFrameFilter? = null
@@ -244,7 +254,8 @@ class AudioDeck(private val name: String) {
         try {
             grabber = when (source) {
                 is AudioSource.LocalFile -> FFmpegFrameGrabber(source.file)
-                is AudioSource.Remote -> FFmpegFrameGrabber(HttpSeekStream(source.url), Int.MAX_VALUE - 8)
+                // Downloaded ahead of the music, so a slow moment online isn't a gap in the sound.
+                is AudioSource.Remote -> FFmpegFrameGrabber(AheadStream(source.url).also { net = it }, Int.MAX_VALUE - 8)
             }
             // Decode at full precision; everything is worked on in floating point and only turned
             // into 16-bit (what Windows' sound output takes from Java) at the very end.
@@ -341,7 +352,14 @@ class AudioDeck(private val name: String) {
                 if (seekUs >= 0) return false // a jump came in while decoding: drop this piece
                 // Automated checks only: pretend the connection dropped once, 5 s in.
                 if (testDrop && playedUs > 5_000_000) { testDrop = false; throw IOException("Test: connection dropped") }
+                // The speaker ran out of sound before this piece arrived: a gap you can hear.
+                if (l.isRunning && playedUs > 2_000_000 && l.available() >= l.bufferSize - BYTES_PER_MS * 5) {
+                    underruns++
+                    val waited = if (lastWriteAt > 0) (System.nanoTime() - lastWriteAt) / 1_000_000 else 0
+                    android.util.Log.w("Glasswave", "Sound ran out: ${waited} ms since the last piece (decoding took ${lastReadMs} ms)" + (net?.let { ", server answered in ${it.lastOpenMs} ms" } ?: ""))
+                }
                 l.write(bytes, 0, n * 2)
+                lastWriteAt = System.nanoTime()
                 val start = if (mediaUs > 0) mediaUs else playedUs
                 playedUs = start + ((n / 2) * 1_000_000L / RATE * stretch).toLong()
                 playSpeed = stretch
@@ -371,7 +389,9 @@ class AudioDeck(private val name: String) {
                     if (want != (1f to 1f)) chain = tempoFilter(want.first, want.second)
                 }
                 if (!l.isRunning) l.start()
+                val readAt = System.nanoTime()
                 val frame = grabber.grabSamples()
+                lastReadMs = (System.nanoTime() - readAt) / 1_000_000
                 if (frame == null) {
                     // The end of the song: let the last bit play out, then say so.
                     if (seekUs >= 0) continue
@@ -408,6 +428,7 @@ class AudioDeck(private val name: String) {
             if (line === out) line = null
             out?.let { runCatching { it.stop(); it.close() } }
             runCatching { grabber?.stop(); grabber?.release() }
+            runCatching { net?.close() }
         }
     }
 
@@ -442,15 +463,19 @@ class AudioDeck(private val name: String) {
                 start()
             }
         }.onFailure { android.util.Log.w("Glasswave", "Couldn't set up speed and pitch", it) }.getOrNull()
+        /** How many times the sound ran out since the app started (each one is a skip you can hear). */
+        @Volatile var underruns = 0
         @Volatile private var testDrop = System.getProperty("gw.testDrop") != null
         /** Where the limiter holds peaks: just under full scale (about -0.3 dB). */
         private const val CEILING = 0.966f
         private const val BYTES_PER_MS = RATE * 4 / 1000
         /**
-         * About 0.6 s of sound queued up ahead: enough to ride out a busy moment (like the window
-         * coming back from the taskbar) without a skip, while pausing and seeking stay instant.
+         * About 1.2 s of sound queued up ahead: enough to ride out a busy moment (a game loading,
+         * Windows tidying memory, the window coming back from the taskbar) without a gap, while
+         * pausing and seeking stay instant (they act on the speaker directly). It used to be 0.6 s,
+         * which was too little on busy PCs.
          */
-        private const val BUFFER_BYTES = RATE * 4 * 3 / 5
+        private const val BUFFER_BYTES = RATE * 4 * 6 / 5
         private val FORMAT = AudioFormat(RATE.toFloat(), 16, 2, true, false)
 
         init {
