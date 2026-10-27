@@ -38,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AccountCircle
@@ -179,6 +180,28 @@ private fun NavRow(title: String, detail: String, icon: ImageVector, color: Colo
     }
 }
 
+/** Puts the colours back as they came: cover colours on, normal colour strength and glass. */
+@Composable
+private fun ResetColours() {
+    val same = Settings.accentColor == null && Settings.colorStrength == 1f && Settings.glassOpacity == 1f
+    Row(
+        Modifier.fillMaxWidth().pressable(0.98f) {
+            Settings.updateAccentColor(null)
+            Settings.updateColorStrength(1f)
+            Settings.updateGlassOpacity(1f)
+            Menus.say("Colours are back to default")
+        }.padding(horizontal = 18.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            GText("Reset to default colours", 16, if (same) Faint else Color.White, FontWeight.Medium)
+            GText("Cover colours on, normal colour strength and glass", 13, Dim)
+        }
+        Spacer(Modifier.width(12.dp))
+        Ico(Icons.Rounded.RestartAlt, if (same) Faint else Color.White, 22.dp)
+    }
+}
+
 @Composable
 private fun Divider() {
     Box(Modifier.padding(start = 18.dp).fillMaxWidth().height(0.5.dp).background(Color.White.copy(alpha = 0.12f)))
@@ -258,6 +281,8 @@ private fun Look() {
             Settings.updateAccentColor(if (on) null else Settings.lastOwnAccent() ?: AccentSwatches[0])
         }
         if (Settings.accentColor != null) AccentPicker()
+        Divider()
+        ResetColours()
     }
     Note("On: the background, buttons, lyrics and visualizer change with each song's cover. Off: the whole app stays one plain colour you pick (lime is Glasswave's own look).")
     Group("Wallpaper") {
