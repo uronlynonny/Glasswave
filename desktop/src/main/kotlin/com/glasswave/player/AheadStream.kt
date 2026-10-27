@@ -159,7 +159,8 @@ internal class AheadStream(url: String) : InputStream() {
 
     companion object {
         /** How far ahead to download: 8 MB, about 7 minutes of music at the best quality. */
-        private const val AHEAD = 8L * 1024 * 1024
+        // Enough for a whole song, so a dropped connection doesn't cut it short.
+        private const val AHEAD = 24L * 1024 * 1024
         /** A jump this close past what's downloaded just waits for the download to get there. */
         private const val JUMP = 512L * 1024
 

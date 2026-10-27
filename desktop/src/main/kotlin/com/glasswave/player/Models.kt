@@ -35,7 +35,8 @@ sealed interface MusicItem {
 }
 
 /** [explicit]: YouTube Music marks it Explicit (the uncensored version). */
-data class SongItem(val track: Track, override val subtitle: String, val explicit: Boolean = false) : MusicItem {
+/** [plays]: how many times it's been played or watched on YouTube (0 when not shown). */
+data class SongItem(val track: Track, override val subtitle: String, val explicit: Boolean = false, val plays: Long = 0) : MusicItem {
     override val title get() = track.title
     override val thumb get() = track.thumb
 }

@@ -200,6 +200,7 @@ fun BoxScope.MenuLayer(ps: PlayerState, backdrop: Backdrop, open: (MusicItem) ->
             }
         }
         Menus.naming?.let { NameDialog(it, backdrop) }
+        ShareCardLayer()
         Toast(Modifier.align(Alignment.TopCenter).statusBarsPadding())
         return
     }
@@ -226,6 +227,7 @@ fun BoxScope.MenuLayer(ps: PlayerState, backdrop: Backdrop, open: (MusicItem) ->
         }
     }
     Menus.naming?.let { NameDialog(it, backdrop) }
+    ShareCardLayer()
     Toast(Modifier.align(Alignment.BottomCenter))
 }
 
@@ -370,14 +372,8 @@ private fun SongMenuBody(target: Menus.SongTarget, ps: PlayerState, open: (Music
                             Menus.closeSong()
                         }
                         MenuRow(Icons.Rounded.Share, "Share") {
-                            val link = if (t.url.startsWith("gwmatch") || pc) {
-                                "https://music.youtube.com/search?q=" + android.net.Uri.encode("${t.title} ${t.artist}")
-                            } else t.url
-                            // On desktop, sharing copies the link to paste anywhere.
-                            java.awt.Toolkit.getDefaultToolkit().systemClipboard
-                                .setContents(java.awt.datatransfer.StringSelection("${t.title} · ${t.artist}\n$link"), null)
                             Menus.closeSong()
-                            Menus.say("Link copied")
+                            ShareCard.track = t
                         }
                     }
                     SongPage.PICK -> {

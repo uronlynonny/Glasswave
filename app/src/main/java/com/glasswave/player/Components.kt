@@ -122,7 +122,8 @@ fun Centered(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun ErrorBox(message: String, backdrop: Backdrop, onRetry: () -> Unit) {
+fun ErrorBox(message: String, backdrop: Backdrop, onPlaySaved: (() -> Unit)? = null, onRetry: () -> Unit) {
+    if (message.startsWith("No internet")) return OfflineBox(backdrop, onPlaySaved, onRetry)
     Column(Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         GText(message, 15, Dim)
         Spacer(Modifier.height(14.dp))

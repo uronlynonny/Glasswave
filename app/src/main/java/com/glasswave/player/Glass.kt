@@ -149,6 +149,12 @@ data class CoverColors(val a: Color, val b: Color, val c: Color, val base: Color
 val Lime = Color(0xFFC6F432)
 val DefaultColors = CoverColors(Color(0xFF9FD12A), Color(0xFF24400C), Lime, Color(0xFF0A0B08))
 
+/** The whole app in one colour you picked (Settings > Look) instead of the cover's. Lime gives Glasswave's own look. */
+fun ownColors(argb: Int): CoverColors {
+    val c = Color(argb)
+    return CoverColors(lerp(c, Color.Black, 0.18f), lerp(c, Color.Black, 0.72f), c, lerp(c, Color.Black, 0.94f))
+}
+
 /**
  * Reads the main colours out of [art] (loaded tiny, so it's quick) and smoothly fades to them
  * whenever the song changes.
@@ -157,7 +163,12 @@ val DefaultColors = CoverColors(Color(0xFF9FD12A), Color(0xFF24400C), Lime, Colo
 fun rememberCoverColors(art: String?): CoverColors {
     val ctx = LocalContext.current
     val target = remember { mutableStateOf(DefaultColors) }
-    LaunchedEffect(art) {
+    val own = Settings.accentColor
+    LaunchedEffect(art, own) {
+        if (own != null) {
+            target.value = ownColors(own)
+            return@LaunchedEffect
+        }
         if (art == null) {
             target.value = DefaultColors
             CoverTint.accent = Lime
@@ -207,6 +218,8 @@ fun GlassBackground(colors: CoverColors, art: String?, modifier: Modifier = Modi
     }
     val anim by rememberDrift(40_000)
     val ctx = LocalContext.current
+    // With your own colour, the cover isn't blurred in behind either.
+    val art = if (Settings.accentColor != null) null else art
     val request = remember(art) { art?.let { ImageRequest.Builder(ctx).data(it).size(96).build() } }
     // How strong the colours are (Settings > Look).
     val k = Settings.colorStrength
@@ -274,6 +287,7 @@ fun GText(
     weight: FontWeight = FontWeight.Normal,
     maxLines: Int = Int.MAX_VALUE,
     modifier: Modifier = Modifier,
+    align: androidx.compose.ui.text.style.TextAlign = androidx.compose.ui.text.style.TextAlign.Unspecified,
 ) {
     BasicText(
         text = text,
@@ -285,6 +299,7 @@ fun GText(
             fontFamily = AppFontFamily,
             // Big bold titles sit a little tighter, like Apple's.
             letterSpacing = if (size >= 22) (-0.4).sp else 0.sp,
+            textAlign = align,
         ),
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,

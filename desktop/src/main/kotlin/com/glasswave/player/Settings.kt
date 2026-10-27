@@ -58,7 +58,7 @@ enum class VisualizerStyle(val label: String, val detail: String) {
 }
 
 enum class CacheSize(val label: String, val bytes: Long) {
-    S256("256 MB", 256L shl 20), S512("512 MB", 512L shl 20), G1("1 GB", 1L shl 30), G2("2 GB", 2L shl 30),
+    S256("256 MB", 256L shl 20), S512("512 MB", 512L shl 20), G1("1 GB", 1L shl 30), G2("2 GB", 2L shl 30), G4("4 GB", 4L shl 30),
 }
 
 /** App settings, saved on the phone. The values are Compose state so screens update right away. */
@@ -77,7 +77,7 @@ object Settings {
     var playerStyle by mutableStateOf(PlayerStyle.CARD); private set
     var buttonStyle by mutableStateOf(ButtonStyle.CLASSIC); private set
     var showModeButtons by mutableStateOf(false); private set
-    var cacheSize by mutableStateOf(CacheSize.S512); private set
+    var cacheSize by mutableStateOf(CacheSize.G1); private set
     var keepHistory by mutableStateOf(true); private set
     var coverMotion by mutableStateOf(CoverMotion.WIFI); private set
     var autoplay by mutableStateOf(true); private set
@@ -172,7 +172,7 @@ object Settings {
         playerStyle = enumPref("player_style", PlayerStyle.CARD).let { if (it == PlayerStyle.PANEL) it else PlayerStyle.CARD }
         buttonStyle = enumPref("button_style", ButtonStyle.CLASSIC)
         showModeButtons = prefs.getBoolean("mode_buttons", false)
-        cacheSize = enumPref("cache_size", CacheSize.S512)
+        cacheSize = enumPref("cache_size", CacheSize.G1)
         keepHistory = prefs.getBoolean("history", true)
         coverMotion = enumPref("cover_motion", CoverMotion.WIFI)
         autoplay = prefs.getBoolean("autoplay", true)

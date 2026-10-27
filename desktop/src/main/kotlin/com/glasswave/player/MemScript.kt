@@ -206,6 +206,9 @@ object MemScript {
                             val at = w.locationOnScreen
                             java.awt.Robot().mouseMove(at.x + x, at.y + y)
                         }
+                        // flow: starts Flow, like tapping its bar on Home. seek ms: jumps to a time in the song.
+                        "flow" -> onUi { Flow.start(ps, History.tracks.take(20)) }
+                        "seek" -> onUi { ps.seekTo(arg.toLong()) }
                         "full" -> onUi { PlayerView.openFull = true }
                         // artisttap: like tapping the artist's name in the full player.
                         "artisttap" -> onUi { ps.currentTrack()?.let { Menus.artistOf = it } }
@@ -229,6 +232,21 @@ object MemScript {
                         "settings" -> onUi { vm.openSettings(arg) }
                         "accent" -> onUi { Settings.updateAccentColor(if (arg == "song") null else arg.toLong(16).toInt()) }
                         "search" -> onUi { vm.selectTab(Tab.SEARCH); vm.onQuery(arg); vm.submitSearch() }
+                        // rank query: what the All search shows, in order, with play counts.
+                        "rank" -> {
+                            val page = kotlinx.coroutines.runBlocking { YtMusicApi.searchAll(arg, emptySet()) }
+                            for (s in page.sections) {
+                                System.err.println("GW rank [$arg] == ${s.title}")
+                                for (i in s.items.take(14)) System.err.println("GW rank [$arg]    " + when (i) {
+                                    is SongItem -> "${i.title} - ${i.track.artist} (${i.plays})"
+                                    else -> "${i::class.simpleName}: ${i.title}"
+                                })
+                            }
+                        }
+                        "offline" -> onUi { vm.homeOfflineForCheck() }
+                        // uncensor id: which version plays for that song (the explicit one when it's clean).
+                        "uncensor" -> System.err.println("GW uncensor $arg -> " + YtRepo.uncensored(ytWatchUrl(arg)))
+                        "share" -> onUi { ShareCard.track = if (arg == "off") null else ps.currentTrack() }
                         "mem" -> System.err.println(line(arg))
                         "regions" -> regions(arg)
                         // wshot name: the whole window as Windows shows it, frame and all.

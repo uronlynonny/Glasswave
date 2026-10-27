@@ -131,7 +131,7 @@ fun SearchScreen(c: ScreenCtx) {
                 }
                 sug != null -> Suggestions(c, sug)
                 r == null || r is Load.Loading -> Column { repeat(8) { SkeletonRow() } }
-                r is Load.Failed -> ErrorBox(r.message, c.bg) { vm.submitSearch() }
+                r is Load.Failed -> ErrorBox(r.message, c.bg, { c.ps.playList(Downloads.tracks.toList().shuffled(), 0) }) { vm.submitSearch() }
             }
         }
     }

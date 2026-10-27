@@ -165,7 +165,7 @@ fun HomeScreen(c: ScreenCtx) {
 
             when (val h = vm.home) {
                 is Load.Loading -> item(key = "loading") { HomeSkeleton() }
-                is Load.Failed -> item(key = "error") { ErrorBox(h.message, c.bg) { vm.loadHome() } }
+                is Load.Failed -> item(key = "error") { ErrorBox(h.message, c.bg, { c.ps.playList(Downloads.tracks.toList().shuffled(), 0) }) { vm.loadHome() } }
                 is Load.Done -> {
                     // Songs you marked "Not interested" stay off Home.
                     val sections = NotInterested.hide(h.value)

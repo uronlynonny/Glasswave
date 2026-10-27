@@ -107,6 +107,8 @@ class MainViewModel : ViewModel() {
     /* ---- Home ---- */
     var home by mutableStateOf<Load<List<Section>>>(Load.Loading)
         private set
+    /** For the test script: shows Home as it looks with no internet. */
+    internal fun homeOfflineForCheck() { home = Load.Failed("No internet connection.") }
     var homeChips by mutableStateOf<List<YtMusicApi.Chip>>(emptyList())
         private set
     var homeChip by mutableStateOf<YtMusicApi.Chip?>(null)

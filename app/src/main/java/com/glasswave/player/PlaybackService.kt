@@ -23,6 +23,7 @@ import androidx.media3.datasource.FileDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.CacheWriter
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.common.PlaybackParameters
@@ -238,6 +239,9 @@ class PlaybackService : MediaSessionService() {
 
     private var session: MediaSession? = null
     private val worker = Executors.newFixedThreadPool(2)
+    /** Saves the next songs whole, one at a time, so a bad connection doesn't stop the music. */
+    private val saver = Executors.newSingleThreadExecutor()
+    private var cacheFactory: CacheDataSource.Factory? = null
     private val main = Handler(Looper.getMainLooper())
     private val settingsListener: () -> Unit = { session?.player?.let { applySettings(it); maybeAutoplay(it); applyLevel(it) } }
     private val soundListener: () -> Unit = { session?.player?.let { applyPitch(it) } }
@@ -341,6 +345,7 @@ class PlaybackService : MediaSessionService() {
             // Same song at a different quality is stored separately.
             .setCacheKeyFactory { spec -> spec.uri.toString() + "|" + Settings.streamQuality().name }
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        cacheFactory = cached
         val sources = DataSource.Factory { LocalFirstDataSource(cached.createDataSource(), FileDataSource()) }
         mediaSources = sources
 
@@ -562,7 +567,10 @@ class PlaybackService : MediaSessionService() {
         playingSince = if (p.isPlaying) now else 0
     }
 
-    /** Looks up the next two songs' audio in the background so skipping is instant. */
+    /**
+     * Looks up the next two songs' audio in the background so skipping is instant, and saves them
+     * whole (unless saving data), so with a bad connection the music keeps going for a few songs.
+     */
     private fun prefetchAhead(p: Player) {
         var i = p.currentMediaItemIndex
         repeat(2) {
@@ -570,7 +578,13 @@ class PlaybackService : MediaSessionService() {
                 ?: C.INDEX_UNSET
             if (i == C.INDEX_UNSET || i >= p.mediaItemCount) return
             val uri = p.getMediaItemAt(i).localConfiguration?.uri ?: return
-            if (Downloads.fileFor(uri.toString()) == null) worker.execute { YtRepo.prefetch(uri) }
+            if (Downloads.fileFor(uri.toString()) == null) {
+                worker.execute { YtRepo.prefetch(uri) }
+                val f = cacheFactory
+                if (f != null && !Settings.savingData) saver.execute {
+                    runCatching { CacheWriter(f.createDataSource(), DataSpec(uri), null, null).cache() }
+                }
+            }
         }
     }
 
@@ -844,6 +858,7 @@ class PlaybackService : MediaSessionService() {
         Sound.listeners -= soundListener
         main.removeCallbacks(fader)
         worker.shutdownNow()
+        saver.shutdownNow()
         SleepTimer.cancel()
         SleepTimer.player = null
         sendBroadcast(

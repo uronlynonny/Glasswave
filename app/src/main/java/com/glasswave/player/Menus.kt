@@ -189,6 +189,7 @@ fun BoxScope.MenuLayer(ps: PlayerState, backdrop: Backdrop, open: (MusicItem) ->
         }
     }
     Menus.naming?.let { NameDialog(it, backdrop) }
+    ShareCardLayer()
     Toast(Modifier.align(Alignment.BottomCenter))
 }
 
@@ -329,12 +330,8 @@ private fun SongMenuBody(target: Menus.SongTarget, ps: PlayerState, open: (Music
                             Menus.closeSong()
                         }
                         MenuRow(Icons.Rounded.Share, "Share") {
-                            val link = if (t.url.startsWith("gwmatch") || phone) {
-                                "https://music.youtube.com/search?q=" + android.net.Uri.encode("${t.title} ${t.artist}")
-                            } else t.url
-                            val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "${t.title} · ${t.artist}\n$link")
-                            ctx.startActivity(Intent.createChooser(send, "Share song").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                             Menus.closeSong()
+                            ShareCard.track = t
                         }
                     }
                     SongPage.PICK -> {

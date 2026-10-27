@@ -244,10 +244,13 @@ private fun Main(c: ScreenCtx, open: (SettingsPage) -> Unit) {
 
 @Composable
 private fun Look() {
-    Group("Highlight colour") {
-        AccentPicker()
+    Group("App colours") {
+        SwitchRow("Colours from the cover", "The app takes each song's cover colours", Settings.accentColor == null) { on ->
+            Settings.updateAccentColor(if (on) null else Settings.lastOwnAccent() ?: AccentSwatches[0])
+        }
+        if (Settings.accentColor != null) AccentPicker()
     }
-    Note("Match the song: buttons, the side menu, the playing song, lyrics and the visualizer take each song's cover colour. My own colour: they always stay the colour you pick.")
+    Note("On: the background, buttons, lyrics and visualizer change with each song's cover. Off: the whole app stays one plain colour you pick (lime is Glasswave's own look).")
     Group("Wallpaper") {
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Pill(if (Settings.wallpaper == null) "Choose picture, GIF or video" else "Change", true, Modifier.weight(1f)) {
@@ -917,13 +920,7 @@ private fun EqBands() {
 @Composable
 private fun AccentPicker() {
     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
-        val own = Settings.accentColor != null
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill("Match the song", !own) { Settings.updateAccentColor(null) }
-            Pill("My own colour", own) { if (!own) Settings.updateAccentColor(Settings.lastOwnAccent() ?: AccentSwatches[2]) }
-        }
-        if (!own) return@Column
-        Spacer(Modifier.height(14.dp))
+        if (Settings.accentColor == null) return@Column
         androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             items(AccentSwatches.size) { i ->
                 val c = AccentSwatches[i]

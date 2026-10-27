@@ -66,11 +66,12 @@ fun OnlinePage(c: ScreenCtx, item: MusicItem) {
                 round = item is ArtistItem,
                 tracks = tracks,
                 c = c,
+                showDownload = item !is ArtistItem,
             )
         }
         when (st) {
             is Load.Loading -> items(6) { SkeletonRow() }
-            is Load.Failed -> item(key = "err") { ErrorBox(st.message, c.bg) { vm.retryPage(item) } }
+            is Load.Failed -> item(key = "err") { ErrorBox(st.message, c.bg, { c.ps.playList(Downloads.tracks.toList().shuffled(), 0) }) { vm.retryPage(item) } }
             is Load.Done -> {
                 if (item is ArtistItem && tracks.isNotEmpty()) item(key = "top") { SectionTitle("Top songs") }
                 trackList(c, tracks, numbered = item is AlbumItem)

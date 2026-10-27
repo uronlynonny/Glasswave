@@ -138,10 +138,20 @@ object YtMusicApi {
         return artist to seconds
     }
 
-    private fun songFrom(videoId: String, title: String, line: Any?, thumb: String?, fallbackArtist: String = "", explicit: Boolean = false): SongItem {
+    private fun songFrom(videoId: String, title: String, line: Any?, thumb: String?, fallbackArtist: String = "", explicit: Boolean = false, plays: Long = 0): SongItem {
         val (artist, seconds) = artistAndLength(line)
         val a = artist.ifEmpty { fallbackArtist }
-        return SongItem(Track(ytWatchUrl(videoId), title.ifEmpty { "Unknown" }, a, seconds, thumb), a, explicit)
+        return SongItem(Track(ytWatchUrl(videoId), title.ifEmpty { "Unknown" }, a, seconds, thumb), a, explicit, plays.takeIf { it > 0 } ?: playsIn(ytText(line)))
+    }
+
+    private val playsRx = Regex("""([\d.,]+)\s*([KMB])?\s+(plays|views)""", RegexOption.IGNORE_CASE)
+
+    /** "483M plays" / "1.4B views" / "35 plays" -> the number (0 when there's none). */
+    private fun playsIn(text: String): Long {
+        val m = playsRx.find(text) ?: return 0
+        val n = m.groupValues[1].replace(",", "").toDoubleOrNull() ?: return 0
+        val times = when (m.groupValues[2].uppercase()) { "K" -> 1e3; "M" -> 1e6; "B" -> 1e9; else -> 1.0 }
+        return (n * times).toLong()
     }
 
     /** YouTube Music's "E" badge: the explicit (uncensored) version. */
@@ -182,7 +192,8 @@ object YtMusicApi {
             when {
                 browseId != null && !pageType(nav).contains("UNKNOWN") && videoId == null ->
                     typed(browseId, pageType(nav), title, ytText(line), thumb)
-                videoId != null -> songFrom(videoId, title, line, thumb)
+                videoId != null -> songFrom(videoId, title, line, thumb,
+                    plays = playsIn(ytText(o.path("flexColumns.2.musicResponsiveListItemFlexColumnRenderer.text"))))
                 else -> null
             }
         }
@@ -387,25 +398,41 @@ object YtMusicApi {
         }
         val mixedJob = async(Dispatchers.IO) { call("search", body(null)) }
         val songsJob = async(Dispatchers.IO) { runCatching { call("search", body(Filter.SONGS.params)) }.getOrNull() }
+        // What people most often search starting with these words ("last last" -> "last last burna boy").
+        val popularJob = async(Dispatchers.IO) { runCatching { suggestions(query).queries }.getOrNull().orEmpty() }
         val mixed = sections(mixedJob.await())
         val songsJson = songsJob.await()
+        val ytTop = mixed.firstOrNull { it.title == "Top result" }?.items?.firstOrNull()
+        // Typed a line from a song: YouTube Music finds the song from its lyrics, so trust its picks.
+        val lyrics = ytTop is SongItem && SearchRank.looksLikeLyrics(query, ytTop)
+        val rank = SearchRank(query, popularJob.await(), played, lyrics)
 
-        val top = mixed.firstOrNull { it.title == "Top result" }?.items?.firstOrNull()
         val songs = LinkedHashMap<String, SongItem>()
-        // The Songs search is the long, popularity-ordered list; the mixed one's Songs shelf fills gaps.
+        val shelf = mixed.filter { it.title.equals("Songs", true) || (lyrics && it.title == "Top result") }.flatMap { it.items }.filterIsInstance<SongItem>()
+        // With lyrics, the mixed search's songs (the ones the words come from) go first.
+        if (lyrics) shelf.forEach { songs.putIfAbsent(it.track.url, it) }
         songsJson?.let { j -> sections(j).flatMap { it.items }.filterIsInstance<SongItem>().forEach { songs.putIfAbsent(it.track.url, it) } }
-        mixed.filter { it.title.equals("Songs", true) }.flatMap { it.items }.filterIsInstance<SongItem>()
-            .forEach { songs.putIfAbsent(it.track.url, it) }
-        (top as? SongItem)?.let { songs.remove(it.track.url) }
-        // Songs you've listened to before go first among the top ones (otherwise YouTube's order).
-        val ordered = preferExplicit(songs.values.toList()).filterIsInstance<SongItem>().let { all ->
-            val head = all.take(20)
-            head.sortedBy { if (it.track.url in played) 0 else 1 } + all.drop(20)
+        shelf.forEach { songs.putIfAbsent(it.track.url, it) }
+        // Best match first: how well it matches the words, how popular it is, and whether you've
+        // played it. Songs hardly anyone has played go to the bottom.
+        val ordered = rank.sort(preferExplicit(songs.values.toList()).filterIsInstance<SongItem>())
+        // The top result is the best song, unless YouTube's top is an artist, album or playlist the
+        // search names, or a song that scores better.
+        val best = ordered.firstOrNull()
+        val top = when {
+            ytTop !is SongItem && ytTop != null -> ytTop
+            // The song the lyrics are from (its song version rather than the music video, if there is one).
+            lyrics -> ordered.firstOrNull { SearchRank.same(it, ytTop as SongItem) } ?: ytTop
+            best == null -> ytTop
+            ytTop is SongItem && rank.score(ytTop, 0) >= rank.score(best, 0) -> ytTop
+            else -> best
         }
-
+        // The top result doesn't show again right under it (nor its song/video twin).
+        val rest = (top as? SongItem)?.let { t -> ordered.filterNot { SearchRank.same(it, t) } } ?: ordered
+        
         val out = mutableListOf<Section>()
         if (top != null) out += Section("Top result", listOf(top))
-        if (ordered.isNotEmpty()) out += Section("Songs", ordered.take(8))
+        if (rest.isNotEmpty()) out += Section("Songs", rest.take(8))
         val order = listOf("artist", "album", "featured playlist", "community playlist", "playlist")
         mixed.filter { s ->
             val t = s.title.lowercase()
@@ -417,7 +444,7 @@ object YtMusicApi {
             val items = if (s.items.all { it is SongItem }) s.items.take(4) else s.items
             out += Section(s.title, items)
         }
-        val more = ordered.drop(8)
+        val more = rest.drop(8)
         val token = songsJson?.let { nextPage(it) }
         if (more.isNotEmpty() || token != null) out += Section("More songs", more)
         SearchPage(out, if (out.lastOrNull()?.title == "More songs") token else null)
@@ -469,7 +496,9 @@ object YtMusicApi {
     /** The next page of a filtered search. */
     suspend fun searchMore(token: Pair<String, Boolean>): SearchPage = withContext(Dispatchers.IO) {
         val json = more("search", token)
-        SearchPage(listOf(Section("", items(json))), nextPage(json))
+        // Songs hardly anyone has played go to the end of each page.
+        val list = items(json).sortedBy { (it as? SongItem)?.let { s -> if (SearchRank.rare(s)) 1 else 0 } ?: 0 }
+        SearchPage(listOf(Section("", list)), nextPage(json))
     }
 
     /** What YouTube Music suggests as you type: finished searches, plus a few direct hits. */
@@ -536,6 +565,27 @@ object YtMusicApi {
             val tracks = songs?.items?.filterIsInstance<SongItem>()?.map { it.track } ?: emptyList()
             Page(title, h.subtitle, cover, tracks, all.filter { it !== songs })
         }
+    }
+
+    /**
+     * The uncensored version of a clean song: same name, same main artist, about the same length,
+     * marked Explicit. Null when the song is already explicit, isn't a song, or has no explicit
+     * version. Blocking.
+     */
+    fun explicitFor(videoId: String): String? {
+        val json = call("next", JSONObject().put("videoId", videoId).put("isAudioOnly", true))
+        val r = collect(json, "playlistPanelVideoRenderer").firstOrNull { it.optString("videoId") == videoId } ?: return null
+        if (isExplicit(r) || isSong(r) == false) return null
+        val title = ytText(r.opt("title")).ifEmpty { return null }
+        val (artist, seconds) = artistAndLength(r.opt("longBylineText") ?: r.opt("shortBylineText"))
+        val lead = artist.substringBefore(",").substringBefore(" & ").trim().lowercase()
+        val body = JSONObject().put("query", "$title $artist".trim())
+            .put("params", java.net.URLDecoder.decode(Filter.SONGS.params!!, "UTF-8"))
+        return sections0(call("search", body)).flatMap { it.items }.filterIsInstance<SongItem>().take(12).firstOrNull { s ->
+            s.explicit && YtRepo.sameSong(title, s.track.title) &&
+                (lead.isEmpty() || s.track.artist.lowercase().contains(lead)) &&
+                (seconds <= 0 || s.track.seconds <= 0 || kotlin.math.abs(s.track.seconds - seconds) <= 20)
+        }?.let { YtRepo.videoIdFor(it.track.url) }?.takeIf { it != videoId }
     }
 
     /** The real title, artist, length and cover of a song, straight from YouTube Music. Blocking. */
