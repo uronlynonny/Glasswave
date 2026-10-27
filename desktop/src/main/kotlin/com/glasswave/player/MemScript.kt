@@ -234,11 +234,11 @@ object MemScript {
                         "search" -> onUi { vm.selectTab(Tab.SEARCH); vm.onQuery(arg); vm.submitSearch() }
                         // rank query: what the All search shows, in order, with play counts.
                         "rank" -> {
-                            val page = kotlinx.coroutines.runBlocking { YtMusicApi.searchAll(arg, emptySet()) }
+                            val page = kotlinx.coroutines.runBlocking { YtMusicApi.searchAll(arg, History.tracks.map { it.url }.toSet()) }
                             for (s in page.sections) {
                                 System.err.println("GW rank [$arg] == ${s.title}")
                                 for (i in s.items.take(14)) System.err.println("GW rank [$arg]    " + when (i) {
-                                    is SongItem -> "${i.title} - ${i.track.artist} (${i.plays})"
+                                    is SongItem -> "${i.title} - ${i.track.artist} (${i.plays})" + if (History.tracks.any { h -> h.url == i.track.url }) " [played]" else ""
                                     else -> "${i::class.simpleName}: ${i.title}"
                                 })
                             }

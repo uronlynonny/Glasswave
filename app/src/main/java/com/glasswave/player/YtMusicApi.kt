@@ -78,8 +78,12 @@ object YtMusicApi {
             }
             YtRepo.http.newCall(b.build()).execute().use { r -> return r.code to (r.body?.string() ?: "{}") }
         }
-        var (code, text) = send(true)
-        if ((code == 401 || code == 403) && cookie != null) {
+        // Searches never go through your account: YouTube would save every one (including the
+        // ones Glasswave makes on its own, like finding a song's explicit version) in your
+        // YouTube search history.
+        val anon = endpoint == "search" || endpoint.endsWith("get_search_suggestions")
+        var (code, text) = send(!anon)
+        if ((code == 401 || code == 403) && cookie != null && !anon) {
             if (requireAuth) throw SignInExpired("YouTube Music")
             val retry = send(false)
             code = retry.first
@@ -424,6 +428,8 @@ object YtMusicApi {
             // The song the lyrics are from (its song version rather than the music video, if there is one).
             lyrics -> ordered.firstOrNull { SearchRank.same(it, ytTop as SongItem) } ?: ytTop
             best == null -> ytTop
+            // YouTube's top pick is a song the search isn't about (one from your history): use the best match.
+            ytTop is SongItem && !rank.relevant(ytTop) -> best
             ytTop is SongItem && rank.score(ytTop, 0) >= rank.score(best, 0) -> ytTop
             else -> best
         }

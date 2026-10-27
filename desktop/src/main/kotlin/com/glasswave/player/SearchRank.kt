@@ -29,7 +29,6 @@ class SearchRank(query: String, popular: List<String>, private val played: Set<S
         var score = 0.0
         if (lyrics) {
             score += 0.9 * (if (s.plays > 0) log10(s.plays.toDouble()) else 4.5)
-            if (t.url in played) score += 3.0
             return score + 12.0 * (1.0 - index / 40.0).coerceAtLeast(0.0)
         }
         if (words.isNotEmpty()) {
@@ -44,16 +43,40 @@ class SearchRank(query: String, popular: List<String>, private val played: Set<S
         }
         if (intent.isNotEmpty()) score += 3.0 * intent.count { it in all } / intent.size
         score += 0.9 * (if (s.plays > 0) log10(s.plays.toDouble()) else 4.5)
-        if (t.url in played) score += 3.0
+        // Played before only counts for songs the search is about, so songs from your history
+        // that YouTube fills the list with don't climb up.
+        if (t.url in played && relevant(s)) score += 3.0
         else if (s.plays in 1 until 20_000) score -= 5.0
         score += 2.0 * (1.0 - index / 60.0).coerceAtLeast(0.0) // YouTube's own order counts a little
         return score
     }
 
-    /** Best first; songs with under a thousand plays always last. */
+    /**
+     * True when the song is about what was typed: at least half the words are in its name or
+     * artist, or the words appear together. YouTube Music pads a search with other songs (often
+     * ones you've played); those aren't.
+     */
+    fun relevant(s: SongItem): Boolean {
+        if (lyrics || words.isEmpty()) return true
+        val title = norm(s.track.title)
+        val artist = norm(s.track.artist)
+        if (title.contains(q) || "$title $artist".contains(q)) return true
+        val all = "$title $artist".split(' ').toSet()
+        val hit = words.count { w -> w in all || (w == words.last() && all.any { it.startsWith(w) }) }
+        return hit * 2 >= words.size
+    }
+
+    /** Best first; songs with under a thousand plays next to last, songs that don't match the search last. */
     fun sort(songs: List<SongItem>): List<SongItem> =
-        songs.mapIndexed { i, s -> Triple(s, score(s, i), rare(s) && s.track.url !in played) }
-            .sortedWith(compareBy<Triple<SongItem, Double, Boolean>> { it.third }.thenByDescending { it.second })
+        songs.mapIndexed { i, s ->
+            val tier = when {
+                !relevant(s) -> 2
+                rare(s) && s.track.url !in played -> 1
+                else -> 0
+            }
+            Triple(s, score(s, i), tier)
+        }
+            .sortedWith(compareBy<Triple<SongItem, Double, Int>> { it.third }.thenByDescending { it.second })
             .map { it.first }
 
     companion object {
