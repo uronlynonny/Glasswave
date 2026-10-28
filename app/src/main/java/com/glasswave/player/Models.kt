@@ -63,6 +63,8 @@ data class Page(
     val thumb: String?,
     val tracks: List<Track>,
     val sections: List<Section>,
+    /** How many of [tracks] are listed at the top (an artist's top songs); Play still plays them all. */
+    val shown: Int = Int.MAX_VALUE,
 )
 
 fun Track.toMediaItem(): MediaItem {

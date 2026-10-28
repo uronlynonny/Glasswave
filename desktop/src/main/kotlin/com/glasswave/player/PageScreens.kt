@@ -74,7 +74,7 @@ fun OnlinePage(c: ScreenCtx, item: MusicItem) {
             is Load.Failed -> item(key = "err") { ErrorBox(st.message, c.bg, { c.ps.playList(Downloads.tracks.toList().shuffled(), 0) }) { vm.retryPage(item) } }
             is Load.Done -> {
                 if (item is ArtistItem && tracks.isNotEmpty()) item(key = "top") { SectionTitle("Top songs") }
-                trackList(c, tracks, numbered = item is AlbumItem)
+                trackList(c, tracks, numbered = item is AlbumItem, shown = st.value.shown)
                 st.value.sections.forEachIndexed { i, s ->
                     item(key = "sec$i") {
                         Column(Modifier) {
@@ -282,8 +282,9 @@ fun StatsPage(c: ScreenCtx) {
     }
 }
 
-private fun LazyListScope.trackList(c: ScreenCtx, tracks: List<Track>, numbered: Boolean, playlistId: String? = null) {
-    itemsIndexed(tracks, key = { i, t -> "$i|${t.url}" }) { i, t ->
+private fun LazyListScope.trackList(c: ScreenCtx, tracks: List<Track>, numbered: Boolean, playlistId: String? = null, shown: Int = Int.MAX_VALUE) {
+    // Only the first [shown] are listed, but tapping one plays on through all of [tracks].
+    itemsIndexed(tracks.take(shown), key = { i, t -> "$i|${t.url}" }) { i, t ->
         Box(Modifier.padding(horizontal = 8.dp)) {
             TrackRow(t, t.url == c.ps.currentId, c.ps.playing, if (numbered) i + 1 else null, playlistId) { c.ps.playList(tracks, i) }
         }

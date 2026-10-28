@@ -5,6 +5,8 @@ import java.io.IOException
 import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -568,9 +570,73 @@ object YtMusicApi {
         } else {
             // Artist: the first list of songs is "Top songs"; the rest are albums, singles, similar artists...
             val songs = all.firstOrNull { s -> s.items.isNotEmpty() && s.items.all { it is SongItem } }
-            val tracks = songs?.items?.filterIsInstance<SongItem>()?.map { it.track } ?: emptyList()
-            Page(title, h.subtitle, cover, tracks, all.filter { it !== songs })
+            val top = songs?.items?.filterIsInstance<SongItem>()?.map { it.track } ?: emptyList()
+            // Every song by the artist: the playlist behind Top songs' "Show all".
+            val allId = collect(json, "musicShelfRenderer").firstNotNullOfOrNull { s ->
+                listOf(s.opt("bottomEndpoint"), s.opt("title")).firstNotNullOfOrNull { n ->
+                    findString(n, "browseId")?.takeIf { it.startsWith("VL") }
+                }
+            }
+            val topUrls = top.map { it.url }.toSet()
+            // A music player: no Videos or Live performances rows (their songs are in Songs).
+            val kept = all.filter { it !== songs }.filterNot { s ->
+                s.title.lowercase().let { t -> "video" in t || "live performance" in t }
+            }
+            // All the songs, and the same-name check, are looked up at the same time.
+            val (rest, checked) = kotlinx.coroutines.coroutineScope {
+                val restJob = async(Dispatchers.IO) {
+                    allId?.let { id ->
+                        runCatching { tracksFrom(browse(JSONObject().put("browseId", id)), max = 300) }.getOrNull()
+                    }.orEmpty().filter { it.url !in topUrls }
+                }
+                val checkJob = async(Dispatchers.IO) { sameNameOnly(songs?.items?.filterIsInstance<SongItem>().orEmpty(), kept) }
+                restJob.await() to checkJob.await()
+            }
+            val (others, wrongSongs) = checked
+            val shelf = if (rest.isEmpty()) emptyList() else listOf(Section("Songs", rest.filter { it.url !in wrongSongs }.map { SongItem(it, it.artist) }))
+            // Play goes through the top songs, then all the others.
+            Page(title, h.subtitle, cover, top + rest.filter { it.url !in wrongSongs }, shelf + others, shown = top.size)
         }
+    }
+
+    private val yearRx = Regex("""\b(19|20)\d{2}\b""")
+
+    /**
+     * YouTube Music sometimes puts several artists who share a name on one page (searching
+     * "Marino" gives an alt-pop singer whose Albums row held 1990s albums by someone else).
+     * Each album and single on the page is opened and its songs' play counts read. One is someone
+     * else's when its songs have under a thousandth of the plays of the artist's top songs AND it
+     * came out more than four years away from any of the artist's well-played releases. Brand-new
+     * releases (no plays yet, same years) always stay. Gives the rows without those, and the
+     * addresses of their songs (to leave out of Songs too).
+     */
+    private suspend fun sameNameOnly(top: List<SongItem>, rows: List<Section>): Pair<List<Section>, Set<String>> {
+        val topPlays = top.maxOfOrNull { it.plays } ?: 0L
+        val releases = rows.flatMap { it.items }.filterIsInstance<AlbumItem>().distinctBy { it.browseId }.take(30)
+        if (topPlays < 100_000 || releases.isEmpty()) return rows to emptySet()
+        val gate = kotlinx.coroutines.sync.Semaphore(10)
+        val songsOf: Map<String, List<SongItem>?> = kotlinx.coroutines.coroutineScope {
+            releases.map { a ->
+                async(Dispatchers.IO) {
+                    a.browseId to gate.withPermit {
+                        runCatching { sections0(browse(JSONObject().put("browseId", a.browseId))).flatMap { it.items }.filterIsInstance<SongItem>() }.getOrNull()
+                    }
+                }
+            }.awaitAll().toMap()
+        }
+        fun most(a: AlbumItem): Long = songsOf[a.browseId]?.maxOfOrNull { it.plays } ?: -1L
+        fun year(a: AlbumItem): Int? = yearRx.find(a.subtitle)?.value?.toIntOrNull()
+        val anchors = releases.filter { most(it) * 100 >= topPlays }.mapNotNull(::year)
+        if (anchors.isEmpty()) return rows to emptySet()
+        val wrong = releases.filter { a ->
+            val plays = most(a)
+            val y = year(a) ?: return@filter false
+            plays in 0 until topPlays / 1000 && anchors.minOf { kotlin.math.abs(it - y) } > 4
+        }.map { it.browseId }.toSet()
+        if (wrong.isEmpty()) return rows to emptySet()
+        val wrongSongs = wrong.flatMap { songsOf[it].orEmpty() }.map { it.track.url }.toSet()
+        val cleaned = rows.map { s -> s.copy(items = s.items.filterNot { it is AlbumItem && it.browseId in wrong }) }.filter { it.items.isNotEmpty() }
+        return cleaned to wrongSongs
     }
 
     /**
@@ -730,7 +796,7 @@ object YtMusicApi {
         return out.values.toList()
     }
 
-    private fun tracksFrom(first: JSONObject, requireAuth: Boolean = false): List<Track> {
+    private fun tracksFrom(first: JSONObject, requireAuth: Boolean = false, max: Int = Int.MAX_VALUE): List<Track> {
         val out = LinkedHashMap<String, Track>()
         // Only read the playlist's own list, not the "suggestions" shown under it.
         var scope: Any = collect(first, "musicPlaylistShelfRenderer").firstOrNull()
@@ -739,6 +805,7 @@ object YtMusicApi {
         repeat(200) { i ->
             val before = out.size
             for (s in items(scope).filterIsInstance<SongItem>()) out.putIfAbsent(s.track.url, s.track)
+            if (out.size >= max) return out.values.take(max)
             val next = nextPage(scope) ?: return out.values.toList()
             if (out.size == before && i > 0) return out.values.toList()
             scope = more("browse", next, requireAuth)

@@ -246,6 +246,13 @@ object MemScript {
                         "offline" -> onUi { vm.homeOfflineForCheck() }
                         // uncensor id: which version plays for that song (the explicit one when it's clean).
                         "uncensor" -> System.err.println("GW uncensor $arg -> " + YtRepo.uncensored(ytWatchUrl(arg)))
+                        // artistpage name: what an artist's page holds (and opens it).
+                        "artistpage" -> { val t0 = System.currentTimeMillis()
+                            val a = kotlinx.coroutines.runBlocking { YtMusicApi.search(arg, YtMusicApi.Filter.ARTISTS) }.sections.flatMap { it.items }.filterIsInstance<ArtistItem>().first()
+                            val p = kotlinx.coroutines.runBlocking { YtMusicApi.page(a) }
+                            System.err.println("GW artistpage ${a.title}: ${p.tracks.size} songs to play, ${p.shown} listed, ${System.currentTimeMillis() - t0} ms; rows: " + p.sections.joinToString(" | ") { "${it.title} (${it.items.size})" })
+                            onUi { vm.open(Route.Online(a)) }
+                        }
                         "share" -> onUi { ShareCard.track = if (arg == "off") null else ps.currentTrack() }
                         "mem" -> System.err.println(line(arg))
                         "regions" -> regions(arg)
