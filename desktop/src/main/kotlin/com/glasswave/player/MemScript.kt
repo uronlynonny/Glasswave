@@ -219,6 +219,9 @@ object MemScript {
                         }
                         // flow: starts Flow, like tapping its bar on Home. seek ms: jumps to a time in the song.
                         "flow" -> onUi { Flow.start(ps, History.tracks.take(20)) }
+                        // mixlog: prints how each blend is planned; seekend N: jumps to N seconds before the end.
+                        "mixlog" -> onUi { ps.mixLog = { System.err.println("GW mix: $it") } }
+                        "seekend" -> onUi { ps.seekTo((ps.durationMs - arg.toLong() * 1000).coerceAtLeast(0)) }
                         "seek" -> onUi { ps.seekTo(arg.toLong()) }
                         "full" -> onUi { PlayerView.openFull = true }
                         // artisttap: like tapping the artist's name in the full player.

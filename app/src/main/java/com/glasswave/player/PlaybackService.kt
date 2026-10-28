@@ -892,7 +892,7 @@ class PlaybackService : MediaSessionService() {
         val head = MixLibrary.profile(next, MixPart.HEAD)
         val had = (if (tail != null) 1 else 0) or (if (head != null) 2 else 0)
         plan?.let { if (planKey == key && (planLocked || had == planHad)) return it }
-        val p = MixPlanner.plan(dur, tail, head, Settings.mixSeconds, canStretch)
+        val p = MixPlanner.plan(dur, tail, head, canStretch = canStretch)
         plan = p
         planKey = key
         planHad = had

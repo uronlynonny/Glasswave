@@ -102,8 +102,25 @@ object MixPlanner {
      * ending ([tail]) and the new song's start ([head]); either can be missing. [mixSeconds] is how
      * long you like blends. [canStretch] is false when the tempo can't be touched (a speed you set).
      */
-    fun plan(oldMs: Long, tail: MixProfile?, head: MixProfile?, mixSeconds: Int, canStretch: Boolean = true): MixPlan {
-        val want = mixSeconds * 1000L
+    /**
+     * How long a blend should last, from the songs' tempo, the way a DJ counts it in beats:
+     * fast songs (118 BPM and up) blend over 32 beats, mid-tempo ones (85 to 118) over 16,
+     * slow ones over 8. So 128 BPM house gets about 15 s, a 100 BPM Afrobeats song about
+     * 10 s, a slow ballad about 6 s. With no tempo known yet, 8 s.
+     */
+    fun blendMs(tail: MixProfile?, head: MixProfile?): Long {
+        val beat = listOfNotNull(tail, head).firstOrNull { it.steady && it.beatMs > 0 }?.beatMs ?: return 8_000
+        val bpm = 60_000 / beat
+        val beats = when {
+            bpm >= 118 -> 32
+            bpm >= 85 -> 16
+            else -> 8
+        }
+        return (beats * beat).toLong().coerceIn(5_000, 16_000)
+    }
+
+    fun plan(oldMs: Long, tail: MixProfile?, head: MixProfile?, mixSeconds: Int = 0, canStretch: Boolean = true): MixPlan {
+        val want = if (mixSeconds > 0) mixSeconds * 1000L else blendMs(tail, head)
         val plainLen = min(want, oldMs / 5)
         val plain = simple(MixStyle.PLAIN, oldMs - plainLen, 0, plainLen, "Plain blend, ${plainLen / 1000} s")
         if (oldMs < 45_000) return plain

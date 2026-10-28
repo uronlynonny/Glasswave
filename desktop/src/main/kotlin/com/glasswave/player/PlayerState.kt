@@ -688,7 +688,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         val had = (if (tail != null) 1 else 0) or (if (head != null) 2 else 0)
         plan?.let { if (planKey == key && (planLocked || had == planHad)) return it }
         // Tempo matching only at normal speed and pitch (a speed you set stays yours).
-        val p = MixPlanner.plan(dur, tail, head, Settings.mixSeconds, canStretch = AudioDeck.speed == 1f && AudioDeck.pitch == 1f)
+        val p = MixPlanner.plan(dur, tail, head, canStretch = AudioDeck.speed == 1f && AudioDeck.pitch == 1f)
         plan = p
         planKey = key
         planHad = had

@@ -71,7 +71,6 @@ object Settings {
     /** Automix: the end of one song plays under the start of the next, like a DJ blending them. Off by default. */
     var automix by mutableStateOf(false); private set
     /** How long two songs overlap when mixing, in seconds. */
-    var mixSeconds by mutableIntStateOf(8); private set
     var animations by mutableStateOf(true); private set
     var glass by mutableStateOf(true); private set
     var playerStyle by mutableStateOf(PlayerStyle.CARD); private set
@@ -84,7 +83,8 @@ object Settings {
     var coverMotion by mutableStateOf(CoverMotion.WIFI); private set
     var autoplay by mutableStateOf(true); private set
     /** Seconds the song fades out at its end and in at its start. 0 = off. */
-    var crossfade by mutableIntStateOf(0); private set
+    /** Crossfade was taken out: only Flow (and Automix) blend songs, for as long as the songs call for. */
+    const val crossfade = 0
     /** Quality for downloads made on Wi-Fi, and on mobile data. */
     var downloadWifi by mutableStateOf(Quality.HIGH); private set
     var downloadData by mutableStateOf(Quality.NORMAL); private set
@@ -167,7 +167,6 @@ object Settings {
         skipSilence = prefs.getBoolean("skip_silence", false)
         volumeLeveling = prefs.getBoolean("volume_leveling", true)
         automix = prefs.getBoolean("automix", false)
-        mixSeconds = prefs.getInt("mix_seconds", 8)
         animations = prefs.getBoolean("animations", true)
         glass = prefs.getBoolean("glass", true)
         // The PC has two player styles: Card and Glass panel. Anything else saved becomes Card.
@@ -179,7 +178,6 @@ object Settings {
         rememberPlaying = prefs.getBoolean("remember_playing", true)
         coverMotion = enumPref("cover_motion", CoverMotion.WIFI)
         autoplay = prefs.getBoolean("autoplay", true)
-        crossfade = prefs.getInt("crossfade", 0)
         downloadWifi = enumPref("dl_wifi", Quality.HIGH)
         downloadData = enumPref("dl_data", Quality.NORMAL)
         livingCover = prefs.getBoolean("living_cover", true)
@@ -245,9 +243,7 @@ object Settings {
         listeners.forEach { it() } // the player adds or removes Autoplay songs
     }
     fun updateAutomix(on: Boolean) { automix = on; prefs.edit { putBoolean("automix", on) } }
-    fun updateMixSeconds(sec: Int) { mixSeconds = sec.coerceIn(3, 15); prefs.edit { putInt("mix_seconds", mixSeconds) } }
 
-    fun updateCrossfade(sec: Int) { crossfade = sec.coerceIn(0, 12); prefs.edit { putInt("crossfade", crossfade) } }
 
     /** Raw preferences for the cache size, read before the cache opens. */
     fun cacheBytes(context: Context): Long =

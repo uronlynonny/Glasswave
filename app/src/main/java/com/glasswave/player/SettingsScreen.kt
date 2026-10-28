@@ -86,7 +86,7 @@ import kotlinx.coroutines.withContext
 
 private enum class SettingsPage(val title: String, val subtitle: String, val icon: ImageVector, val color: Color) {
     LOOK("Look", "Colours, wallpaper, fonts, visualizer, player style", Icons.Rounded.Palette, Color(0xFFAF52DE)),
-    AUDIO("Player & audio", "Quality, crossfade, autoplay", Icons.Rounded.MusicNote, Color(0xFFFF375F)),
+    AUDIO("Player & audio", "Quality, Automix, autoplay", Icons.Rounded.MusicNote, Color(0xFFFF375F)),
     SOUND("Sound & effects", "10-band equalizer, bass, pitch, reverb", Icons.Rounded.GraphicEq, Color(0xFFFF9F0A)),
     PERFORMANCE("Performance", "Frame rate, high performance mode", Icons.Rounded.Speed, Color(0xFF64D2FF)),
     ACCOUNTS("Accounts", "YouTube Music and Spotify", Icons.Rounded.AccountCircle, Color(0xFF0A84FF)),
@@ -367,35 +367,10 @@ private fun Audio(c: ScreenCtx) {
         Choices(DataSaver.entries, Settings.dataSaver, { it.label }, { it.detail }) { Settings.updateDataSaver(it) }
     }
     Note("While saving data, songs stream at Low quality, music videos behind the cover are skipped and pictures load smaller. Songs you've downloaded play as they are.")
-    Group("Crossfade") {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(0, 2, 4, 6, 8, 12).forEach { s ->
-                val on = Settings.crossfade == s
-                Box(
-                    Modifier.weight(1f).pressable(0.95f) { Settings.updateCrossfade(s) }.clip(CircleShape)
-                        .background(if (on) Color.White else Color.White.copy(alpha = 0.08f)).padding(vertical = 9.dp),
-                    contentAlignment = Alignment.Center,
-                ) { GText(if (s == 0) "Off" else "${s}s", 13, if (on) Color.Black else Color.White, FontWeight.SemiBold, 1) }
-            }
-        }
-    }
-    Note("Each song fades out over its last seconds and the next fades in, so songs blend instead of cutting.")
     Group("Automix") {
         SwitchRow("Automix", "Mixes each song into the next like a DJ: on the beat, tempos matched. Also in the player's ••• menu.", Settings.automix) { Settings.updateAutomix(it) }
-        if (Settings.automix) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(4, 6, 8, 10, 12).forEach { s ->
-                    val on = Settings.mixSeconds == s
-                    Box(
-                        Modifier.weight(1f).pressable(0.95f) { Settings.updateMixSeconds(s) }.clip(CircleShape)
-                            .background(if (on) Color.White else Color.White.copy(alpha = 0.08f)).padding(vertical = 9.dp),
-                        contentAlignment = Alignment.Center,
-                    ) { GText("${s}s", 13, if (on) Color.Black else Color.White, FontWeight.SemiBold, 1) }
-                }
-            }
-        }
     }
-    Note("Automix listens to each song first to find its tempo, beats and key. Songs with a similar tempo are matched and lined up beat for beat, and their bass is handed over halfway, so it sounds like one continuous mix. Songs that are too far apart in tempo are handed over on the beat instead. It also picks which of the next few songs fits best, and skips silent endings. The length you pick is how long blends last. Flow always mixes this way. While Automix is on, it takes over from crossfade.")
+    Note("Automix listens to each song first to find its tempo, beats and key. Songs with a similar tempo are matched and lined up beat for beat, and their bass is handed over halfway, so it sounds like one continuous mix. Songs that are too far apart in tempo are handed over on the beat instead. How long each blend lasts depends on the songs: faster songs get longer, DJ-style blends, slower ones shorter. Flow always mixes this way.")
     Group("Playback") {
         SwitchRow("Autoplay", "When the queue ends, keep playing similar songs.", Settings.autoplay) { Settings.updateAutoplay(it) }
         SwitchRow("Remember what was playing", "When you open Glasswave again, the last song is waiting where you left off. Just tap play.", Settings.rememberPlaying) {
