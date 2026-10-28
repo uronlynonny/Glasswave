@@ -591,6 +591,10 @@ private fun StoragePage(c: ScreenCtx) {
     }
     Note("Songs you listen to are kept here, so they play again instantly and still play with no internet. When it's full, the ones played longest ago make room.")
     Group("Privacy") {
+        SwitchRow("Remember what was playing", "When you open Glasswave again, the last song and its queue are waiting where you left off. Just press play.", Settings.rememberPlaying) {
+            Settings.updateRememberPlaying(it)
+        }
+        Divider()
         SwitchRow("Remember what I play", "Powers \"Recently played\" on Home. Stays on this phone.", Settings.keepHistory) { Settings.updateKeepHistory(it) }
         Divider()
         NavRow("Clear listening history", "${History.tracks.size} songs", Icons.Rounded.Storage, Color(0xFFFF9F0A)) { History.clear() }

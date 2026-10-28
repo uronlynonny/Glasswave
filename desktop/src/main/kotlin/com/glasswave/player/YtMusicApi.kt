@@ -391,6 +391,12 @@ object YtMusicApi {
         SearchPage(sections(json), if (filter != Filter.ALL) nextPage(json) else null)
     }
 
+    /** YouTube Music's Videos search (lyric videos, fan and label uploads). */
+    suspend fun searchVideos(query: String): List<SongItem> = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("query", query).put("params", "EgWKAQIQAWoKEAkQChAFEAMQBA==")
+        sections(call("search", body)).flatMap { it.items }.filterIsInstance<SongItem>()
+    }
+
     private val skipInAll = listOf("listen again", "from your library", "library", "episode", "podcast", "profile", "video")
 
     /**

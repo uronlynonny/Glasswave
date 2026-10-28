@@ -122,6 +122,8 @@ object MemScript {
                             onUi { ps.playList(hits.take(10), 0) }
                         }
                         "next" -> onUi { ps.next() }
+                        // state: what's loaded right now (song, spot, playing, what's next).
+                        "state" -> onUi { System.err.println("GW state '${ps.title}' at ${ps.livePosition() / 1000}s playing=${ps.playing} next: " + ps.upcoming(3).joinToString(" | ") { it.track.title }) }
                         // upnext: what's coming up after the song playing (Autoplay's picks).
                         "upnext" -> onUi { System.err.println("GW upnext after '${ps.title}' by ${ps.artist}: " + ps.upcoming(8).joinToString(" | ") { "${it.track.title} - ${it.track.artist}" }) }
                         // tap: plays one song from a search on its own, like tapping it on Home (Autoplay follows).
@@ -263,6 +265,8 @@ object MemScript {
                                 System.err.println("GW lyrtime ${t.title}: ${System.currentTimeMillis() - t0} ms, ready before: $was, ${ly?.lines?.size ?: 0} lines")
                             }
                         }
+                        // streamtest id: can that song's audio be found (18+ songs play another upload)?
+                        "streamtest" -> System.err.println("GW streamtest $arg -> " + runCatching { YtRepo.streamUrl(ytWatchUrl(arg)).take(60) }.getOrElse { "FAILED: $it" })
                         "share" -> onUi { ShareCard.track = if (arg == "off") null else ps.currentTrack() }
                         "mem" -> System.err.println(line(arg))
                         "regions" -> regions(arg)

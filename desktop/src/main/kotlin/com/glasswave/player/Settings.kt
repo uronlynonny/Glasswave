@@ -79,6 +79,8 @@ object Settings {
     var showModeButtons by mutableStateOf(false); private set
     var cacheSize by mutableStateOf(CacheSize.G1); private set
     var keepHistory by mutableStateOf(true); private set
+    /** Open Glasswave again and the last song (and its queue) is waiting, paused, where you left off. */
+    var rememberPlaying by mutableStateOf(true); private set
     var coverMotion by mutableStateOf(CoverMotion.WIFI); private set
     var autoplay by mutableStateOf(true); private set
     /** Seconds the song fades out at its end and in at its start. 0 = off. */
@@ -174,6 +176,7 @@ object Settings {
         showModeButtons = prefs.getBoolean("mode_buttons", false)
         cacheSize = enumPref("cache_size", CacheSize.G1)
         keepHistory = prefs.getBoolean("history", true)
+        rememberPlaying = prefs.getBoolean("remember_playing", true)
         coverMotion = enumPref("cover_motion", CoverMotion.WIFI)
         autoplay = prefs.getBoolean("autoplay", true)
         crossfade = prefs.getInt("crossfade", 0)
@@ -235,6 +238,7 @@ object Settings {
     fun updateCacheSize(s: CacheSize) { cacheSize = s; prefs.edit { putString("cache_size", s.name) } }
     fun updateCoverMotion(m: CoverMotion) { coverMotion = m; prefs.edit { putString("cover_motion", m.name) } }
     fun updateKeepHistory(on: Boolean) { keepHistory = on; prefs.edit { putBoolean("history", on) } }
+    fun updateRememberPlaying(on: Boolean) { rememberPlaying = on; prefs.edit { putBoolean("remember_playing", on) } }
     fun updateAutoplay(on: Boolean) {
         autoplay = on
         prefs.edit { putBoolean("autoplay", on) }

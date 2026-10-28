@@ -120,6 +120,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     }
 
     private fun changed() {
+        saveSoon()
         queueVersion++
         maybeAutoplay()
         prefetchAhead()
@@ -306,6 +307,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     fun livePosition(): Long = if (deck.ready) deck.positionMs else positionMs
 
     fun tick() {
+        // While playing, the spot in the song is saved every 5 seconds.
+        if (SystemClock.elapsedRealtime() - lastSave > 5_000) saveSession()
         positionMs = livePosition()
         if (deck.durationMs > 0) durationMs = deck.durationMs
     }
@@ -316,9 +319,78 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         Settings.listeners += { maybeAutoplay(); applyLevel() }
         MixLibrary.listeners += { url -> main.post { onMixKnown(url) } }
         SleepTimer.player = this
+        // What was playing when Glasswave last closed (or crashed) comes back, paused.
+        main.post { restoreSession() }
+    }
+
+    /* ---- Pick up where you left off ---- */
+
+    private val sessionFile get() = java.io.File(android.content.AppDirs.data, "last_played.json")
+    private val saver = Executors.newSingleThreadExecutor { r -> Thread(r, "save-queue").apply { isDaemon = true } }
+    private var lastSave = 0L
+    private val saveLater = Runnable { saveSession() }
+
+    private fun saveSoon() {
+        main.removeCallbacks(saveLater)
+        main.postDelayed(saveLater, 500)
+    }
+
+    /** Writes the queue (both orders), the song and the spot in it. Main thread; the writing happens off it. */
+    fun saveSession(now: Boolean = false) {
+        lastSave = SystemClock.elapsedRealtime()
+        if (!Settings.rememberPlaying) { saver.execute { runCatching { sessionFile.delete() } }; return }
+        if (cur !in items.indices) return
+        val o = org.json.JSONObject()
+            .put("items", org.json.JSONArray(items.map { t ->
+                org.json.JSONObject().put("u", t.url).put("t", t.title).put("a", t.artist).put("s", t.seconds).put("i", t.thumb ?: "")
+            }))
+            .put("base", org.json.JSONArray(base.toList()))
+            .put("shuf", org.json.JSONArray(shuf.toList()))
+            .put("cur", cur)
+            .put("pos", if (atEnd) 0L else livePosition())
+            .put("shuffle", shuffle)
+            .put("repeat", repeat)
+        val text = o.toString()
+        val write = Runnable {
+            runCatching {
+                val f = sessionFile
+                val tmp = java.io.File(f.parentFile, f.name + ".tmp")
+                tmp.writeText(text)
+                java.nio.file.Files.move(tmp.toPath(), f.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+            }
+        }
+        // Closing: write it now, before the app exits. Otherwise off the main thread.
+        if (now) write.run() else saver.execute(write)
+    }
+
+    /** Puts the saved queue back, paused at the saved spot. Does nothing if something is already playing. */
+    private fun restoreSession() {
+        if (!Settings.rememberPlaying || hasItem) return
+        val o = runCatching { org.json.JSONObject(sessionFile.readText()) }.getOrNull() ?: return
+        val arr = o.optJSONArray("items") ?: return
+        val tracks = (0 until arr.length()).mapNotNull { n ->
+            val t = arr.optJSONObject(n) ?: return@mapNotNull null
+            Track(t.optString("u"), t.optString("t"), t.optString("a"), t.optLong("s"), t.optString("i").ifEmpty { null })
+        }.filter { it.url.isNotEmpty() }
+        if (tracks.isEmpty() || tracks.size != arr.length()) return
+        fun order(key: String): List<Int> {
+            val a = o.optJSONArray(key) ?: return tracks.indices.toList()
+            val list = (0 until a.length()).map { a.optInt(it, -1) }.filter { it in tracks.indices }
+            return list.ifEmpty { tracks.indices.toList() }
+        }
+        items.clear(); base.clear(); shuf.clear()
+        items += tracks
+        base += order("base")
+        shuf += order("shuf")
+        shuffle = o.optBoolean("shuffle", false)
+        repeat = o.optInt("repeat", Player.REPEAT_MODE_OFF)
+        moveTo(o.optInt("cur", 0).coerceIn(tracks.indices), play = false, auto = false, startMs = o.optLong("pos", 0L))
+        changed()
     }
 
     fun release() {
+        main.removeCallbacks(saveLater)
+        saveSession(now = true)
         logPlay()
         SongCache.flush()
         deck.stop()
@@ -332,6 +404,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     private fun markPlaying(on: Boolean) {
         if (on == playing) return
         playing = on
+        if (!on) saveSoon()
         val now = SystemClock.elapsedRealtime()
         if (on) {
             playingSince = now

@@ -455,7 +455,7 @@ class PlaybackService : MediaSessionService() {
                 ) saveSoon()
                 if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
                     main.removeCallbacks(saveTick)
-                    if (p.isPlaying) main.postDelayed(saveTick, 15_000)
+                    if (p.isPlaying) main.postDelayed(saveTick, 5_000)
                 }
             }
 
@@ -513,12 +513,12 @@ class PlaybackService : MediaSessionService() {
         main.postDelayed(saveNow, 500)
     }
 
-    /** While playing, saves the spot in the song every 15 seconds. */
+    /** While playing, saves the spot in the song every 5 seconds (a crash loses at most that). */
     private val saveTick = object : Runnable {
         override fun run() {
             val p = session?.player ?: return
             LastPlayed.save(p)
-            if (p.isPlaying) main.postDelayed(this, 15_000)
+            if (p.isPlaying) main.postDelayed(this, 5_000)
         }
     }
 
