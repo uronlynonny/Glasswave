@@ -39,6 +39,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -56,6 +59,7 @@ fun OnlinePage(c: ScreenCtx, item: MusicItem) {
     val page = (st as? Load.Done)?.value
     val list = rememberLazyListState()
     val tracks = page?.tracks ?: emptyList()
+    var query by androidx.compose.runtime.remember(item) { androidx.compose.runtime.mutableStateOf("") }
 
     PageFrame(c, list) {
         item(key = "head") {
@@ -68,14 +72,16 @@ fun OnlinePage(c: ScreenCtx, item: MusicItem) {
                 tracks = tracks,
                 c = c,
                 showDownload = item !is ArtistItem,
+                extra = { CollectionActions(c, item, page?.title ?: item.title, page?.thumb ?: hiRes(item.thumb), tracks) },
             )
         }
+        if (item !is ArtistItem && tracks.size >= 8) item(key = "find") { FindInList(c, query) { query = it } }
         when (st) {
             is Load.Loading -> items(6) { SkeletonRow() }
             is Load.Failed -> item(key = "err") { ErrorBox(st.message, c.bg, { c.ps.playList(Downloads.tracks.toList().shuffled(), 0) }) { vm.retryPage(item) } }
             is Load.Done -> {
                 if (item is ArtistItem && tracks.isNotEmpty()) item(key = "top") { SectionTitle("Top songs") }
-                trackList(c, tracks, numbered = item is AlbumItem, shown = st.value.shown)
+                trackList(c, if (item is ArtistItem) tracks else found(tracks, query), numbered = item is AlbumItem && query.isBlank(), shown = st.value.shown)
                 st.value.sections.forEachIndexed { i, s ->
                     item(key = "sec$i") {
                         Column(Modifier) {
@@ -99,11 +105,12 @@ fun SavedPage(c: ScreenCtx, start: PlaylistInfo) {
     val p = all.firstOrNull { it.id == start.id } ?: start
     LaunchedEffect(p.id, Library.version) { c.vm.reloadSaved(p.id) }
     val tracks = c.vm.savedTracks
+    var query by androidx.compose.runtime.remember(p.id) { androidx.compose.runtime.mutableStateOf("") }
     PageFrame(c, list) {
         item(key = "head") {
             PageHeader(
                 list, if (p.id == Library.LIKED_ID) tracks.firstOrNull()?.thumb else p.thumb, p.name,
-                "${p.source.label} · ${p.count} songs", false, tracks, c,
+                p.source.label, false, tracks, c,
                 extra = {
                     // Pin, and the playlist menu.
                     GlassCircle(48.dp, c.bg, onClick = { Library.togglePin(p.id) }) {
@@ -120,7 +127,10 @@ fun SavedPage(c: ScreenCtx, start: PlaylistInfo) {
             tracks.isEmpty() -> item(key = "none") {
                 Centered(if (p.source == Source.LOCAL) "No songs yet. Tap ⋮ on any song and choose Add to playlist." else "This playlist is empty.")
             }
-            else -> trackList(c, tracks, numbered = false, playlistId = p.id)
+            else -> {
+                if (tracks.size >= 8) item(key = "find") { FindInList(c, query) { query = it } }
+                trackList(c, found(tracks, query), numbered = false, playlistId = p.id)
+            }
         }
     }
 }
@@ -293,6 +303,91 @@ private fun LazyListScope.trackList(c: ScreenCtx, tracks: List<Track>, numbered:
     }
 }
 
+/** "12 songs · 48 min" (or "1 hr 5 min"), like Spotify shows under the title. */
+private fun listLength(tracks: List<Track>): String {
+    val n = tracks.size
+    val songs = if (n == 1) "1 song" else "$n songs"
+    val secs = tracks.sumOf { it.seconds }
+    if (secs <= 0) return songs
+    val mins = (secs + 30) / 60
+    val time = if (mins >= 60) "${mins / 60} hr ${mins % 60} min" else "$mins min"
+    return "$songs · $time"
+}
+
+/** The songs whose name or artist has [query] in it (all of them when it's empty). */
+private fun found(tracks: List<Track>, query: String): List<Track> {
+    val q = query.trim().lowercase()
+    if (q.isEmpty()) return tracks
+    return tracks.filter { it.title.lowercase().contains(q) || it.artist.lowercase().contains(q) }
+}
+
+/** An album or playlist from YouTube Music: save it to your Library (or take it out), and its menu. */
+@Composable
+private fun CollectionActions(c: ScreenCtx, item: MusicItem, title: String, cover: String?, tracks: List<Track>) {
+    val browseId = when (item) {
+        is AlbumItem -> item.browseId
+        is PlaylistItem -> item.browseId
+        else -> return
+    }
+    if (tracks.isEmpty()) return
+    val all by c.vm.playlists.collectAsState()
+    val id = Library.savedId(browseId)
+    val saved = all.any { it.id == id }
+    GlassCircle(
+        48.dp, c.bg,
+        tint = if (saved) CoverTint.accent.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.06f),
+        onClick = {
+            if (saved) {
+                Library.delete(id)
+                Menus.say("Removed from Library")
+            } else {
+                Library.saveCollection(browseId, title, cover, tracks)
+                Menus.say("Saved to Library")
+            }
+        },
+    ) {
+        Ico(if (saved) Icons.Rounded.Check else Icons.Rounded.Add, if (saved) Color.Black else Color.White, 22.dp)
+    }
+    GlassCircle(48.dp, c.bg, onClick = {
+        Menus.openPlaylist(all.firstOrNull { it.id == id } ?: PlaylistInfo(id, title, Source.YT, cover, tracks.size), tracks)
+    }) {
+        Ico(Icons.Rounded.MoreHoriz, Color.White, 22.dp)
+    }
+}
+
+/** "Find in playlist": narrows the songs down as you type. */
+@Composable
+private fun FindInList(c: ScreenCtx, query: String, onChange: (String) -> Unit) {
+    Row(
+        Modifier
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .fillMaxWidth()
+            .height(44.dp)
+            .liquidGlass(c.bg, 22.dp, depth = 12.dp, bend = 16.dp)
+            .padding(start = 14.dp, end = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Ico(Icons.Rounded.Search, Dim, 19.dp)
+        Spacer(Modifier.width(10.dp))
+        Box(Modifier.weight(1f)) {
+            if (query.isEmpty()) GText("Find in this list", 15, Faint)
+            androidx.compose.foundation.text.BasicTextField(
+                value = query,
+                onValueChange = onChange,
+                singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = androidx.compose.ui.unit.TextUnit(15f, androidx.compose.ui.unit.TextUnitType.Sp)),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(CoverTint.accent),
+                modifier = Modifier.fillMaxWidth().typing(),
+            )
+        }
+        if (query.isNotEmpty()) {
+            Box(Modifier.size(34.dp).pressable(0.85f) { onChange("") }, contentAlignment = Alignment.Center) {
+                Ico(Icons.Rounded.Close, Faint, 18.dp)
+            }
+        }
+    }
+}
+
 @Composable
 private fun PageFrame(c: ScreenCtx, list: LazyListState, content: LazyListScope.() -> Unit) {
     Box(Modifier.fillMaxSize()) {
@@ -345,6 +440,11 @@ private fun PageHeader(
         if (subtitle.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
             GText(subtitle, 15, Dim, maxLines = 2)
+        }
+        // Like Spotify: how many songs and how long they last altogether.
+        if (!round && tracks.isNotEmpty()) {
+            Spacer(Modifier.height(2.dp))
+            GText(listLength(tracks), 13, Faint, maxLines = 1)
         }
         Spacer(Modifier.height(18.dp))
         // Small round actions (download, pin, menu) on their own row, so Play and Shuffle below

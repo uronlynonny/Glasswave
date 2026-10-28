@@ -445,6 +445,7 @@ class PlaybackService : MediaSessionService() {
 
         // Bring back what was playing last time (paused), and keep it saved as things change.
         LastPlayed.restore(player)
+        if (player.mediaItemCount > 0) main.postDelayed(forgetIdle, LastPlayed.FORGET_AFTER_MS)
         player.addListener(object : Player.Listener {
             override fun onEvents(p: Player, events: Player.Events) {
                 if (events.containsAny(
@@ -455,7 +456,9 @@ class PlaybackService : MediaSessionService() {
                 ) saveSoon()
                 if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
                     main.removeCallbacks(saveTick)
+                    main.removeCallbacks(forgetIdle)
                     if (p.isPlaying) main.postDelayed(saveTick, 5_000)
+                    else if (p.mediaItemCount > 0) main.postDelayed(forgetIdle, LastPlayed.FORGET_AFTER_MS)
                 }
             }
 
@@ -511,6 +514,15 @@ class PlaybackService : MediaSessionService() {
     private fun saveSoon() {
         main.removeCallbacks(saveNow)
         main.postDelayed(saveNow, 500)
+    }
+
+    /** Paused (or stopped) for an hour: the song and queue are cleared and not brought back. */
+    private val forgetIdle = Runnable {
+        val p = session?.player ?: return@Runnable
+        if (p.isPlaying) return@Runnable
+        p.stop()
+        p.clearMediaItems()
+        LastPlayed.clear()
     }
 
     /** While playing, saves the spot in the song every 5 seconds (a crash loses at most that). */

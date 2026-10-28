@@ -350,6 +350,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
             .put("pos", if (atEnd) 0L else livePosition())
             .put("shuffle", shuffle)
             .put("repeat", repeat)
+            .put("at", System.currentTimeMillis())
         val text = o.toString()
         val write = Runnable {
             runCatching {
@@ -367,6 +368,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     private fun restoreSession() {
         if (!Settings.rememberPlaying || hasItem) return
         val o = runCatching { org.json.JSONObject(sessionFile.readText()) }.getOrNull() ?: return
+        // Not used for over an hour: start fresh instead.
+        if (System.currentTimeMillis() - o.optLong("at", 0L) > FORGET_AFTER_MS) { runCatching { sessionFile.delete() }; return }
         val arr = o.optJSONArray("items") ?: return
         val tracks = (0 until arr.length()).mapNotNull { n ->
             val t = arr.optJSONObject(n) ?: return@mapNotNull null
@@ -386,6 +389,20 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         repeat = o.optInt("repeat", Player.REPEAT_MODE_OFF)
         moveTo(o.optInt("cur", 0).coerceIn(tracks.indices), play = false, auto = false, startMs = o.optLong("pos", 0L))
         changed()
+        main.postDelayed(forgetIdle, FORGET_AFTER_MS)
+    }
+
+    /** Left alone longer than this (nothing playing), the song and queue are cleared and not brought back. */
+    private val FORGET_AFTER_MS = (System.getProperty("gw.forgetAfterMs")?.toLongOrNull() ?: (60 * 60 * 1000L))
+
+    private val forgetIdle = Runnable {
+        if (playing || !hasItem) return@Runnable
+        stopAll()
+        items.clear(); base.clear(); shuf.clear()
+        Flow.stop()
+        queueVersion++
+        main.removeCallbacks(saveLater)
+        saver.execute { runCatching { sessionFile.delete() } }
     }
 
     fun release() {
@@ -405,6 +422,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         if (on == playing) return
         playing = on
         if (!on) saveSoon()
+        main.removeCallbacks(forgetIdle)
+        if (!on) main.postDelayed(forgetIdle, FORGET_AFTER_MS)
         val now = SystemClock.elapsedRealtime()
         if (on) {
             playingSince = now

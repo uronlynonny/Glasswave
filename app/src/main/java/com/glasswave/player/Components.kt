@@ -533,3 +533,6 @@ fun Toggle(on: Boolean, onChange: (Boolean) -> Unit) {
         Box(Modifier.offset(x = knob, y = 2.dp).size(26.dp).clip(CircleShape).background(Color.White))
     }
 }
+
+/** On PC this keeps keyboard shortcuts out of a text box; the phone has none, so it does nothing. */
+fun androidx.compose.ui.Modifier.typing(): androidx.compose.ui.Modifier = this

@@ -118,7 +118,9 @@ object Menus {
     fun closeSong() { song = null }
     /** A song whose artist page should open (tapping the artist's name in the full player). */
     var artistOf by mutableStateOf<Track?>(null)
-    fun openPlaylist(p: PlaylistInfo) { playlist = p }
+    /** The songs of an album or playlist that isn't in your Library (its menu can play or save them). */
+    var playlistSongs: List<Track>? = null
+    fun openPlaylist(p: PlaylistInfo, songs: List<Track>? = null) { playlistSongs = songs; playlist = p }
     fun closePlaylist() { playlist = null }
     fun askName(r: NameRequest) { naming = r }
     fun closeName() { naming = null }
@@ -431,7 +433,7 @@ private fun PlaylistMenuBody(p: PlaylistInfo, ps: PlayerState) {
         fun withSongs(what: (List<Track>) -> Unit) {
             Menus.closePlaylist()
             kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch {
-                val songs = Library.tracks(p.id)
+                val songs = Menus.playlistSongs ?: Library.tracks(p.id)
                 if (songs.isEmpty()) Menus.say("${p.name} has no songs yet") else what(songs)
             }
         }
@@ -443,28 +445,40 @@ private fun PlaylistMenuBody(p: PlaylistInfo, ps: PlayerState) {
         MenuRow(Icons.AutoMirrored.Rounded.QueueMusic, "Add to queue") {
             withSongs { songs -> if (!ps.hasItem) ps.playList(songs, 0) else songs.forEach { ps.addToQueue(it) }; Menus.say("Added ${p.name} to the queue") }
         }
-        val pinned = Library.isPinned(p.id)
-        MenuRow(Icons.Rounded.PushPin, if (pinned) "Unpin" else "Pin to top", if (pinned) Lime else Color.White) {
-            Library.togglePin(p.id)
-            Menus.say(if (pinned) "Unpinned" else "Pinned")
-            Menus.closePlaylist()
+        val inLibrary = Library.info(p.id) != null
+        val savedCollection = p.id.startsWith(Library.SAVED_PREFIX)
+        val given = Menus.playlistSongs
+        if (savedCollection && !inLibrary && given != null) {
+            MenuRow(Icons.Rounded.Add, "Save to Library") {
+                Library.saveCollection(p.id.removePrefix(Library.SAVED_PREFIX), p.name, p.thumb, given)
+                Menus.say("Saved to Library")
+                Menus.closePlaylist()
+            }
         }
-        if (p.source == Source.LOCAL && p.id != Library.LIKED_ID) {
+        if (inLibrary) {
+            val pinned = Library.isPinned(p.id)
+            MenuRow(Icons.Rounded.PushPin, if (pinned) "Unpin" else "Pin to top", if (pinned) Lime else Color.White) {
+                Library.togglePin(p.id)
+                Menus.say(if (pinned) "Unpinned" else "Pinned")
+                Menus.closePlaylist()
+            }
+        }
+        if (inLibrary && p.source == Source.LOCAL && p.id != Library.LIKED_ID) {
             MenuRow(Icons.Rounded.Edit, "Rename") {
                 Menus.closePlaylist()
                 Menus.askName(Menus.NameRequest("Rename playlist", p.name, "Save") { Library.rename(p.id, it) })
             }
         }
-        if (p.source == Source.LOCAL) {
-            MenuRow(Icons.Rounded.Delete, "Delete playlist", Color(0xFFFF8A8A)) {
+        if (inLibrary && p.source == Source.LOCAL) {
+            MenuRow(Icons.Rounded.Delete, if (savedCollection) "Remove from Library" else "Delete playlist", Color(0xFFFF8A8A)) {
                 Library.delete(p.id)
-                Menus.say("Deleted ${p.name}")
+                Menus.say(if (savedCollection) "Removed from Library" else "Deleted ${p.name}")
                 Menus.closePlaylist()
             }
         }
         MenuRow(Icons.Rounded.Download, "Download all") {
             Menus.closePlaylist()
-            kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { Downloads.downloadAll(Library.tracks(p.id)) }
+            kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch { Downloads.downloadAll(given ?: Library.tracks(p.id)) }
             Menus.say("Downloading ${p.name}")
         }
     }

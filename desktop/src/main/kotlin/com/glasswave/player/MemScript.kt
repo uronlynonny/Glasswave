@@ -122,6 +122,7 @@ object MemScript {
                             onUi { ps.playList(hits.take(10), 0) }
                         }
                         "next" -> onUi { ps.next() }
+                        "toggle" -> onUi { ps.toggle() }
                         // plmenu: opens the first playlist's menu (as a right-click in the side menu does).
                         // hotkey: presses Ctrl+Alt+→ like a person would (the shortcut that works from any window).
                         "hotkey" -> java.awt.Robot().run {
@@ -257,6 +258,17 @@ object MemScript {
                         // uncensor id: which version plays for that song (the explicit one when it's clean).
                         "uncensor" -> System.err.println("GW uncensor $arg -> " + YtRepo.uncensored(ytWatchUrl(arg)))
                         // artistpage name: what an artist's page holds (and opens it).
+                        // albumpage query: opens the first album found; savealbum saves the open one to the Library.
+                        "albumpage" -> {
+                            val a = kotlinx.coroutines.runBlocking { YtMusicApi.search(arg, YtMusicApi.Filter.ALBUMS) }.sections.flatMap { it.items }.filterIsInstance<AlbumItem>().first()
+                            onUi { vm.open(Route.Online(a)) }
+                        }
+                        "savealbum" -> {
+                            val a = (vm.stack.lastOrNull() as? Route.Online)?.item as? AlbumItem
+                            val p = a?.let { kotlinx.coroutines.runBlocking { YtMusicApi.page(it) } }
+                            if (a != null && p != null) onUi { Library.saveCollection(a.browseId, p.title, p.thumb, p.tracks) }
+                            System.err.println("GW saved: " + Library.playlists.value.filter { it.id.startsWith(Library.SAVED_PREFIX) }.joinToString { "${it.name} (${it.count})" })
+                        }
                         "artistpage" -> { val t0 = System.currentTimeMillis()
                             val a = kotlinx.coroutines.runBlocking { YtMusicApi.search(arg, YtMusicApi.Filter.ARTISTS) }.sections.flatMap { it.items }.filterIsInstance<ArtistItem>().first()
                             val p = kotlinx.coroutines.runBlocking { YtMusicApi.page(a) }

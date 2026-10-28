@@ -159,6 +159,25 @@ object Library {
     @Synchronized
     fun clearSource(source: Source) = replaceSource(source, emptyList())
 
+    /* ---------------- Albums and playlists saved from YouTube Music ---------------- */
+
+    const val SAVED_PREFIX = "saved_"
+
+    /** The Library id an album or playlist gets when you save it. */
+    fun savedId(browseId: String) = SAVED_PREFIX + browseId
+
+    /** Saves an album or playlist (with its songs) to your Library, or refreshes it if it's there. */
+    @Synchronized
+    fun saveCollection(browseId: String, name: String, cover: String?, tracks: List<Track>): PlaylistInfo {
+        val p = PlaylistInfo(savedId(browseId), name.trim().ifEmpty { "Saved" }, Source.LOCAL, cover ?: tracks.firstOrNull()?.thumb, tracks.size)
+        writeTracks(p.id, tracks)
+        val all = listOf(p) + _playlists.value.filter { it.id != p.id }
+        writeIndex(all)
+        _playlists.value = all
+        version++
+        return p
+    }
+
     /* ---------------- Playlists made in the app ---------------- */
 
     /** Your own playlists (not the synced ones), Liked songs first. */

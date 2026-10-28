@@ -21,6 +21,8 @@ object LastPlayed {
     /** At most this many songs are kept (some before the current song, the rest after). */
     private const val MAX = 200
     private const val BEFORE = 50
+    /** Left alone longer than this (nothing playing), it's forgotten: Glasswave opens fresh. */
+    const val FORGET_AFTER_MS = 60 * 60 * 1000L
 
     private lateinit var prefs: SharedPreferences
 
@@ -66,6 +68,7 @@ object LastPlayed {
             putLong("position", pos)
             putBoolean("shuffle", shuffle)
             putInt("repeat", p.repeatMode)
+            putLong("at", System.currentTimeMillis())
         }
     }
 
@@ -79,6 +82,8 @@ object LastPlayed {
         if (!Settings.rememberPlaying || p.mediaItemCount > 0) return
         try {
             val sp = prefs
+            // Not used for over an hour: start fresh instead.
+            if (System.currentTimeMillis() - sp.getLong("at", 0L) > FORGET_AFTER_MS) return clear()
             val arr = JSONArray(sp.getString("tracks", null) ?: return)
             val tracks = (0 until arr.length()).map { n ->
                 val o = arr.getJSONObject(n)
