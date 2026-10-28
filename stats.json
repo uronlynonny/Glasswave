@@ -1,5 +1,5 @@
 {
-  "lastTime": 1793155356,
+  "lastTime": 1793158817,
   "totals": {
     "visits": 88,
     "siteDownloads": 30,
@@ -672,9 +672,15 @@
       "v": 0,
       "d": 0,
       "a": 0
+    },
+    {
+      "t": 1793162500,
+      "v": 0,
+      "d": 0,
+      "a": 0
     }
   ],
-  "updated": 1793158816,
+  "updated": 1793162500,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -749,7 +755,7 @@
       "m": "\"I Remember\" by Takeoff wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nYoutubeMusicPremiumContentException: This video is a YouTube Music Premium video\n\nWindows 10 (10.0), Glasswave for Windows 1.2.1\nhttps://music.youtube.com/watch?v=SSRjufffRiA"
     }
   ],
-  "lastActiveTime": 1793140361,
+  "lastActiveTime": 1793161590,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -816,11 +822,17 @@
         "b2db98c7-4f60-4555-b25f-63d597799d89",
         "c99a549d-51a7-43c3-9c24-2ce001713605"
       ]
+    },
+    "2026-10-28": {
+      "a": [
+        "36d58cc1-c393-490b-9440-241580552d0a",
+        "7b35404e-f47e-417d-b856-13d2e544ae4f"
+      ]
     }
   },
   "active": {
     "today": {
-      "a": 0,
+      "a": 2,
       "w": 0
     },
     "week": {
@@ -851,6 +863,11 @@
         "d": "2026-10-27",
         "a": 9,
         "w": 5
+      },
+      {
+        "d": "2026-10-28",
+        "a": 2,
+        "w": 0
       }
     ]
   }
