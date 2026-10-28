@@ -1,11 +1,11 @@
 {
-  "lastTime": 1793173709,
+  "lastTime": 1793177284,
   "totals": {
     "visits": 90,
     "siteDownloads": 30,
-    "apk": 123
+    "apk": 124
   },
-  "apkTotal": 86,
+  "apkTotal": 87,
   "hours": [
     {
       "t": 1792763089,
@@ -696,9 +696,15 @@
       "v": 2,
       "d": 0,
       "a": 2
+    },
+    {
+      "t": 1793177287,
+      "v": 0,
+      "d": 0,
+      "a": 1
     }
   ],
-  "updated": 1793174081,
+  "updated": 1793177287,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -771,6 +777,10 @@
     {
       "t": 1793043832,
       "m": "\"I Remember\" by Takeoff wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nYoutubeMusicPremiumContentException: This video is a YouTube Music Premium video\n\nWindows 10 (10.0), Glasswave for Windows 1.2.1\nhttps://music.youtube.com/watch?v=SSRjufffRiA"
+    },
+    {
+      "t": 1793177284,
+      "m": "\"Anime Bitch\" by Shiki-Tmns, D-Real, Hentai Dude wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nAgeRestrictedContentException: This age-restricted video cannot be watched anonymously\n\nWindows 11 (10.0), Glasswave for Windows 1.2.13\nhttps://music.youtube.com/watch?v=0TED-B4QFUI"
     }
   ],
   "lastActiveTime": 1793173227,
