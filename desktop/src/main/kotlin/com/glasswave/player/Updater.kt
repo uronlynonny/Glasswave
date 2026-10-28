@@ -55,6 +55,7 @@ object Updater {
      * never downloads installers itself. (Windows says so: a Store app runs inside a "package".)
      */
     val fromStore: Boolean by lazy {
+        if (!Os.isWindows) return@lazy false
         runCatching {
             val k = com.sun.jna.Native.load("kernel32", StorePackage::class.java)
             val len = com.sun.jna.ptr.IntByReference(0)
@@ -138,6 +139,10 @@ object Updater {
     }
 
     fun check(tell: Boolean = false) {
+        if (Os.isMac) {
+            if (tell) status = "On a Mac, new versions come from the Glasswave website for now."
+            return
+        }
         if (fromStore) {
             if (tell) {
                 status = "Glasswave updates through the Microsoft Store."
@@ -169,7 +174,7 @@ object Updater {
     }
 
     fun checkIfDue() {
-        if (fromStore) return
+        if (fromStore || Os.isMac) return
         if (System.currentTimeMillis() - lastChecked > 3600_000L) check()
     }
 
@@ -295,7 +300,7 @@ object Updater {
 
     /** Called as the app closes: a downloaded update installs silently, ready for next time. */
     fun installOnExit() {
-        if (fromStore) return
+        if (fromStore || Os.isMac) return
         ready?.let { runInstaller(it, reopen = false) }
     }
 

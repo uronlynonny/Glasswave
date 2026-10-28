@@ -1,6 +1,7 @@
-# Glasswave for Windows
+# Glasswave for Windows and Mac
 
-The desktop version of Glasswave. It's a separate build from the Android app: the shared code
+The desktop version of Glasswave. The same code builds for Windows and for Mac: build on the
+computer you're building for (a Mac build has to be made on a Mac). It's a separate build from the Android app: the shared code
 was copied in from `app/` and adapted, so changes to one don't reach the other by themselves.
 
 ## Run, build, check
@@ -29,3 +30,26 @@ two apps stay in step.
   cursor; type is Windows 11's Segoe UI Variable.
 - **Shortcuts**: Space plays/pauses, Ctrl+→ / Ctrl+← skip, Esc or the mouse's back button goes back.
 - **Not on desktop yet**: YouTube Music sign-in, music videos, voice search, the home-screen widget.
+
+## On a Mac
+
+Needs Java 21 (`brew install openjdk@21`, then `export JAVA_HOME=/opt/homebrew/opt/openjdk@21`).
+Run Gradle with `sh ./gradlew` (the script isn't marked executable in this repository).
+
+```
+sh ./gradlew -p desktop run            # open the app
+sh ./gradlew -p desktop packageDmg     # Mac installer (in desktop/build/compose/binaries/main/dmg)
+sh ./gradlew -p desktop makeMacIcon    # remake icons/glasswave.icns after changing the icon design
+```
+
+- **Files**: `~/Library/Application Support/Glasswave` and `~/Library/Caches/Glasswave`.
+- **Window**: the Mac's own title bar, made see-through, so the red, yellow and green buttons sit
+  over the song's colours. The red button hides the window and the music keeps playing; click
+  Glasswave in the Dock to bring it back, ⌘Q to quit.
+- **Shortcuts**: ⌘→ / ⌘← skip (instead of Ctrl). Type is San Francisco.
+- **Sign-in**: YouTube Music sign-in opens Google's page in a small window of its own, built from
+  `signin/SignIn.swift` with Apple's WebKit (needs Xcode's command line tools to build). It starts
+  fresh and private each time and keeps nothing after it closes.
+- **Not on Mac yet**: updating itself (get new versions from the website), media keys outside the window and Now Playing
+  in Control Center. The app isn't signed with an Apple Developer ID, so the first time, right-click
+  it and choose Open.

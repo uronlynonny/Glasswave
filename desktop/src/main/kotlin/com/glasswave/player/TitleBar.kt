@@ -95,9 +95,27 @@ object TitleBar {
     private const val HTTOPLEFT = 13L
     private const val HTTOPRIGHT = 14L
 
+    /**
+     * On a Mac: the window keeps its own title bar, made see-through, with the app drawn right up
+     * under it. Only the red, yellow and green buttons show, over the song's colours, and the bar
+     * still drags and double-click zooms as usual. Glasswave draws no bar of its own.
+     */
+    private fun installMac(window: java.awt.Window) {
+        val root = (window as? javax.swing.RootPaneContainer)?.rootPane ?: return
+        root.putClientProperty("apple.awt.fullWindowContent", true)
+        root.putClientProperty("apple.awt.transparentTitleBar", true)
+        root.putClientProperty("apple.awt.windowTitleVisible", false)
+        inset = 28.dp
+        macBar = true
+    }
+
+    /** True on a Mac, where the window's own see-through bar is used (see installMac). */
+    private var macBar = false
+
     /** Takes over Windows' title bar for [window]. Call once, after the window is showing. */
     fun install(window: java.awt.Window) {
-        if (proc != null || System.getProperty("gw.nativeTitleBar") != null) return
+        if (proc != null || macBar || System.getProperty("gw.nativeTitleBar") != null) return
+        if (Os.isMac) return installMac(window)
         runCatching {
             val u = Native.load("user32", User32::class.java)
             val hwnd = Native.getWindowPointer(window) ?: return
@@ -162,7 +180,7 @@ object TitleBar {
     /** The bar itself: the app's name on the left, the three window buttons on the right. */
     @Composable
     fun Bar(window: java.awt.Window, modifier: Modifier = Modifier) {
-        if (inset == 0.dp) return
+        if (inset == 0.dp || macBar) return
         val text = Color.White.copy(alpha = if (active) 0.85f else 0.45f)
         Row(
             modifier.fillMaxWidth().height(Height).onGloballyPositioned { barPx = it.size.height },

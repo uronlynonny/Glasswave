@@ -42,7 +42,7 @@ object Problems {
         }
         val os = "${System.getProperty("os.name")} (${System.getProperty("os.version")})"
         val body = "\"${t.title.ifBlank { "Unknown song" }}\"" + (if (t.artist.isNotEmpty()) " by ${t.artist}" else "") +
-            " wouldn't play (tried ${tries + 1} times).\n$why\n\n$os, Glasswave for Windows ${Updater.currentVersion()}\n$url"
+            " wouldn't play (tried ${tries + 1} times).\n$why\n\n$os, Glasswave for ${if (Os.isMac) "Mac" else "Windows"} ${Updater.currentVersion()}\n$url"
         Thread {
             runCatching {
                 val req = Request.Builder().url("https://ntfy.sh/$TOPIC")

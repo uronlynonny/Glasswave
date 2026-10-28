@@ -14,6 +14,16 @@ val appBuild = file("../app/build.gradle.kts").readText()
 // Glasswave for Windows has its own version number, separate from the phone app.
 // Raise it for every Windows release: installed copies update themselves to a higher number.
 val appVersion = "1.2.13"
+// Which computer this build is for: the one building it (a Mac build has to be made on a Mac).
+val hostOs = System.getProperty("os.name").lowercase()
+val isMac = hostOs.startsWith("mac")
+// FFmpeg's ready-made native libraries for this computer.
+val nativeTarget = when {
+    isMac && System.getProperty("os.arch") == "aarch64" -> "macosx-arm64"
+    isMac -> "macosx-x86_64"
+    hostOs.startsWith("linux") -> "linux-x86_64"
+    else -> "windows-x86_64"
+}
 val newPipe = Regex("NewPipeExtractor:(v?[0-9][0-9.]*)").find(appBuild)?.groupValues?.get(1)
     ?: error("Couldn't find the NewPipeExtractor version in app/build.gradle.kts")
 
@@ -41,10 +51,10 @@ dependencies {
             "librealsense2", "videoinput", "artoolkitplus", "flandmark", "leptonica", "tesseract",
         ).forEach { exclude(group = "org.bytedeco", module = it) }
     }
-    implementation("org.bytedeco:ffmpeg:6.1.1-1.5.10:windows-x86_64")
-    implementation("org.bytedeco:javacpp:1.5.10:windows-x86_64")
+    implementation("org.bytedeco:ffmpeg:6.1.1-1.5.10:$nativeTarget")
+    implementation("org.bytedeco:javacpp:1.5.10:$nativeTarget")
 
-    // Talks to Windows directly, for the dark title bar.
+    // Talks to Windows directly, for the dark title bar (unused on Mac).
     implementation("net.java.dev.jna:jna-platform:5.14.0")
     // Voice search: Whisper speech recognition, run on this PC.
     implementation("io.github.givimad:whisper-jni:1.7.1")
@@ -119,7 +129,7 @@ compose.desktop {
         nativeDistributions {
             // Files shipped beside the app: the YouTube Music sign-in window (see signInHelper).
             appResourcesRootDir.set(layout.buildDirectory.dir("appres"))
-            targetFormats(TargetFormat.Msi, TargetFormat.Exe)
+            if (isMac) targetFormats(TargetFormat.Dmg) else targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "Glasswave"
             packageVersion = appVersion
             description = "Glasswave music player"
@@ -135,6 +145,22 @@ compose.desktop {
                 // Installs for this user only, so the app can update itself without asking for admin rights.
                 perUserInstall = true
                 upgradeUuid = "6c1f3b8e-2a4d-4f7e-9b1a-5d8c0e7f3a21"
+            }
+            macOS {
+                iconFile.set(project.file("icons/glasswave.icns"))
+                bundleID = "com.glasswave.player"
+                dockName = "Glasswave"
+                appCategory = "public.app-category.music"
+                // Macs only take version numbers that start at 1 or higher (1.2.11 is fine).
+                packageVersion = appVersion
+                dmgPackageVersion = appVersion
+                infoPlist {
+                    // Voice search asks for the microphone; this is the line macOS shows when it asks.
+                    extraKeysRawXml = """
+                        <key>NSMicrophoneUsageDescription</key>
+                        <string>Glasswave listens only while you use voice search, on this Mac.</string>
+                    """.trimIndent()
+                }
             }
         }
     }
@@ -190,7 +216,27 @@ val signInHelper by tasks.registering {
         check(p.waitFor() == 0) { "Couldn't build the sign-in window: $log" }
     }
 }
-tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(signInHelper) }
+// The Mac's sign-in window (signin/SignIn.swift): the same job, in Apple's web view (WebKit). It is
+// compiled with the Swift compiler from Xcode's command line tools and shipped next to the app,
+// with the app's icon for the Dock while it's open.
+val macSignInHelper by tasks.registering {
+    val src = file("signin/SignIn.swift")
+    val icon = file("icons/glasswave.icns")
+    val out = layout.buildDirectory.dir("appres/macos/signin")
+    inputs.file(src)
+    inputs.file(icon)
+    outputs.dir(out)
+    doLast {
+        val o = out.get().asFile.apply { deleteRecursively(); mkdirs() }
+        val p = ProcessBuilder("xcrun", "swiftc", "-O", "-o", File(o, "GlasswaveSignIn").absolutePath, src.absolutePath)
+            .redirectErrorStream(true).start()
+        val log = p.inputStream.bufferedReader().readText()
+        check(p.waitFor() == 0) { "Couldn't build the sign-in window: $log" }
+        icon.copyTo(File(o, "glasswave.icns"))
+    }
+}
+val signInFor = if (isMac) macSignInHelper else signInHelper
+tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(signInFor) }
 
 // Checks (screenCheck, deckCheck, voiceCheck…) never touch your real Glasswave: unless a check
 // picks its own folder, it keeps its library, history, listening stats and cache in build/check-data.
@@ -222,12 +268,12 @@ tasks.register<JavaExec>("screenCheck") {
     // -PsignInTest=<folder>: the YouTube Music sign-in window hands back signed-out cookies (no
     // account needed), and the app keeps its data in that folder instead of yours.
     (project.findProperty("signInTest") as String?)?.let { dir ->
-        dependsOn(signInHelper)
+        dependsOn(signInFor)
         environment("GW_SIGNIN_TEST", "1")
         systemProperty("gw.signInUrl", "https://music.youtube.com/")
         environment("APPDATA", "$dir/roaming")
         environment("LOCALAPPDATA", "$dir/local")
-        systemProperty("gw.appResources", layout.buildDirectory.dir("appres/windows").get().asFile.absolutePath)
+        systemProperty("gw.appResources", layout.buildDirectory.dir(if (isMac) "appres/macos" else "appres/windows").get().asFile.absolutePath)
     }
 }
 
@@ -278,6 +324,13 @@ tasks.register<JavaExec>("makeOg") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("com.glasswave.player.OgImageKt")
     args(file("../docs/og.png").absolutePath)
+}
+
+// Remakes the Mac icon, icons/glasswave.icns (needs a Mac: it uses macOS's iconutil).
+tasks.register<JavaExec>("makeMacIcon") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.IconMakerKt")
+    args("--mac", file("icons/glasswave.icns").absolutePath)
 }
 
 // Remakes icons/glasswave.ico from the icon design (see IconMaker.kt).

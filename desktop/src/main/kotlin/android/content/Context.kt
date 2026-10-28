@@ -7,11 +7,19 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import org.json.JSONObject
 
-/** Where Glasswave keeps its files on Windows (falls back to the home folder elsewhere). */
+/**
+ * Where Glasswave keeps its files. On Windows: %APPDATA%\Glasswave and %LOCALAPPDATA%\Glasswave Cache.
+ * On a Mac: ~/Library/Application Support/Glasswave and ~/Library/Caches/Glasswave, the usual places
+ * (the checks set APPDATA and LOCALAPPDATA on a Mac too, to keep their files apart from yours).
+ */
 object AppDirs {
-    val data: File = File(System.getenv("APPDATA") ?: System.getProperty("user.home"), "Glasswave").apply { mkdirs() }
+    private val home = System.getProperty("user.home")
+    private val mac = System.getProperty("os.name").orEmpty().lowercase().startsWith("mac")
+    val data: File = (System.getenv("APPDATA")?.let { File(it, "Glasswave") }
+        ?: if (mac) File(home, "Library/Application Support/Glasswave") else File(home, "Glasswave")).apply { mkdirs() }
     // Kept apart from the installed app (which lives in %LOCALAPPDATA%\Glasswave), so updates never touch it.
-    val cache: File = File(System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"), "Glasswave Cache").apply { mkdirs() }
+    val cache: File = (System.getenv("LOCALAPPDATA")?.let { File(it, "Glasswave Cache") }
+        ?: if (mac) File(home, "Library/Caches/Glasswave") else File(home, "Glasswave Cache")).apply { mkdirs() }
 }
 
 open class Context {
