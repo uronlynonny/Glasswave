@@ -16,25 +16,27 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
+import kotlin.math.ceil
+import kotlin.math.pow
 
 /**
  * Bars that move with the music, in the highlight colour. Drawn every frame without
  * redrawing anything around it, and only measuring the sound while it's on screen.
  *
- * Lively on purpose: each bar shows how much louder its notes are than they've been lately (so
- * beats jump out even in loud songs), every bass hit pumps the bars up and brightens them, the
- * bars drop fast, and a small cap on each one falls more slowly.
+ * Each bar glides on a soft spring, so it rises and falls smoothly instead of jumping, and
+ * neighbouring bars blend a little so the row moves like one wave. The bass makes the whole row
+ * swell, the low (left) bars most.
  */
 @Composable
 fun Visualizer(playing: Boolean, color: Color, modifier: Modifier = Modifier, style: VisualizerStyle = Settings.visualizer) {
     if (style == VisualizerStyle.OFF) return
-    val raw = remember { FloatArray(Spectrum.BANDS) }
-    val shown = remember { FloatArray(Spectrum.BANDS) }
-    val caps = remember { FloatArray(Spectrum.BANDS) }
-    val usual = remember { FloatArray(Spectrum.BANDS) { 0.4f } }
+    val n = Spectrum.BANDS
+    val raw = remember { FloatArray(n) }
+    val pos = remember { FloatArray(n) }
+    val vel = remember { FloatArray(n) }
+    val usual = remember { FloatArray(n) { 0.4f } }
     val bassUsual = remember { floatArrayOf(0.4f) }
-    val kick = remember { mutableFloatStateOf(0f) }
+    val swell = remember { mutableFloatStateOf(0f) }
     val tick = remember { mutableLongStateOf(0L) }
     DisposableEffect(Unit) {
         Spectrum.watch()
@@ -42,43 +44,51 @@ fun Visualizer(playing: Boolean, color: Color, modifier: Modifier = Modifier, st
     }
     LaunchedEffect(playing) {
         var last = 0L
+        val target = FloatArray(n)
         while (true) {
             val settled = withFrameNanos { now ->
                 val dt = if (last == 0L) 16f else ((now - last) / 1_000_000f).coerceIn(1f, 64f)
                 last = now
-                val f = dt / 16.0
+                val f = dt / 16f
                 val got = playing && Spectrum.now(raw)
-                // Bass hits: the lowest notes jumping above their usual level.
+                if (!got) raw.fill(0f)
+
+                // Bass: the lowest notes against their usual level, smoothed into a swell.
                 var bass = 0f
                 for (i in 0 until 5) bass += raw[i]
                 bass /= 5f
-                if (got) {
-                    bassUsual[0] += (bass - bassUsual[0]) * (1f - Math.pow(0.97, f).toFloat())
-                    val hit = ((bass - bassUsual[0]) * 5f).coerceIn(0f, 1f)
-                    kick.floatValue = maxOf(hit, kick.floatValue * Math.pow(0.82, f).toFloat())
-                } else {
-                    kick.floatValue *= Math.pow(0.82, f).toFloat()
+                if (got) bassUsual[0] += (bass - bassUsual[0]) * (1f - 0.985f.pow(f))
+                val hit = if (got) ((bass - bassUsual[0]) * 4f + bass * 0.35f).coerceIn(0f, 1f) else 0f
+                val s = swell.floatValue
+                swell.floatValue = s + (hit - s) * (1f - (if (hit > s) 0.55f else 0.88f).pow(f))
+                val sw = swell.floatValue
+
+                for (i in 0 until n) {
+                    // Blend with the neighbours so the row moves as one wave.
+                    val a = raw[(i - 1).coerceAtLeast(0)]
+                    val b = raw[(i + 1).coerceAtMost(n - 1)]
+                    val v = raw[i] * 0.5f + (a + b) * 0.25f
+                    if (got) usual[i] += (v - usual[i]) * (1f - 0.98f.pow(f))
+                    val lift = (v - usual[i]) * 1.3f
+                    val low = 1f - i.toFloat() / n
+                    val x = (v * 0.72f + lift) * (0.8f + sw * (0.05f + 0.45f * low))
+                    // Soft top: loud moments still rise, but the row never flattens at full height.
+                    target[i] = if (got) (if (x < 0.7f) x else 0.7f + (x - 0.7f) * 0.35f).coerceIn(0f, 0.98f) else 0f
                 }
-                val k = kick.floatValue
-                val n = shown.size
-                var peak = 0f
-                for (i in shown.indices) {
-                    val target = if (got) {
-                        // How loud it is, plus how much louder than lately: steady sound sits
-                        // lower, every change jumps.
-                        usual[i] += (raw[i] - usual[i]) * (1f - Math.pow(0.975, f).toFloat())
-                        val lift = (raw[i] - usual[i]) * 2.6f
-                        val low = 1f - i.toFloat() / n
-                        ((raw[i] * 0.62f + lift) * (0.82f + k * (0.25f + 0.45f * low))).coerceIn(0f, 1f)
-                    } else 0f
-                    // Up at once, down fast.
-                    val speed = if (target > shown[i]) 1f - Math.pow(0.12, f).toFloat() else 1f - Math.pow(0.74, f).toFloat()
-                    shown[i] += (target - shown[i]) * speed
-                    caps[i] = maxOf(shown[i], caps[i] - 0.011f * dt / 16f)
-                    peak = maxOf(peak, caps[i])
+                // The springs, in small steps so they stay smooth at any frame rate.
+                val steps = ceil(dt / 8f).toInt().coerceAtLeast(1)
+                val h = dt / steps / 16f
+                var moving = 0f
+                repeat(steps) {
+                    for (i in 0 until n) {
+                        vel[i] += (target[i] - pos[i]) * 0.34f * h
+                        vel[i] *= 0.74f.pow(h)
+                        pos[i] = (pos[i] + vel[i] * h).coerceIn(0f, 1f)
+                    }
                 }
+                for (i in 0 until n) moving = maxOf(moving, pos[i], kotlin.math.abs(vel[i]))
                 tick.longValue = now
-                !playing && peak < 0.005f
+                !playing && moving < 0.004f
             }
             if (settled) break
         }
@@ -86,33 +96,24 @@ fun Visualizer(playing: Boolean, color: Color, modifier: Modifier = Modifier, st
     Box(
         modifier.drawBehind {
             tick.longValue // redraw on every new frame
-            val n = shown.size
             val w = size.width
             val h = size.height
-            val k = kick.floatValue
-            val top = lerp(color, Color.White, k * 0.35f)
-            val brush = Brush.verticalGradient(listOf(top, color.copy(alpha = 0.35f + k * 0.2f)), startY = 0f, endY = h)
-            val capColor = lerp(color, Color.White, 0.55f)
+            val sw = swell.floatValue
+            val brush = Brush.verticalGradient(
+                listOf(color, color.copy(alpha = 0.45f + sw * 0.15f)),
+                startY = 0f, endY = h,
+            )
             when (style) {
                 VisualizerStyle.BARS, VisualizerStyle.MIRROR -> {
-                    val gap = w / n * 0.32f
+                    val gap = w / n * 0.34f
                     val bw = w / n - gap
-                    val capH = maxOf(2f, bw * 0.45f)
-                    val room = h - capH * 2
                     val mirror = style == VisualizerStyle.MIRROR
                     for (i in 0 until n) {
-                        val v = (0.04f + shown[i] * 0.96f).coerceIn(0f, 1f)
-                        val bh = maxOf(bw, v * room)
+                        val v = (0.05f + pos[i] * 0.95f).coerceIn(0f, 1f)
+                        val bh = maxOf(bw, v * h)
                         val x = i * (bw + gap) + gap / 2
                         val y = if (mirror) (h - bh) / 2 else h - bh
                         drawRoundRect(brush, Offset(x, y), Size(bw, bh), CornerRadius(bw / 2))
-                        // The cap, a little above the bar while it falls back.
-                        if (caps[i] > shown[i] + 0.03f) {
-                            val ch = (0.04f + caps[i] * 0.96f) * room
-                            val cy = if (mirror) (h - ch) / 2 - capH * 1.5f else h - ch - capH * 1.5f
-                            drawRoundRect(capColor, Offset(x, cy), Size(bw, capH), CornerRadius(capH / 2))
-                            if (mirror) drawRoundRect(capColor, Offset(x, h - cy - capH), Size(bw, capH), CornerRadius(capH / 2))
-                        }
                     }
                 }
                 VisualizerStyle.OFF -> Unit
