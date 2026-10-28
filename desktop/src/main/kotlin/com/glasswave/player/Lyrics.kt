@@ -6,6 +6,7 @@ import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -54,7 +55,29 @@ object LyricsRepo {
     private fun mainArtist(a: String) = a.replace(" - Topic", "").split(",", "&", " x ", " X ", " and ").first().trim()
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
-    suspend fun get(url: String, title: String, artist: String, seconds: Long): Lyrics? = withContext(Dispatchers.IO) {
+    /** Lookups running right now, so opening the lyrics joins one already under way. */
+    private val pending = ConcurrentHashMap<String, kotlinx.coroutines.Deferred<Lyrics?>>()
+    private val ahead = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+
+    /** True when [url]'s lyrics are already here (no wait to show them). */
+    fun ready(url: String) = cache.containsKey(url)
+
+    /**
+     * Looks a song's lyrics up in the background (the song that just started, and the next one),
+     * so they're usually ready by the time the lyrics are opened, like Spotify's.
+     */
+    fun prefetch(t: Track) {
+        if (t.title.isBlank() || cache.containsKey(t.url) || t.url in none || pending.containsKey(t.url)) return
+        ahead.launch { runCatching { get(t.url, t.title, t.artist, t.seconds) } }
+    }
+
+    suspend fun get(url: String, title: String, artist: String, seconds: Long): Lyrics? {
+        cache[url]?.let { return it }
+        val job = pending.getOrPut(url) { ahead.async { try { load(url, title, artist, seconds) } finally { pending.remove(url) } } }
+        return job.await()
+    }
+
+    private suspend fun load(url: String, title: String, artist: String, seconds: Long): Lyrics? = withContext(Dispatchers.IO) {
         cache[url]?.let { return@withContext it }
         // A downloaded song keeps its lyrics on this PC, so they show offline too.
         saved(url)?.let { cache[url] = it; return@withContext it }
@@ -62,18 +85,20 @@ object LyricsRepo {
         val t = cleanTitle(title)
         val a = mainArtist(artist)
         // Synced lyrics from anywhere beat unsynced ones; unsynced are the last resort.
+        // LRCLIB and KuGou are asked at the same time, not one after the other.
+        val fromKugou = async { runCatching { kugou(t, a, seconds) }.getOrNull() }
         val fromLrclib = runCatching { lrclib(t, a, seconds) }.getOrNull()
         fun fits(k: Lyrics) = seconds <= 0 || (k.lines.lastOrNull()?.ms ?: 0) / 1000 <= seconds + 3
         val lrclibSynced = fromLrclib?.takeIf { it.synced }
         val found = if (lrclibSynced != null) {
             // LRCLIB usually times whole lines; KuGou often times every word. Use KuGou's only when
             // it's clearly the same song with the same timing, otherwise keep LRCLIB's.
-            if (lrclibSynced.wordTimed) lrclibSynced
-            else runCatching { kugou(t, a, seconds) }.getOrNull()
+            if (lrclibSynced.wordTimed) lrclibSynced.also { fromKugou.cancel() }
+            else fromKugou.await()
                 ?.takeIf { k -> k.wordTimed && fits(k) && sameSong(lrclibSynced, k) }
                 ?: lrclibSynced
         } else {
-            runCatching { kugou(t, a, seconds) }.getOrNull()?.takeIf { fits(it) }
+            fromKugou.await()?.takeIf { fits(it) }
                 ?: fromLrclib
                 ?: runCatching { youtube(url) }.getOrNull()
         }

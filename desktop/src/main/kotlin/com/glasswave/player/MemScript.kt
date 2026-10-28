@@ -253,6 +253,16 @@ object MemScript {
                             System.err.println("GW artistpage ${a.title}: ${p.tracks.size} songs to play, ${p.shown} listed, ${System.currentTimeMillis() - t0} ms; rows: " + p.sections.joinToString(" | ") { "${it.title} (${it.items.size})" })
                             onUi { vm.open(Route.Online(a)) }
                         }
+                        // lyrtime: how long the playing song's lyrics take to come (0 when fetched ahead).
+                        "lyrtime" -> {
+                            val t = ps.currentTrack()
+                            if (t != null) {
+                                val was = LyricsRepo.ready(t.url)
+                                val t0 = System.currentTimeMillis()
+                                val ly = kotlinx.coroutines.runBlocking { LyricsRepo.get(t.url, t.title, t.artist, t.seconds) }
+                                System.err.println("GW lyrtime ${t.title}: ${System.currentTimeMillis() - t0} ms, ready before: $was, ${ly?.lines?.size ?: 0} lines")
+                            }
+                        }
                         "share" -> onUi { ShareCard.track = if (arg == "off") null else ps.currentTrack() }
                         "mem" -> System.err.println(line(arg))
                         "regions" -> regions(arg)

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.CallMade
 import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.runtime.Composable
@@ -393,6 +394,10 @@ private fun TopResult(c: ScreenCtx, item: MusicItem, all: List<MusicItem>) {
         if (item is SongItem) {
             GlassCircle(48.dp, c.bg, tint = Accent.copy(alpha = 0.5f), onClick = { tapAndRemember(c, item, all) }) {
                 Ico(Icons.Rounded.PlayArrow, Color.White, 28.dp)
+            }
+            // The song's menu, like every other song: add to a playlist, play next, go to the artist...
+            Box(Modifier.size(40.dp).pressable(0.85f) { Menus.openSong(item.track) }, contentAlignment = Alignment.Center) {
+                Ico(Icons.Rounded.MoreVert, Dim, 22.dp)
             }
         }
     }

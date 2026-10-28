@@ -113,7 +113,7 @@ fun LyricsScreen(ps: PlayerState, onClose: () -> Unit) {
         if (url == null) return@LaunchedEffect
         state = Load.Loading
         // Give the player a moment to know the song's length (it helps pick the right lyrics).
-        if (ps.durationMs <= 0) delay(600)
+        if (ps.durationMs <= 0 && !LyricsRepo.ready(url)) delay(600)
         state = try {
             Load.Done(LyricsRepo.get(url, ps.title, ps.artist, ps.durationMs / 1000))
         } catch (e: Exception) {

@@ -35,6 +35,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.PushPin
@@ -164,7 +165,7 @@ fun DownloadsPage(c: ScreenCtx) {
 @Composable
 fun StatsPage(c: ScreenCtx) {
     val list = rememberLazyListState()
-    var period by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(Stats.Period.MONTH) }
+    var period by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(Stats.Period.WEEK) }
     var data by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Stats.Summary?>(null) }
     LaunchedEffect(period, Stats.version) { data = Stats.summary(period) }
     val accent = CoverTint.accent
@@ -173,7 +174,7 @@ fun StatsPage(c: ScreenCtx) {
             Column(Modifier.padding(horizontal = 20.dp)) {
                 GText("Your stats", 32, weight = FontWeight.Bold)
                 Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Stats.Period.entries.forEach { p -> Chip(p.label, period == p, c.bg) { period = p } }
                 }
             }
@@ -197,6 +198,8 @@ fun StatsPage(c: ScreenCtx) {
                     }
                 }
             }
+            // This week: how it compares with last week.
+            Stats.vsLastWeek(d)?.let { GText(it, 14, accent, FontWeight.SemiBold, 1, Modifier.padding(start = 20.dp, bottom = 6.dp)) }
         }
         // Number one, big
         d.topSongs.firstOrNull()?.let { top ->

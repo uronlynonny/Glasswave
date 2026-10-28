@@ -60,7 +60,7 @@ private fun fmt(n: Long) = "%,d".format(n)
 
 @Composable
 fun DeskStatsPage(c: ScreenCtx) {
-    var period by rememberSaveable { mutableStateOf(Stats.Period.MONTH) }
+    var period by rememberSaveable { mutableStateOf(Stats.Period.WEEK) }
     var data by remember { mutableStateOf<Stats.Summary?>(null) }
     LaunchedEffect(period, Stats.version) { data = Stats.summary(period) }
     val accent = readable(CoverTint.accent)
@@ -213,7 +213,9 @@ private fun Numbers(d: Stats.Summary, accent: Color, modifier: Modifier) {
             GText(fmt(d.minutes), 64, accent, FontWeight.ExtraBold, 1)
             GText("minutes listened", 15, Dim)
             val hours = d.minutes / 60
-            if (hours >= 1) GText("That's about ${fmt(hours)} hour${if (hours == 1L) "" else "s"} of music.", 13, Faint)
+            val vs = Stats.vsLastWeek(d)
+            if (vs != null) GText(vs, 14, accent, FontWeight.SemiBold)
+            else if (hours >= 1) GText("That's about ${fmt(hours)} hour${if (hours == 1L) "" else "s"} of music.", 13, Faint)
         }
         Row(Modifier.fillMaxWidth()) {
             listOf("Plays" to d.plays.toLong(), "Songs" to d.songs.toLong(), "Artists" to d.artists.toLong()).forEach { (label, n) ->

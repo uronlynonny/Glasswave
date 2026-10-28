@@ -29,6 +29,8 @@ object Stats {
         val topSongs: List<Ranked>,
         val topArtists: List<Artist>,
         val history: List<Play>,
+        /** Minutes the week before (This week only; -1 otherwise). */
+        val previous: Long = -1,
         /** Minutes listened per day (this month), per month (this year), or per month for the last year (all time). */
         val activity: List<Bar> = emptyList(),
         val artists: Int = 0,
@@ -36,7 +38,20 @@ object Stats {
 
     data class Bar(val label: String, val minutes: Long)
 
-    enum class Period(val label: String) { MONTH("This month"), YEAR("This year"), ALL("All time") }
+    enum class Period(val label: String) { WEEK("This week"), MONTH("This month"), YEAR("This year"), ALL("All time") }
+
+    /** "↑ 20% more than last week", for This week (null for the others, or with nothing to compare). */
+    fun vsLastWeek(s: Summary): String? {
+        val before = s.previous
+        if (before < 0) return null
+        if (before == 0L) return if (s.minutes > 0) "Nothing played last week" else null
+        val pct = (s.minutes - before) * 100 / before
+        return when {
+            pct > 0 -> "↑ $pct% more than last week"
+            pct < 0 -> "↓ ${-pct}% less than last week"
+            else -> "Same as last week"
+        }
+    }
 
     private lateinit var file: File
     private val writer = Executors.newSingleThreadExecutor()
@@ -119,8 +134,12 @@ object Stats {
     private fun startOf(p: Period): Long {
         if (p == Period.ALL) return 0L
         val c = Calendar.getInstance()
-        if (p == Period.YEAR) c.set(Calendar.MONTH, Calendar.JANUARY)
-        c.set(Calendar.DAY_OF_MONTH, 1)
+        when (p) {
+            // Weeks start on Monday.
+            Period.WEEK -> c.add(Calendar.DAY_OF_YEAR, -((c.get(Calendar.DAY_OF_WEEK) - Calendar.MONDAY + 7) % 7))
+            Period.YEAR -> { c.set(Calendar.MONTH, Calendar.JANUARY); c.set(Calendar.DAY_OF_MONTH, 1) }
+            else -> c.set(Calendar.DAY_OF_MONTH, 1)
+        }
         c.set(Calendar.HOUR_OF_DAY, 0)
         c.set(Calendar.MINUTE, 0)
         c.set(Calendar.SECOND, 0)
@@ -133,6 +152,14 @@ object Stats {
         val cal = Calendar.getInstance()
         val months = java.text.DateFormatSymbols.getInstance().shortMonths
         return when (p) {
+            Period.WEEK -> {
+                // Monday to Sunday.
+                val names = java.text.DateFormatSymbols.getInstance().shortWeekdays
+                val days = listOf(Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY, Calendar.THURSDAY, Calendar.FRIDAY, Calendar.SATURDAY, Calendar.SUNDAY)
+                val ms = LongArray(7)
+                plays.forEach { cal.timeInMillis = it.at; ms[days.indexOf(cal.get(Calendar.DAY_OF_WEEK))] += it.ms }
+                days.mapIndexed { i, d -> Bar(names[d], ms[i] / 60_000) }
+            }
             Period.MONTH -> {
                 val days = now.get(Calendar.DAY_OF_MONTH)
                 val ms = LongArray(days)
@@ -162,7 +189,13 @@ object Stats {
 
     suspend fun summary(p: Period): Summary = withContext(Dispatchers.IO) {
         val from = startOf(p)
-        val plays = readAll().filter { it.at >= from }
+        val everything = readAll()
+        val plays = everything.filter { it.at >= from }
+        // This week: last week's minutes too, to compare.
+        val previous = if (p != Period.WEEK) -1L else {
+            val weekBefore = from - 7L * 24 * 60 * 60 * 1000
+            everything.filter { it.at in weekBefore until from }.sumOf { it.ms } / 60_000
+        }
         val bySong = plays.groupBy { it.track.url }.map { (_, list) ->
             val newest = list.maxBy { it.at }
             Ranked(newest.track, list.size, list.sumOf { it.ms })
@@ -181,6 +214,7 @@ object Stats {
             topSongs = bySong.take(50),
             topArtists = byArtist.take(20),
             history = plays.sortedByDescending { it.at }.take(300),
+            previous = previous,
             activity = activity(p, plays),
             artists = byArtist.size,
         )

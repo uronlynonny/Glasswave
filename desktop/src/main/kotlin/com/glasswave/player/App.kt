@@ -127,6 +127,13 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
         }
     }
 
+    LaunchedEffect(ps.currentId) {
+        if (ps.currentId == null) return@LaunchedEffect
+        // Wait (a few seconds at most) for the song's length: it helps pick the right lyrics.
+        repeat(20) { if (ps.durationMs > 0) return@repeat; kotlinx.coroutines.delay(250) }
+        ps.currentTrack()?.let { LyricsRepo.prefetch(it.copy(seconds = ps.durationMs / 1000)) }
+        ps.upcoming(1).firstOrNull()?.let { LyricsRepo.prefetch(it.track) }
+    }
     val colors = rememberCoverColors(hiRes(ps.art))
     val bg = rememberBackdrop()
     val page = rememberBackdrop()
