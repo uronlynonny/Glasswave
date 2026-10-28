@@ -308,7 +308,9 @@ fun main() {
     if (!SingleInstance.claim()) return
     startUp()
     application {
-        val ps = remember { PlayerState().also { it.connect() } }
+        val ps = remember { PlayerState().also { it.connect(); GlobalKeys.start(it) } }
+        // The keyboard's media keys go to Glasswave while it has a song loaded.
+        LaunchedEffect(ps.hasItem) { GlobalKeys.mediaKeys(ps.hasItem) }
         val vm = remember { MainViewModel() }
         remember { System.getProperty("gw.memScript")?.let { MemScript.start(ps, vm, File(it)) } }
         val quit = ::exitApplication
@@ -344,6 +346,7 @@ fun main() {
             onPreviewKeyEvent = { e ->
                 // Caught before any button sees them, and left alone while you type in a text box:
                 // Space plays/pauses, Ctrl+arrows (⌘+arrows on a Mac) skip, Esc goes back.
+                // (Ctrl+Alt+arrows and the media keys also work from any other window: see GlobalKeys.)
                 if (e.type != KeyEventType.KeyDown || Typing.active) return@Window false
                 val skip = if (Os.isMac) e.isMetaPressed else e.isCtrlPressed
                 when {

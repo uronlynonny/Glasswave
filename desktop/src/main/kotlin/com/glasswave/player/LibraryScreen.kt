@@ -168,7 +168,7 @@ fun LibraryScreen(c: ScreenCtx) {
 @Composable
 private fun PlaylistCard(p: PlaylistInfo, onOpen: () -> Unit) {
     Column(
-        Modifier.combinedClickable(
+        Modifier.onRightClick { Menus.openPlaylist(p) }.combinedClickable(
             interactionSource = remember { MutableInteractionSource() },
             indication = null,
             onLongClick = { Menus.openPlaylist(p) },

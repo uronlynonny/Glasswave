@@ -50,6 +50,9 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Block
@@ -196,7 +199,7 @@ fun BoxScope.MenuLayer(ps: PlayerState, backdrop: Backdrop, open: (MusicItem) ->
                     .padding(vertical = 8.dp),
             ) {
                 lastSong?.let { SongMenuBody(it, ps, open) }
-                lastList?.let { PlaylistMenuBody(it) }
+                lastList?.let { PlaylistMenuBody(it, ps) }
             }
         }
         Menus.naming?.let { NameDialog(it, backdrop) }
@@ -223,7 +226,7 @@ fun BoxScope.MenuLayer(ps: PlayerState, backdrop: Backdrop, open: (MusicItem) ->
         Menus.playlist?.let { lastList = it; lastSong = null }
         MenuFrame(backdrop) {
             lastSong?.let { SongMenuBody(it, ps, open) }
-            lastList?.let { PlaylistMenuBody(it) }
+            lastList?.let { PlaylistMenuBody(it, ps) }
         }
     }
     Menus.naming?.let { NameDialog(it, backdrop) }
@@ -411,9 +414,9 @@ private fun SongMenuBody(target: Menus.SongTarget, ps: PlayerState, open: (Music
     }
 }
 
-/** Long-press a playlist in the Library: pin it, and rename or delete your own. */
+/** Right-click a playlist (side menu or Library), or long-press it: play it, queue it, pin it, rename or delete your own. */
 @Composable
-private fun PlaylistMenuBody(p: PlaylistInfo) {
+private fun PlaylistMenuBody(p: PlaylistInfo, ps: PlayerState) {
     Column {
         Row(Modifier.padding(horizontal = 20.dp).padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Cover(p.thumb, Modifier.size(52.dp), 8.dp, fallback = Icons.AutoMirrored.Rounded.QueueMusic)
@@ -424,6 +427,22 @@ private fun PlaylistMenuBody(p: PlaylistInfo) {
             }
         }
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color.White.copy(alpha = 0.12f)))
+        // Play / Shuffle / queue it, straight from the menu.
+        fun withSongs(what: (List<Track>) -> Unit) {
+            Menus.closePlaylist()
+            kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch {
+                val songs = Library.tracks(p.id)
+                if (songs.isEmpty()) Menus.say("${p.name} has no songs yet") else what(songs)
+            }
+        }
+        MenuRow(Icons.Rounded.PlayArrow, "Play") { withSongs { ps.playList(it, 0) } }
+        MenuRow(Icons.Rounded.Shuffle, "Shuffle") { withSongs { ps.playList(it, 0, shuffle = true) } }
+        MenuRow(Icons.AutoMirrored.Rounded.PlaylistPlay, "Play next") {
+            withSongs { songs -> if (!ps.hasItem) ps.playList(songs, 0) else songs.asReversed().forEach { ps.playNextTrack(it) }; Menus.say("${p.name} plays next") }
+        }
+        MenuRow(Icons.AutoMirrored.Rounded.QueueMusic, "Add to queue") {
+            withSongs { songs -> if (!ps.hasItem) ps.playList(songs, 0) else songs.forEach { ps.addToQueue(it) }; Menus.say("Added ${p.name} to the queue") }
+        }
         val pinned = Library.isPinned(p.id)
         MenuRow(Icons.Rounded.PushPin, if (pinned) "Unpin" else "Pin to top", if (pinned) Lime else Color.White) {
             Library.togglePin(p.id)
@@ -536,6 +555,12 @@ private fun Toast(modifier: Modifier) {
 /** Where the mouse last pressed, in window pixels (menus open there on PC). Set by the window. */
 object PointerSpot {
     var last = androidx.compose.ui.geometry.Offset.Zero
+}
+
+/** Runs [action] on a right-click (the click spot is already saved in [PointerSpot], so a menu opens there). */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+fun Modifier.onRightClick(action: () -> Unit): Modifier = this.onPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Press) { e ->
+    if (e.button == androidx.compose.ui.input.pointer.PointerButton.Secondary) action()
 }
 
 /**

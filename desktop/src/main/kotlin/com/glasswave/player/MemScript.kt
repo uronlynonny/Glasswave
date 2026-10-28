@@ -122,6 +122,14 @@ object MemScript {
                             onUi { ps.playList(hits.take(10), 0) }
                         }
                         "next" -> onUi { ps.next() }
+                        // plmenu: opens the first playlist's menu (as a right-click in the side menu does).
+                        // hotkey: presses Ctrl+Alt+→ like a person would (the shortcut that works from any window).
+                        "hotkey" -> java.awt.Robot().run {
+                            keyPress(java.awt.event.KeyEvent.VK_CONTROL); keyPress(java.awt.event.KeyEvent.VK_ALT); keyPress(java.awt.event.KeyEvent.VK_RIGHT)
+                            delay(60)
+                            keyRelease(java.awt.event.KeyEvent.VK_RIGHT); keyRelease(java.awt.event.KeyEvent.VK_ALT); keyRelease(java.awt.event.KeyEvent.VK_CONTROL)
+                        }
+                        "plmenu" -> onUi { Library.playlists.value.firstOrNull()?.let { Menus.openPlaylist(it) } }
                         // state: what's loaded right now (song, spot, playing, what's next).
                         "state" -> onUi { System.err.println("GW state '${ps.title}' at ${ps.livePosition() / 1000}s playing=${ps.playing} next: " + ps.upcoming(3).joinToString(" | ") { it.track.title }) }
                         // upnext: what's coming up after the song playing (Autoplay's picks).

@@ -168,7 +168,8 @@ fun Sidebar(vm: MainViewModel, page: Backdrop, modifier: Modifier = Modifier) {
                         .height(50.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(if (opened) Color.White.copy(alpha = 0.12f) else Color.Transparent)
-                        .pressable(0.97f) { if (!opened) vm.open(Route.Saved(p)) },
+                        .pressable(0.97f) { if (!opened) vm.open(Route.Saved(p)) }
+                        .onRightClick { Menus.openPlaylist(p) },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.width(56.dp), contentAlignment = Alignment.Center) { Cover(p.thumb, Modifier.size(38.dp), 8.dp) }
@@ -325,7 +326,7 @@ fun PlayerBar(ps: PlayerState, page: Backdrop, onOpen: () -> Unit, modifier: Mod
             Row(verticalAlignment = Alignment.CenterVertically) {
                 BarButton(Icons.Rounded.Shuffle, if (ps.shuffle) accent else Dim, 19.dp) { ps.toggleShuffle() }
                 Spacer(Modifier.width(10.dp))
-                BarButton(Icons.Rounded.SkipPrevious, Color.White, 26.dp) { ps.previous() }
+                BarButton(Icons.Rounded.SkipPrevious, Color.White, 26.dp, if (Os.isMac) "Previous  ⌘←" else "Previous  Ctrl+←") { ps.previous() }
                 Spacer(Modifier.width(10.dp))
                 Box(
                     Modifier.size(40.dp).clip(CircleShape).background(Color.White).pressable(0.92f) { ps.toggle() },
@@ -334,7 +335,7 @@ fun PlayerBar(ps: PlayerState, page: Backdrop, onOpen: () -> Unit, modifier: Mod
                     Ico(if (ps.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, Color(0xFF111111), 24.dp)
                 }
                 Spacer(Modifier.width(10.dp))
-                BarButton(Icons.Rounded.SkipNext, Color.White, 26.dp) { ps.next() }
+                BarButton(Icons.Rounded.SkipNext, Color.White, 26.dp, if (Os.isMac) "Next  ⌘→" else "Next  Ctrl+→") { ps.next() }
                 Spacer(Modifier.width(10.dp))
                 BarButton(
                     if (ps.repeat == Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
@@ -375,11 +376,24 @@ fun PlayerBar(ps: PlayerState, page: Backdrop, onOpen: () -> Unit, modifier: Mod
     }
 }
 
+/** A player bar button. With [hint], resting the mouse on it shows the hint (its keyboard shortcut). */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun BarButton(icon: ImageVector, color: Color, iconSize: Dp, onClick: () -> Unit) {
-    Box(Modifier.size(36.dp).pressable(0.9f, onClick = onClick), contentAlignment = Alignment.Center) {
-        Ico(icon, color, iconSize)
+private fun BarButton(icon: ImageVector, color: Color, iconSize: Dp, hint: String? = null, onClick: () -> Unit) {
+    val button = @Composable {
+        Box(Modifier.size(36.dp).pressable(0.9f, onClick = onClick), contentAlignment = Alignment.Center) {
+            Ico(icon, color, iconSize)
+        }
     }
+    if (hint == null) return button()
+    androidx.compose.foundation.TooltipArea(
+        tooltip = {
+            Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xEE1C1D22)).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                GText(hint, 12, Color.White)
+            }
+        },
+        delayMillis = 500,
+    ) { button() }
 }
 
 /**
