@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerButton
@@ -215,6 +216,9 @@ object GpuMemory {
 
     /** Call now and then: the store is made with the first frame, and again if the card resets. */
     fun limit(window: java.awt.Window) {
+        // Not on a Mac: there it draws with Metal on a thread of its own, and trimming the store from
+        // here, while that thread is drawing, crashes the app.
+        if (Os.isMac) return
         runCatching {
             val layer = findLayer(window) ?: return
             val redrawer = layer.javaClass.methods.firstOrNull { it.name.startsWith("getRedrawer") && it.parameterCount == 0 }
@@ -292,7 +296,14 @@ fun main() {
     // Draw with OpenGL: on Windows' default (Direct3D 12) the graphics driver takes memory in
     // 64 MB blocks and keeps them, which alone pushed the app well past 300 MB. If OpenGL doesn't
     // work on a PC, the drawing library moves on to another way by itself.
-    if (System.getProperty("skiko.renderApi") == null) System.setProperty("skiko.renderApi", "OPENGL")
+    // (Macs keep the drawing library's own choice, Apple's Metal.)
+    if (Os.isWindows && System.getProperty("skiko.renderApi") == null) System.setProperty("skiko.renderApi", "OPENGL")
+    if (Os.isMac) {
+        // The window's buttons and any system menus in dark mode, to match the app; and the app's
+        // name in the menu bar (rather than the launcher's).
+        System.setProperty("apple.awt.application.appearance", "NSAppearanceNameDarkAqua")
+        System.setProperty("apple.awt.application.name", "Glasswave")
+    }
     // Already open: that window comes to the front instead of a second copy starting.
     if (!SingleInstance.claim()) return
     startUp()
@@ -302,29 +313,43 @@ fun main() {
         remember { System.getProperty("gw.memScript")?.let { MemScript.start(ps, vm, File(it)) } }
         val quit = ::exitApplication
         remember { Updater.exitApp = { Discord.shutdown(); ps.release(); quit() } }
+        // Closing for good: tell your phone, let go of the audio, then quit.
+        val quitAll = {
+            // Tell your phone this computer stopped playing (a second at most).
+            Thread { Sync.goodbye() }.apply { isDaemon = true; start() }.join(1500)
+            // A downloaded update installs quietly as the app closes.
+            Discord.shutdown()
+            Updater.installOnExit()
+            ps.release()
+            exitApplication()
+        }
+        // On a Mac, the red button only hides the window and the music keeps playing, like Apple
+        // Music: clicking Glasswave in the Dock brings it back, and ⌘Q (or Quit in the Dock) quits.
+        var shown by remember { mutableStateOf(true) }
+        remember {
+            if (Os.isMac) runCatching {
+                val d = java.awt.Desktop.getDesktop()
+                d.setQuitHandler { _, r -> r.cancelQuit(); javax.swing.SwingUtilities.invokeLater { quitAll() } }
+                d.addAppEventListener(java.awt.desktop.AppReopenedListener { shown = true })
+            }
+        }
         // Open centred, and small enough to sit above the taskbar on any screen.
         val state = rememberWindowState(size = startSize(), position = WindowPosition(androidx.compose.ui.Alignment.Center))
         Window(
-            onCloseRequest = {
-                // Tell your phone this PC stopped playing (a second at most).
-                Thread { Sync.goodbye() }.apply { isDaemon = true; start() }.join(1500)
-                // A downloaded update installs quietly as the app closes.
-                Discord.shutdown()
-                Updater.installOnExit()
-                ps.release()
-                exitApplication()
-            },
+            onCloseRequest = { if (Os.isMac) shown = false else quitAll() },
+            visible = shown,
             title = "Glasswave",
             icon = rememberVectorPainter(AppIcon),
             state = state,
             onPreviewKeyEvent = { e ->
                 // Caught before any button sees them, and left alone while you type in a text box:
-                // Space plays/pauses, Ctrl+arrows skip, Esc goes back.
+                // Space plays/pauses, Ctrl+arrows (⌘+arrows on a Mac) skip, Esc goes back.
                 if (e.type != KeyEventType.KeyDown || Typing.active) return@Window false
+                val skip = if (Os.isMac) e.isMetaPressed else e.isCtrlPressed
                 when {
                     e.key == Key.Spacebar -> { ps.toggle(); true }
-                    e.isCtrlPressed && e.key == Key.DirectionRight -> { ps.next(); true }
-                    e.isCtrlPressed && e.key == Key.DirectionLeft -> { ps.previous(); true }
+                    skip && e.key == Key.DirectionRight -> { ps.next(); true }
+                    skip && e.key == Key.DirectionLeft -> { ps.previous(); true }
                     e.key == Key.Escape -> BackDispatcher.back()
                     e.key == Key.MediaPlayPause -> { ps.toggle(); true }
                     e.key == Key.MediaNext -> { ps.next(); true }
@@ -335,7 +360,7 @@ fun main() {
         ) {
             LaunchedEffect(Unit) {
                 window.minimumSize = java.awt.Dimension(420, 640)
-                glassTitleBar(window)
+                if (Os.isWindows) glassTitleBar(window)
                 TitleBar.install(window)
             }
             LaunchedEffect(Unit) {
@@ -356,6 +381,7 @@ fun main() {
             // Someone opened Glasswave again while it was already running: show this window.
             LaunchedEffect(SingleInstance.showRequests) {
                 if (SingleInstance.showRequests == 0) return@LaunchedEffect
+                shown = true
                 state.isMinimized = false
                 window.toFront()
                 window.requestFocus()
@@ -378,7 +404,7 @@ fun main() {
                     // The mouse's back button goes back too.
                     .onPointerEvent(PointerEventType.Press) { if (it.button == PointerButton.Back) BackDispatcher.back() },
             ) {
-                App(vm, ps, openInBrowser = ::openInBrowser, openEqualizer = { Menus.say("Use Windows' sound settings for an equalizer") })
+                App(vm, ps, openInBrowser = ::openInBrowser, openEqualizer = { Menus.say(if (Os.isMac) "An equalizer isn't on the Mac version yet" else "Use Windows' sound settings for an equalizer") })
                 // Over everything, see-through: the app's colours show behind it.
                 TitleBar.Bar(window, Modifier.align(androidx.compose.ui.Alignment.TopStart))
             }

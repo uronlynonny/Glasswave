@@ -9,7 +9,7 @@ import java.io.File
  * own (GlasswaveSignIn.exe, built from desktop/signin with Microsoft's WebView2, the Edge engine
  * that comes with Windows 11). You type your details into Google's page; once it lands on YouTube
  * Music the window hands back that site's cookies, the same thing the phone app keeps after
- * signing in, and closes.
+ * signing in, and closes. On a Mac it's the same idea in Apple's web view (desktop/signin/SignIn.swift).
  */
 object YtSignIn {
     sealed interface Result {
@@ -29,7 +29,7 @@ object YtSignIn {
 
     private fun helper(): File? =
         (System.getProperty("compose.application.resources.dir") ?: System.getProperty("gw.appResources"))
-            ?.let { File(it, "signin/GlasswaveSignIn.exe") }
+            ?.let { File(it, if (Os.isMac) "signin/GlasswaveSignIn" else "signin/GlasswaveSignIn.exe") }
             ?.takeIf { it.isFile }
 
     @Volatile private var running: Process? = null

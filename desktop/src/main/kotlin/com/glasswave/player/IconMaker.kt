@@ -55,12 +55,40 @@ private fun storeAssets(dir: File) {
 }
 
 /**
+ * The Mac icon (icons/glasswave.icns). Mac icons leave a margin around the rounded square (about a
+ * tenth of the picture on each side) so they line up with Apple's own in the Dock. Each size is
+ * drawn, then macOS's own iconutil packs them into one .icns file.
+ */
+private fun macIcon(out: File) {
+    val set = File(out.parentFile, "glasswave.iconset").apply { deleteRecursively(); mkdirs() }
+    fun framed(s: Int): ByteArray {
+        val inner = (s * 824f / 1024f).toInt()
+        val surface = Surface.makeRasterN32Premul(s, s)
+        val img = org.jetbrains.skia.Image.makeFromEncoded(drawIcon(inner))
+        val o = (s - inner) / 2f
+        surface.canvas.drawImage(img, o, o)
+        return surface.makeImageSnapshot().encodeToData(EncodedImageFormat.PNG)!!.bytes
+    }
+    for (s in listOf(16, 32, 128, 256, 512)) {
+        File(set, "icon_${s}x$s.png").writeBytes(framed(s))
+        File(set, "icon_${s}x$s@2x.png").writeBytes(framed(s * 2))
+    }
+    val p = ProcessBuilder("iconutil", "-c", "icns", set.absolutePath, "-o", out.absolutePath).redirectErrorStream(true).start()
+    val log = p.inputStream.bufferedReader().readText()
+    check(p.waitFor() == 0) { "iconutil failed: $log" }
+    set.deleteRecursively()
+    println("Wrote ${out.absolutePath}")
+}
+
+/**
  * Makes the Windows icon (icons/glasswave.ico) from the same design as the phone icon: the lime
  * wave on black. Run with  ./gradlew -p desktop makeIcon  after changing the design.
- * With  --store <folder>  it makes the Microsoft Store package's pictures instead.
+ * With  --store <folder>  it makes the Microsoft Store package's pictures instead, and with
+ *  --mac <file.icns>  the Mac icon.
  */
 fun main(args: Array<String>) {
     if (args.firstOrNull() == "--store") return storeAssets(File(args[1]))
+    if (args.firstOrNull() == "--mac") return macIcon(File(args[1]))
     val out = File(args.firstOrNull() ?: "icons/glasswave.ico")
     val sizes = listOf(16, 24, 32, 48, 64, 128, 256)
     val pngs = sizes.map { drawIcon(it) }
