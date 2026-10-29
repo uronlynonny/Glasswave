@@ -1104,6 +1104,38 @@ class PlaybackService : MediaSessionService() {
     }
 
     companion object {
+        /**
+         * Shuffle on: moves an upcoming song ([from] and [to] are places in Up next). The queue is laid
+         * out in the order it plays and shuffle keeps exactly that order, so the move sticks.
+         */
+        @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+        fun moveInShuffle(from: Int, to: Int) {
+            val p = livePlayer as? ExoPlayer ?: return
+            val tl = p.currentTimeline
+            if (tl.isEmpty) return
+            val n = p.mediaItemCount
+            val plays = ArrayList<Int>(n)
+            var i = tl.getFirstWindowIndex(true)
+            while (i != C.INDEX_UNSET && plays.size < n) {
+                plays += i
+                i = tl.getNextWindowIndex(i, Player.REPEAT_MODE_OFF, true)
+            }
+            val at = plays.indexOf(p.currentMediaItemIndex)
+            val a = at + 1 + from
+            val b = at + 1 + to
+            if (plays.size != n || at < 0 || a !in plays.indices || b !in plays.indices) return
+            plays.add(b, plays.removeAt(a))
+            val now = (0 until n).toMutableList()
+            for (k in plays.indices) {
+                val pos = now.indexOf(plays[k])
+                if (pos != k) {
+                    p.moveMediaItem(pos, k)
+                    now.add(k, now.removeAt(pos))
+                }
+            }
+            p.setShuffleOrder(androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder(IntArray(n) { it }, System.nanoTime()))
+        }
+
         /** The running player, for the home-screen widget's buttons. Null when the service isn't running. */
         @Volatile
         var livePlayer: Player? = null

@@ -285,6 +285,27 @@ object MemScript {
                                 Thread.sleep(16)
                             }
                         }
+                        // drag x1 y1 x2 y2: holds the mouse at one spot in the window and drags it to another.
+                        "drag" -> {
+                            val (x1, y1, x2, y2) = arg.split(" ").map { it.toInt() }
+                            val w = java.awt.Window.getWindows().first { it is java.awt.Frame && it.isDisplayable }
+                            onUi { (w as? java.awt.Frame)?.isAlwaysOnTop = true; w.toFront() }
+                            Thread.sleep(300)
+                            val at = w.locationOnScreen
+                            val r = java.awt.Robot()
+                            r.mouseMove(at.x + x1, at.y + y1); Thread.sleep(120)
+                            r.mousePress(java.awt.event.InputEvent.BUTTON1_DOWN_MASK); Thread.sleep(120)
+                            for (k in 1..30) { r.mouseMove(at.x + x1 + (x2 - x1) * k / 30, at.y + y1 + (y2 - y1) * k / 30); Thread.sleep(25) }
+                            Thread.sleep(250)
+                            r.mouseRelease(java.awt.event.InputEvent.BUTTON1_DOWN_MASK)
+                            onUi { (w as? java.awt.Frame)?.isAlwaysOnTop = false }
+                        }
+                        // openpl N: opens the Library's Nth playlist. plorder: prints the open playlist's songs in order.
+                        "openpl" -> onUi { Library.playlists.value.firstOrNull { it.name == arg }?.let { vm.open(Route.Saved(it)) } }
+                        "plorder" -> {
+                            val p = (vm.stack.lastOrNull() as? Route.Saved)?.info
+                            if (p != null) System.err.println("GW order: " + kotlinx.coroutines.runBlocking { Library.tracks(p.id) }.joinToString(" | ") { it.title })
+                        }
                         "click" -> {
                             val r = java.awt.Robot()
                             r.mousePress(java.awt.event.InputEvent.BUTTON1_DOWN_MASK); Thread.sleep(70); r.mouseRelease(java.awt.event.InputEvent.BUTTON1_DOWN_MASK)

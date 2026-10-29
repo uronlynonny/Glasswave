@@ -675,13 +675,30 @@ private fun QueueSheet(ps: PlayerState, fp: Backdrop, colors: CoverColors) {
                     }
                     Toggle(Settings.autoplay) { Settings.updateAutoplay(it) }
                 }
-                val upcoming = ps.upcoming()
+                val playerUpcoming = ps.upcoming()
+                // While a song is being dragged, the list shows its own copy (moved live).
+                val moving = remember { androidx.compose.runtime.mutableStateListOf<PlayerState.QueueEntry>() }
+                val queueList = androidx.compose.foundation.lazy.rememberLazyListState()
+                val reorder = rememberReorder(
+                    queueList,
+                    keys = { (if (moving.isNotEmpty()) moving else playerUpcoming).map { "${it.index}|${it.track.url}" } },
+                    onStart = { moving.clear(); moving.addAll(playerUpcoming) },
+                    onMove = { a, b -> moving.add(b, moving.removeAt(a)) },
+                    onDone = { a, b -> ps.moveUpcoming(a, b) },
+                )
+                // Let go: back to the player's queue once it has the new order.
+                androidx.compose.runtime.LaunchedEffect(reorder.dragKey, playerUpcoming) {
+                    if (reorder.dragKey != null || moving.isEmpty()) return@LaunchedEffect
+                    if (playerUpcoming.map { it.track.url } != moving.map { it.track.url }) kotlinx.coroutines.delay(1500)
+                    moving.clear()
+                }
+                val upcoming: List<PlayerState.QueueEntry> = if (moving.isNotEmpty()) moving else playerUpcoming
                 if (upcoming.isEmpty()) {
                     Centered(if (Settings.autoplay) "Nothing queued. Similar songs will be added when this one ends." else "Nothing queued after this song.")
                 } else {
                     // Where Autoplay's songs start, so they get their own heading.
                     val firstAuto = upcoming.indexOfFirst { it.track.url in Autoplay.added }
-                    LazyColumn(Modifier.weight(1f)) {
+                    LazyColumn(Modifier.weight(1f), state = queueList) {
                         upcoming.forEachIndexed { pos, e ->
                             if (pos == firstAuto) item(key = "autoHead") {
                                 Row(Modifier.padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -690,9 +707,10 @@ private fun QueueSheet(ps: PlayerState, fp: Backdrop, colors: CoverColors) {
                                     GText("AUTOPLAYING SIMILAR SONGS", 11, Faint, FontWeight.SemiBold)
                                 }
                             }
-                            item(key = "${e.index}|${e.track.url}") {
+                            val rowKey = "${e.index}|${e.track.url}"
+                            item(key = rowKey) {
                             Row(
-                                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).pressable(0.98f) { ps.playAt(e.index) }.padding(vertical = 6.dp),
+                                Modifier.fillMaxWidth().reorderRow(reorder, rowKey).clip(RoundedCornerShape(12.dp)).pressable(0.98f) { ps.playAt(e.index) }.padding(vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Cover(e.track.thumb, Modifier.size(44.dp), 8.dp)
@@ -704,6 +722,7 @@ private fun QueueSheet(ps: PlayerState, fp: Backdrop, colors: CoverColors) {
                                 Box(Modifier.size(40.dp).pressable(0.85f) { ps.removeAt(e.index) }, contentAlignment = Alignment.Center) {
                                     Ico(Icons.Rounded.Close, Faint, 20.dp)
                                 }
+                                ReorderHandle(reorder, rowKey)
                             }
                             }
                         }

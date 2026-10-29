@@ -80,6 +80,19 @@ class PlayerState(private val context: Context) {
     fun removeAt(index: Int) { controller?.removeMediaItem(index) }
 
     /** Moves a song to play right after the current one. */
+    /** Moves a song within Up next: [from] and [to] are places in the upcoming list. */
+    fun moveUpcoming(from: Int, to: Int) {
+        val c = controller ?: return
+        if (from == to) return
+        if (c.shuffleModeEnabled) {
+            PlaybackService.moveInShuffle(from, to)
+            return
+        }
+        val b = c.currentMediaItemIndex + 1
+        if (b + maxOf(from, to) >= c.mediaItemCount) return
+        c.moveMediaItem(b + from, b + to)
+    }
+
     fun playNext(index: Int) {
         val c = controller ?: return
         val target = c.currentMediaItemIndex + 1

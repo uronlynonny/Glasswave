@@ -157,6 +157,19 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         changed()
     }
 
+    /** Moves a song within Up next: [from] and [to] are places in the upcoming list. */
+    fun moveUpcoming(from: Int, to: Int) {
+        val o = order
+        val p = o.indexOf(cur)
+        if (p < 0) return
+        val up = o.subList(p + 1, o.size)
+        if (from !in up.indices || to !in up.indices || from == to) return
+        up.add(to, up.removeAt(from))
+        // What plays next may have changed.
+        if (from == 0 || to == 0) spare.stop()
+        changed()
+    }
+
     /** Moves a song to play right after the current one. */
     fun playNext(index: Int) {
         if (index == cur) return

@@ -225,6 +225,15 @@ object Library {
     }
 
     @Synchronized
+    /** Moves a song within a playlist, from one place to another. */
+    fun move(id: String, from: Int, to: Int) {
+        val now = readTracks(id).toMutableList()
+        if (from !in now.indices || to !in now.indices || from == to) return
+        now.add(to, now.removeAt(from))
+        writeTracks(id, now)
+        updateInfo(id, now)
+    }
+
     fun remove(id: String, url: String) {
         val now = readTracks(id).filter { it.url != url }
         writeTracks(id, now)

@@ -129,6 +129,21 @@ fun SavedPage(c: ScreenCtx, start: PlaylistInfo) {
         seen += got.map { it.url }
         picks = got
     }
+    // Moving songs: while one is dragged the list shows its own copy, saved when you let go.
+    val moving = androidx.compose.runtime.remember(p.id) { androidx.compose.runtime.mutableStateListOf<Track>() }
+    val reorder = rememberReorder(
+        list,
+        keys = { (if (moving.isNotEmpty()) moving else tracks).map { "t|${it.url}" } },
+        onStart = { moving.clear(); moving.addAll(tracks) },
+        onMove = { a, b -> moving.add(b, moving.removeAt(a)) },
+        onDone = { a, b -> Library.move(p.id, a, b) },
+    )
+    // Let go: back to the saved list once it has the new order.
+    LaunchedEffect(reorder.dragKey, tracks) {
+        if (reorder.dragKey != null || moving.isEmpty()) return@LaunchedEffect
+        if (tracks.map { it.url } != moving.map { it.url }) kotlinx.coroutines.delay(1500)
+        moving.clear()
+    }
     PageFrame(c, list) {
         item(key = "head") {
             PageHeader(
@@ -139,8 +154,16 @@ fun SavedPage(c: ScreenCtx, start: PlaylistInfo) {
                     // Mix: blend this playlist's songs into each other, like Spotify (lit up while it's on).
                     @Suppress("UNUSED_VARIABLE") val mv = PlaylistMix.version
                     val mixOn = PlaylistMix.get(p.id).on
-                    GlassCircle(48.dp, c.bg, tint = if (mixOn) CoverTint.accent.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.06f), onClick = { c.vm.open(Route.Mix(p)) }) {
-                        Ico(Icons.Rounded.Tune, if (mixOn) Color.Black else Color.White, 21.dp)
+                    val mixFg = if (mixOn) Color.Black else Color.White
+                    Row(
+                        Modifier.height(48.dp)
+                            .liquidGlass(c.bg, 24.dp, if (mixOn) CoverTint.accent.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.06f), depth = 10.dp, bend = 12.dp)
+                            .clip(CircleShape).pressable(0.95f) { c.vm.open(Route.Mix(p)) }.padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Ico(Icons.Rounded.Tune, mixFg, 19.dp)
+                        Spacer(Modifier.width(7.dp))
+                        GText(if (mixOn) "Mix on" else "Mix", 15, mixFg, FontWeight.SemiBold, 1)
                     }
                     // Pin, and the playlist menu.
                     GlassCircle(48.dp, c.bg, onClick = { Library.togglePin(p.id) }) {
@@ -156,6 +179,20 @@ fun SavedPage(c: ScreenCtx, start: PlaylistInfo) {
             !c.vm.savedLoaded -> items(6) { SkeletonRow() }
             tracks.isEmpty() -> item(key = "none") {
                 Centered(if (p.source == Source.LOCAL) "No songs yet. Tap ⋮ on any song and choose Add to playlist." else "This playlist is empty.")
+            }
+            // Your own playlists (not while searching in it): hold ≡ on a song and drag to move it.
+            mine && query.isBlank() -> {
+                if (tracks.size >= 8) item(key = "find") { FindInList(c, query) { query = it } }
+                val rows: List<Track> = if (moving.isNotEmpty()) moving else tracks
+                itemsIndexed(rows, key = { _, t -> "t|${t.url}" }) { i, t ->
+                    val rowKey = "t|${t.url}"
+                    Row(Modifier.padding(horizontal = 8.dp).reorderRow(reorder, rowKey), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) {
+                            TrackRow(t, t.url == c.ps.currentId, c.ps.playing, null, p.id) { c.ps.playList(tracks, i) }
+                        }
+                        ReorderHandle(reorder, rowKey)
+                    }
+                }
             }
             else -> {
                 if (tracks.size >= 8) item(key = "find") { FindInList(c, query) { query = it } }
