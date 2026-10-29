@@ -1,11 +1,11 @@
 {
-  "lastTime": 1793285516,
+  "lastTime": 1793291838,
   "totals": {
     "visits": 94,
     "siteDownloads": 31,
-    "apk": 171
+    "apk": 173
   },
-  "apkTotal": 134,
+  "apkTotal": 136,
   "hours": [
     {
       "t": 1792763089,
@@ -888,9 +888,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1793292566,
+      "v": 0,
+      "d": 0,
+      "a": 2
     }
   ],
-  "updated": 1793289003,
+  "updated": 1793292566,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -967,9 +973,13 @@
     {
       "t": 1793177284,
       "m": "\"Anime Bitch\" by Shiki-Tmns, D-Real, Hentai Dude wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nAgeRestrictedContentException: This age-restricted video cannot be watched anonymously\n\nWindows 11 (10.0), Glasswave for Windows 1.2.13\nhttps://music.youtube.com/watch?v=0TED-B4QFUI"
+    },
+    {
+      "t": 1793291838,
+      "m": "\"Mutlu Ol Yeter\" by Müslüm Gürses wouldn't play (tried 4 times).\nERROR_CODE_IO_UNSPECIFIED\nIOException: YouTube lookup failed\nParsingException: URL not accepted: https://music.youtube.com/watch?v=cdkco-e250A\n\nXiaomi M2101K7BG, Android 13, Glasswave 0.18.12\nhttps://music.youtube.com/watch?v=cdkco-e250A"
     }
   ],
-  "lastActiveTime": 1793273921,
+  "lastActiveTime": 1793291765,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -1068,7 +1078,9 @@
         "1d5a070d-058f-4512-9b39-138119966da3",
         "36d58cc1-c393-490b-9440-241580552d0a",
         "6422d73b-cf9f-45e2-a4f2-b0db6be9d022",
+        "7c391c59-19fe-467e-889c-d3224e3caae6",
         "7ee19118-c677-4374-9e82-d088b7a120b0",
+        "8025c01d-c310-4509-974c-3de9a6b35cb2",
         "82bc22cf-714a-4b03-af6f-c231c2b275fd",
         "924ee2ad-b7fd-4d49-b424-323e0fdd5fac",
         "97b14727-911d-4245-9d38-1ef73d84dcf8",
@@ -1078,15 +1090,15 @@
   },
   "active": {
     "today": {
-      "a": 8,
+      "a": 10,
       "w": 4
     },
     "week": {
-      "a": 33,
+      "a": 35,
       "w": 8
     },
     "month": {
-      "a": 33,
+      "a": 35,
       "w": 8
     },
     "daily": [
@@ -1117,7 +1129,7 @@
       },
       {
         "d": "2026-10-29",
-        "a": 8,
+        "a": 10,
         "w": 4
       }
     ]
