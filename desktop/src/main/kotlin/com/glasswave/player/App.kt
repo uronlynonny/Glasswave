@@ -437,7 +437,7 @@ class ScreenCtx(
 @Composable
 private fun TabBar(vm: MainViewModel, page: Backdrop) {
     BoxWithConstraints(
-        Modifier.fillMaxWidth().height(64.dp).liquidGlass(page, 32.dp, blur = 6.dp, depth = 20.dp, bend = 26.dp).padding(5.dp),
+        Modifier.fillMaxWidth().height(64.dp).liquidGlass(page, 32.dp, floatTint(Color.White.copy(alpha = 0.06f)), blur = 6.dp, depth = 20.dp, bend = 26.dp).padding(5.dp),
     ) {
         val tabs = Tab.entries
         val w = maxWidth / tabs.size

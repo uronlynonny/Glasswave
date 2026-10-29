@@ -398,6 +398,14 @@ private fun Look() {
     val scope = rememberCoroutineScope()
     Group("Style") {
         SwitchRow("Frosted glass", "Calm frosted panels, like a classic music app. Turn off for liquid glass.", Settings.cleanLook) { Settings.updateCleanLook(it) }
+        if (Settings.cleanLook) {
+            Divider()
+            Choices(
+                listOf(false, true), Settings.darkFrost,
+                { if (it) "Dark" else "Light" },
+                { if (it) "Deeper, darker frosted panels." else "Lighter, see-through frosted panels." },
+            ) { Settings.updateDarkFrost(it) }
+        }
     }
     Group("App colours") {
         SwitchRow("Colours from the cover", "The app takes each song's cover colours", Settings.accentColor == null) { on ->

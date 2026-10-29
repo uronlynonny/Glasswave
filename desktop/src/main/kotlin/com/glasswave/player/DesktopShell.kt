@@ -300,7 +300,7 @@ fun PlayerBar(ps: PlayerState, page: Backdrop, onOpen: () -> Unit, modifier: Mod
             .padding(horizontal = 12.dp, vertical = 12.dp)
             .height(80.dp)
             .blockPointer()
-            .liquidGlass(page, 22.dp, tint = Color.Black.copy(alpha = 0.22f), blur = 22.dp, depth = 14.dp, bend = 16.dp, rim = CoverTint.accent)
+            .liquidGlass(page, 22.dp, tint = floatTint(Color.Black.copy(alpha = 0.22f)), blur = 22.dp, depth = 14.dp, bend = 16.dp, rim = CoverTint.accent)
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

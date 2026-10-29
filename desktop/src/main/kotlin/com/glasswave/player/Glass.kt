@@ -68,14 +68,24 @@ val Dim = Color.White.copy(alpha = 0.6f)
 val Faint = Color.White.copy(alpha = 0.4f)
 
 /**
- * Frosted glass (Settings > Look): calm frosted glass. A see-through dark fill (the cover's colours
- * still glow through), as solid as the Glass panels slider says.
+ * Frosted glass (Settings > Look): calm frosted glass, as solid as the Glass panels slider says.
+ * Light (the default): a milky see-through frost that lifts the cover's colours. Dark: a deeper
+ * see-through dark fill.
  */
-val CleanFill: Color get() = Color.Black.copy(alpha = (0.40f * Settings.glassOpacity).coerceIn(0.15f, 0.8f))
+val CleanFill: Color get() =
+    if (Settings.darkFrost) Color.Black.copy(alpha = (0.40f * Settings.glassOpacity).coerceIn(0.15f, 0.8f))
+    else Color(0xFFC4CAD4).copy(alpha = (0.15f * Settings.glassOpacity).coerceIn(0.06f, 0.4f))
 /** Frosted glass where nothing behind is blurred (floating bars, older phones): more solid, so content doesn't show through. */
-val CleanSolid: Color get() = Color.Black.copy(alpha = (0.62f * Settings.glassOpacity).coerceIn(0.3f, 0.9f))
+val CleanSolid: Color get() =
+    if (Settings.darkFrost) Color.Black.copy(alpha = (0.62f * Settings.glassOpacity).coerceIn(0.3f, 0.9f))
+    else Color(0xFF5A606B).copy(alpha = (0.52f * Settings.glassOpacity).coerceIn(0.3f, 0.85f))
+/**
+ * Bars that float over the page (player bar, tab bar): with the light frost they get a little
+ * darker, so their buttons stay readable when a bright cover scrolls under them.
+ */
+fun floatTint(normal: Color): Color = if (Settings.cleanLook && !Settings.darkFrost) Color.Black.copy(alpha = 0.46f) else normal
 /** Frosted glass: the single hairline edge. */
-val CleanEdge = Color.White.copy(alpha = 0.09f)
+val CleanEdge: Color get() = Color.White.copy(alpha = if (Settings.darkFrost) 0.09f else 0.17f)
 
 /* ---------------- Motion ---------------- */
 

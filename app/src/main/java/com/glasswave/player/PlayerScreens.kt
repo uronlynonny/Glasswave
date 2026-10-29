@@ -108,7 +108,7 @@ fun MiniPlayer(ps: PlayerState, page: Backdrop, onOpen: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .height(64.dp)
-            .liquidGlass(page, 32.dp, blur = 10.dp, depth = 18.dp, bend = 22.dp)
+            .liquidGlass(page, 32.dp, floatTint(Color.White.copy(alpha = 0.06f)), blur = 10.dp, depth = 18.dp, bend = 22.dp)
             .clip(RoundedCornerShape(32.dp))
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(

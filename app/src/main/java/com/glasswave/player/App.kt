@@ -394,7 +394,7 @@ class ScreenCtx(
 private fun TabBar(vm: MainViewModel, page: Backdrop) {
     Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
         BoxWithConstraints(
-            Modifier.weight(1f).fillMaxHeight().liquidGlass(page, 32.dp, blur = 6.dp, depth = 20.dp, bend = 26.dp).padding(5.dp),
+            Modifier.weight(1f).fillMaxHeight().liquidGlass(page, 32.dp, floatTint(Color.White.copy(alpha = 0.06f)), blur = 6.dp, depth = 20.dp, bend = 26.dp).padding(5.dp),
         ) {
             val tabs = BarTabs
             val w = maxWidth / tabs.size
@@ -425,7 +425,7 @@ private fun TabBar(vm: MainViewModel, page: Backdrop) {
         val searching = vm.tab == Tab.SEARCH
         GlassCircle(
             64.dp, page,
-            tint = if (searching) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.06f),
+            tint = if (searching) Color.White.copy(alpha = 0.14f) else floatTint(Color.White.copy(alpha = 0.06f)),
             onClick = {
                 vm.focusSearch = true
                 vm.selectTab(Tab.SEARCH)

@@ -119,6 +119,8 @@ object Settings {
     var glassOpacity by mutableFloatStateOf(1f); private set
     /** Frosted glass: calm frosted panels, simple icons and black-and-white toggles, instead of liquid glass. On by default. */
     var cleanLook by mutableStateOf(true); private set
+    /** Frosted glass tone: false = light, see-through frost (the default), true = the deeper, darker frost. */
+    var darkFrost by mutableStateOf(false); private set
 
     private inline fun <reified E : Enum<E>> enumPref(key: String, def: E): E =
         runCatching { enumValueOf<E>(prefs.getString(key, null) ?: def.name) }.getOrDefault(def)
@@ -159,6 +161,7 @@ object Settings {
         colorStrength = prefs.getFloat("color_strength", 1f)
         glassOpacity = prefs.getFloat("glass_opacity", 1f)
         cleanLook = prefs.getBoolean("clean_look", true)
+        darkFrost = prefs.getBoolean("dark_frost", false)
     }
 
     fun updateAccentColor(argb: Int?) {
@@ -246,6 +249,7 @@ object Settings {
     fun updateAnimations(on: Boolean) { animations = on; prefs.edit { putBoolean("animations", on) } }
     fun updateGlass(on: Boolean) { glass = on; prefs.edit { putBoolean("glass", on) } }
     fun updateCleanLook(on: Boolean) { cleanLook = on; prefs.edit { putBoolean("clean_look", on) } }
+    fun updateDarkFrost(on: Boolean) { darkFrost = on; prefs.edit { putBoolean("dark_frost", on) } }
     fun updatePlayerStyle(s: PlayerStyle) { playerStyle = s; prefs.edit { putString("player_style", s.name) } }
     fun updateButtonStyle(s: ButtonStyle) { buttonStyle = s; prefs.edit { putString("button_style", s.name) } }
     fun updateShowModeButtons(on: Boolean) { showModeButtons = on; prefs.edit { putBoolean("mode_buttons", on) } }
