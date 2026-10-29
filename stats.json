@@ -1,5 +1,5 @@
 {
-  "lastTime": 1793226939,
+  "lastTime": 1793230329,
   "totals": {
     "visits": 93,
     "siteDownloads": 31,
@@ -792,9 +792,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1793234772,
+      "v": 0,
+      "d": 0,
+      "a": 0
     }
   ],
-  "updated": 1793230328,
+  "updated": 1793234772,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -873,7 +879,7 @@
       "m": "\"Anime Bitch\" by Shiki-Tmns, D-Real, Hentai Dude wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nAgeRestrictedContentException: This age-restricted video cannot be watched anonymously\n\nWindows 11 (10.0), Glasswave for Windows 1.2.13\nhttps://music.youtube.com/watch?v=0TED-B4QFUI"
     }
   ],
-  "lastActiveTime": 1793222577,
+  "lastActiveTime": 1793233142,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -960,12 +966,17 @@
         "65d60d6b-a971-45bc-a69e-ee9e81d656a6",
         "d8dfbeea-6046-4a55-beb1-39a0e683240f"
       ]
+    },
+    "2026-10-29": {
+      "w": [
+        "1acf6e0b-6faa-44ef-aab2-085f9b135094"
+      ]
     }
   },
   "active": {
     "today": {
-      "a": 9,
-      "w": 5
+      "a": 0,
+      "w": 1
     },
     "week": {
       "a": 28,
@@ -1000,6 +1011,11 @@
         "d": "2026-10-28",
         "a": 9,
         "w": 5
+      },
+      {
+        "d": "2026-10-29",
+        "a": 0,
+        "w": 1
       }
     ]
   }
