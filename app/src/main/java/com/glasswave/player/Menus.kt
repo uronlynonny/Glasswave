@@ -347,7 +347,7 @@ private fun SongMenuBody(target: Menus.SongTarget, ps: PlayerState, open: (Music
                             Menus.closeSong()
                             Menus.newPlaylist(t)
                         }
-                        Library.ownPlaylists().filter { it.id != Library.LIKED_ID }.forEach { p ->
+                        Library.ownPlaylists().filter { it.id != Library.LIKED_ID && !it.id.startsWith(Library.SAVED_PREFIX) }.forEach { p ->
                             Row(
                                 Modifier.fillMaxWidth().pressable(0.98f) {
                                     val added = Library.add(p.id, t)

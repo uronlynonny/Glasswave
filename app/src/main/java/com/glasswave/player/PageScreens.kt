@@ -40,6 +40,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Search
@@ -129,6 +130,12 @@ fun SavedPage(c: ScreenCtx, start: PlaylistInfo) {
                 list, if (p.id == Library.LIKED_ID) tracks.firstOrNull()?.thumb else p.thumb, p.name,
                 p.source.label, false, tracks, c,
                 extra = {
+                    // Mix: blend this playlist's songs into each other, like Spotify (lit up while it's on).
+                    @Suppress("UNUSED_VARIABLE") val mv = PlaylistMix.version
+                    val mixOn = PlaylistMix.get(p.id).on
+                    GlassCircle(48.dp, c.bg, tint = if (mixOn) CoverTint.accent.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.06f), onClick = { c.vm.open(Route.Mix(p)) }) {
+                        Ico(Icons.Rounded.Tune, if (mixOn) Color.Black else Color.White, 21.dp)
+                    }
                     // Pin, and the playlist menu.
                     GlassCircle(48.dp, c.bg, onClick = { Library.togglePin(p.id) }) {
                         Ico(Icons.Rounded.PushPin, if (Library.isPinned(p.id)) Lime else Color.White, 20.dp)
@@ -158,7 +165,7 @@ fun SavedPage(c: ScreenCtx, start: PlaylistInfo) {
                     Column(Modifier.weight(1f)) {
                         GText(if (tracks.isEmpty()) "Let's find something for your playlist" else "Recommended songs", 21, weight = FontWeight.Bold, maxLines = 2)
                         Spacer(Modifier.height(2.dp))
-                        GText(if (tracks.isEmpty()) "Based on its name and what you played lately" else "Based on what's in this playlist", 13, Faint, maxLines = 1)
+                        GText(if (tracks.isEmpty()) "Based on its name and what you play most" else "Based on this playlist and what you play most", 13, Faint, maxLines = 1)
                     }
                     Box(Modifier.clip(RoundedCornerShape(16.dp)).pressable(0.9f) { round++ }.padding(horizontal = 12.dp, vertical = 8.dp)) {
                         GText("Refresh", 14, Color.White, FontWeight.SemiBold)
@@ -194,31 +201,115 @@ private fun SuggestRow(c: ScreenCtx, t: Track, onAdd: () -> Unit) {
     }
 }
 
+/** Every artist on a song, lowercased: "A, B & C" and a "(feat. D)" in the title all count. The main one comes first. */
+private fun artistsOf(t: Track): List<String> {
+    val names = t.artist.split(Regex(",|&| x | feat\\.? | ft\\.? | featuring | with ", RegexOption.IGNORE_CASE)).toMutableList()
+    Regex("[(\\[](?:feat|ft)\\.?\\s+([^)\\]]+)[)\\]]", RegexOption.IGNORE_CASE).find(t.title)?.let { m ->
+        names += m.groupValues[1].split(Regex(",|&| and "))
+    }
+    return names.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct()
+}
+
+/** A song's tempo, if Automix has already listened to it and found a steady beat (80..160). */
+private fun bpmOf(url: String): Float? = MixLibrary.any(url)?.takeIf { it.steady }?.bpm
+
+/** How far apart two tempos are, counting half and double time as the same. */
+private fun tempoGap(a: Float, b: Float): Float = minOf(kotlin.math.abs(a - b), kotlin.math.abs(a * 2 - b), kotlin.math.abs(a - b * 2))
+
 /**
- * About ten songs to suggest for one of your playlists: YouTube Music's radio for a few of its
- * songs, or when it's empty, songs found by its name and radio for what you played lately.
- * Never a song already in it; songs in [skip] (shown before) only when there's little else.
- * Empty when offline.
+ * About ten songs to suggest for one of your playlists, best first. Songs come from YouTube Music's
+ * radio for a few of its songs and for one or two of your favourite artists that fit it (when it's
+ * empty: songs found by its name, what you played lately and your favourite artists). Each is
+ * scored on how much you like its artists (the playlist's own first, then the ones you play most),
+ * how many of the radios its artist turns up in, how close its tempo is to the playlist's (when
+ * Automix knows both), and how high it came in a radio. At most two per artist; never a song
+ * already in it or one you're not interested in. Songs in [skip] (shown before) only when there's
+ * little else, so Refresh moves on to the next best. Empty when offline.
  */
 private suspend fun suggestionsFor(name: String, have: List<Track>, skip: Set<String>): List<Track> = coroutineScope {
     val haveUrls = have.map { it.url }.toSet()
     val haveKeys = have.map { YtRepo.songKey(it.title, it.artist) }.toSet()
+    val recent = History.tracks.toList()
+    fun radioOf(t: Track) = async(Dispatchers.IO) {
+        runCatching { YtRepo.videoIdFor(t.url)?.let { YtMusicApi.radio(it).drop(1).take(25) } ?: emptyList() }.getOrDefault(emptyList())
+    }
+    val allTime = async { runCatching { Stats.summary(Stats.Period.ALL) }.getOrNull() }
+    val month = async { runCatching { Stats.summary(Stats.Period.MONTH) }.getOrNull() }
     val byName = if (have.isNotEmpty() || name.isBlank() || name == "My playlist") emptyList() else runCatching {
         YtMusicApi.search(name, YtMusicApi.Filter.SONGS).sections.flatMap { s -> s.items.filterIsInstance<SongItem>() }.map { it.track }
     }.getOrDefault(emptyList())
-    val seeds = if (have.isNotEmpty()) have.shuffled().take(3)
-        else byName.take(2) + History.tracks.toList().take(12).shuffled().take(2)
-    val radios = seeds.map { s ->
-        async(Dispatchers.IO) {
-            runCatching { YtRepo.videoIdFor(s.url)?.let { NotInterested.thin(YtMusicApi.radio(it)) } ?: emptyList() }.getOrDefault(emptyList())
+    val seeds = if (have.isNotEmpty()) have.shuffled().take(4) else byName.take(2) + recent.take(12).shuffled().take(2)
+    val radios = seeds.map { radioOf(it) }
+    val top = allTime.await()
+    val lately = month.await()
+
+    // How much you like each artist: the playlist's own the most, then the ones you play most
+    // (fading down the list), plus a little for what you played lately.
+    val like = HashMap<String, Double>()
+    fun raise(a: String, v: Double) { if (v > (like[a] ?: 0.0)) like[a] = v }
+    have.flatMap { artistsOf(it) }.groupingBy { it }.eachCount().forEach { (a, n) -> raise(a, 3.0 + 0.4 * minOf(n - 1, 3)) }
+    top?.topArtists?.forEachIndexed { i, a -> raise(a.name.lowercase(), 2.2 * Math.pow(0.85, i.toDouble())) }
+    lately?.topArtists?.forEachIndexed { i, a -> raise(a.name.lowercase(), 2.4 * Math.pow(0.85, i.toDouble())) }
+    recent.take(30).flatMap { artistsOf(it) }.groupingBy { it }.eachCount().forEach { (a, n) -> like[a] = (like[a] ?: 0.0) + 0.15 * minOf(n, 4) }
+
+    val lists = radios.awaitAll().toMutableList()
+    // One or two of your favourite artists that fit: in the playlist, or turning up in its radio.
+    // Radio from the song of theirs you play most, and that song itself.
+    val near = (have + lists.flatten()).flatMap { artistsOf(it) }.toSet()
+    val favs = ((lately?.topArtists ?: emptyList()) + (top?.topArtists ?: emptyList())).map { it.name.lowercase() }.distinct()
+    val fits = favs.filter { it in near }.take(2).ifEmpty { if (have.isEmpty()) favs.take(2) else emptyList() }
+    val played = (top?.topSongs?.map { it.track } ?: emptyList()) + recent
+    val favSeeds = fits.mapNotNull { a -> played.firstOrNull { artistsOf(it).firstOrNull() == a } ?: played.firstOrNull { a in artistsOf(it) } }
+    lists += favSeeds.map { radioOf(it) }.awaitAll()
+    lists += favSeeds
+    if (byName.isNotEmpty()) lists += byName.take(8)
+
+    // How many of the lists each artist turns up in: the more, the closer to the playlist's sound.
+    val spread = HashMap<String, Int>()
+    lists.forEach { l -> l.flatMap { artistsOf(it) }.toSet().forEach { spread[it] = (spread[it] ?: 0) + 1 } }
+    val tempos = have.mapNotNull { bpmOf(it.url) }.sorted()
+    val tempo = tempos.getOrNull(tempos.size / 2)
+
+    // Each song once (any upload of it), with how high it came and in how many lists.
+    class Pick(val t: Track, var high: Double) { var hits = 1 }
+    val picks = LinkedHashMap<String, Pick>()
+    lists.forEach { l ->
+        l.forEachIndexed { i, t ->
+            val key = YtRepo.songKey(t.title, t.artist)
+            if (t.url in haveUrls || key in haveKeys || NotInterested.has(t)) return@forEachIndexed
+            val high = (1.0 - i / 30.0).coerceAtLeast(0.0)
+            val p = picks[key]
+            if (p == null) picks[key] = Pick(t, high) else { p.high = maxOf(p.high, high); p.hits++ }
         }
     }
-    val pool = (byName.take(8) + radios.awaitAll().flatMap { it.drop(1).take(20) })
-        .shuffled()
-        .filter { it.url !in haveUrls && YtRepo.songKey(it.title, it.artist) !in haveKeys }
-        .distinctBy { YtRepo.songKey(it.title, it.artist) }
-    val fresh = pool.filter { it.url !in skip }
-    (if (fresh.size >= 5) fresh else fresh + pool.filter { it.url in skip }).take(10)
+    val heard = recent.take(15).map { it.url }.toSet()
+    val random = java.util.Random()
+    val ranked = picks.values.map { p ->
+        val names = artistsOf(p.t)
+        // A featured artist counts a bit less than the main one.
+        val fond = names.mapIndexed { i, a -> (like[a] ?: 0.0) * if (i == 0) 1.0 else 0.7 }.maxOrNull() ?: 0.0
+        val similar = names.maxOfOrNull { minOf(((spread[it] ?: 1) - 1) * 0.6, 1.5) } ?: 0.0
+        val beat = if (tempo == null) 0.0 else bpmOf(p.t.url)?.let { b -> 1.5 * (1.0 - tempoGap(tempo, b) / 20.0).coerceAtLeast(0.0) } ?: 0.0
+        val again = 0.5 * minOf(p.hits - 1, 3)
+        val worn = if (p.t.url in heard) 0.8 else 0.0
+        // A pinch of chance, only enough to break ties.
+        p.t to fond + similar + beat + p.high + again - worn + random.nextDouble() * 0.3
+    }.sortedByDescending { it.second }.map { it.first }
+
+    fun choose(from: List<Track>): List<Track> {
+        val per = HashMap<String, Int>()
+        val out = mutableListOf<Track>()
+        for (t in from) {
+            val a = artistsOf(t).firstOrNull() ?: ""
+            if ((per[a] ?: 0) >= 2) continue
+            per[a] = (per[a] ?: 0) + 1
+            out += t
+            if (out.size == 10) break
+        }
+        return out
+    }
+    val fresh = choose(ranked.filter { it.url !in skip })
+    if (fresh.size >= 5) fresh else choose(ranked.filter { it.url !in skip } + ranked.filter { it.url in skip })
 }
 
 /** Songs saved on the phone. Plays without internet. */

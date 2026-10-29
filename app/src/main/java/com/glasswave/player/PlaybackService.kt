@@ -871,8 +871,12 @@ class PlaybackService : MediaSessionService() {
 
     /** Automix is on (or Flow is playing, which always mixes), and nothing asks for songs to end on their own. */
     private fun mixOn(p: Player): Boolean {
-        return (Settings.automix || Flow.active) && p.repeatMode != Player.REPEAT_MODE_ONE && !SleepTimer.endOfSong
+        return (Settings.automix || Flow.active || mixedPlaylist(p) != null) && p.repeatMode != Player.REPEAT_MODE_ONE && !SleepTimer.endOfSong
     }
+
+    /** The playlist with Mix on that's playing now, if the queue is one (see [PlaylistMix]). */
+    private fun mixedPlaylist(p: Player): String? =
+        if (Flow.active) null else PlaylistMix.forQueue((0 until p.mediaItemCount).map { p.getMediaItemAt(it).mediaId })
 
     private fun mixerFor(): ExoPlayer? {
         mixer?.let { return it }
@@ -892,7 +896,8 @@ class PlaybackService : MediaSessionService() {
         val head = MixLibrary.profile(next, MixPart.HEAD)
         val had = (if (tail != null) 1 else 0) or (if (head != null) 2 else 0)
         plan?.let { if (planKey == key && (planLocked || had == planHad)) return it }
-        val p = MixPlanner.plan(dur, tail, head, canStretch = canStretch)
+        val p = session?.player?.let { mixedPlaylist(it) }?.let { id -> MixPlanner.custom(dur, tail, head, PlaylistMix.transition(id, cur, next), canStretch) }
+            ?: MixPlanner.plan(dur, tail, head, canStretch = canStretch)
         plan = p
         planKey = key
         planHad = had

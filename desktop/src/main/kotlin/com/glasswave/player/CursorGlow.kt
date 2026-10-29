@@ -65,7 +65,7 @@ class CursorGlow internal constructor(private val scope: CoroutineScope) {
                 // Steps scaled to the time since the last frame, so it feels the same at any frame rate.
                 val frames = if (last == 0L) 1f else ((now - last) / 16_666_667f).coerceIn(0.1f, 4f)
                 last = now
-                val follow = 1f - 0.88f.pow(frames)
+                val follow = 1f - 0.45f.pow(frames)
                 val fade = 1f - 0.9f.pow(frames)
                 val d = target - pos
                 pos = if (d.getDistance() < 0.5f) target else pos + d * follow

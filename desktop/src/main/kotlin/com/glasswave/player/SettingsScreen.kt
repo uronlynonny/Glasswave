@@ -723,11 +723,6 @@ private fun SoundPage(c: ScreenCtx) {
         SliderRow("Treble boost", pct(Sound.treble), Sound.treble, 0f..1f) { Sound.updateTreble(it) }
         SliderRow("Stereo width", pct(Sound.width), Sound.width, 0f..1f) { Sound.updateWidth(it) }
     }
-    Group("Speed & pitch") {
-        SliderRow("Speed", "${"%.2f".format(c.ps.speed)}x", c.ps.speed, 0.5f..2f, center = 1f, snap = 0.05f) { c.ps.changeSpeed(it) }
-        SliderRow("Pitch", semis(Sound.pitch), Sound.pitch, -12f..12f, center = 0f, snap = 1f) { Sound.updatePitch(it) }
-    }
-    Note("Pitch makes songs higher or lower without changing their speed. Speed resets when Glasswave closes; pitch is kept.")
     Group("Effects") {
         SliderRow("Reverb", pct(Sound.reverb), Sound.reverb, 0f..1f) { Sound.updateReverb(it) }
         if (Sound.reverb > 0f) LazyPills(Room.entries.map { it.label }, Sound.room.label) { l -> Room.entries.firstOrNull { it.label == l }?.let { Sound.updateRoom(it) } }

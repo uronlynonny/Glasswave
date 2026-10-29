@@ -57,6 +57,8 @@ enum class Tab(val label: String) { HOME("Home"), SEARCH("Search"), LIBRARY("Lib
 sealed interface Route {
     data class Online(val item: MusicItem) : Route
     data class Saved(val info: PlaylistInfo) : Route
+    /** A playlist's Mix settings. */
+    data class Mix(val info: PlaylistInfo) : Route
     /** Songs downloaded to the phone. */
     data object Offline : Route
     /** Music files already on the phone. */
@@ -383,6 +385,8 @@ class MainViewModel : ViewModel() {
     /* ---- Library ---- */
     val playlists = Library.playlists
     var libFilter by mutableStateOf<Source?>(null)
+    /** The Library's Downloaded filter: only what plays without internet. */
+    var libDownloaded by mutableStateOf(false)
     var savedTracks by mutableStateOf<List<Track>>(emptyList())
         private set
     /** True once the open playlist's songs have been read (an empty playlist is then really empty). */

@@ -68,7 +68,16 @@ private fun LibraryBody(c: ScreenCtx) {
     val sorted = all.sortedWith(
         compareBy<PlaylistInfo>({ p -> pins.indexOf(p.id).let { if (it < 0) Int.MAX_VALUE else it } }, { if (it.id == Library.LIKED_ID) 0 else 1 }),
     )
-    val shown = vm.libFilter?.let { f -> sorted.filter { it.source == f } } ?: sorted
+    // Downloaded: the playlists with songs saved for offline (worked out off the main thread).
+    var offlineIds by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Set<String>>(emptySet()) }
+    androidx.compose.runtime.LaunchedEffect(vm.libDownloaded, Downloads.tracks.size, Library.version) {
+        if (!vm.libDownloaded) return@LaunchedEffect
+        offlineIds = all.filter { p -> Library.tracks(p.id).any { Downloads.isDownloaded(it.url) } }.map { it.id }.toSet()
+    }
+    val shown = when {
+        vm.libDownloaded -> sorted.filter { it.id in offlineIds }
+        else -> vm.libFilter?.let { f -> sorted.filter { it.source == f } } ?: sorted
+    }
     val spin = rememberInfiniteTransition(label = "sync")
     val angle by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(1000, easing = LinearEasing)), label = "spin")
 
@@ -94,10 +103,11 @@ private fun LibraryBody(c: ScreenCtx) {
             }
         }
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            item { Chip("All", vm.libFilter == null, c.bg) { vm.libFilter = null } }
-            item { Chip("Yours", vm.libFilter == Source.LOCAL, c.bg) { vm.libFilter = Source.LOCAL } }
-            item { Chip("YouTube Music", vm.libFilter == Source.YT, c.bg) { vm.libFilter = Source.YT } }
-            item { Chip("Spotify", vm.libFilter == Source.SPOTIFY, c.bg) { vm.libFilter = Source.SPOTIFY } }
+            item { Chip("All", vm.libFilter == null && !vm.libDownloaded, c.bg) { vm.libFilter = null; vm.libDownloaded = false } }
+            item { Chip("Downloaded", vm.libDownloaded, c.bg) { vm.libFilter = null; vm.libDownloaded = true } }
+            item { Chip("Yours", vm.libFilter == Source.LOCAL && !vm.libDownloaded, c.bg) { vm.libFilter = Source.LOCAL; vm.libDownloaded = false } }
+            item { Chip("YouTube Music", vm.libFilter == Source.YT && !vm.libDownloaded, c.bg) { vm.libFilter = Source.YT; vm.libDownloaded = false } }
+            item { Chip("Spotify", vm.libFilter == Source.SPOTIFY && !vm.libDownloaded, c.bg) { vm.libFilter = Source.SPOTIFY; vm.libDownloaded = false } }
         }
         if (vm.syncing) vm.syncStatus?.let { GText(it, 13, Dim, maxLines = 2, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) }
 
@@ -110,9 +120,9 @@ private fun LibraryBody(c: ScreenCtx) {
             modifier = Modifier.weight(1f),
         ) {
             // Your stats: top songs and artists this month / year, listening history.
-            item(key = "stats", span = { GridItemSpan(maxLineSpan) }) { if (desktopLayout()) StatsBanner(c) else StatsCard(c) }
+            if (!vm.libDownloaded) item(key = "stats", span = { GridItemSpan(maxLineSpan) }) { if (desktopLayout()) StatsBanner(c) else StatsCard(c) }
             // Recently played, as a shelf.
-            val recent = History.tracks.take(15)
+            val recent = if (vm.libDownloaded) emptyList() else History.tracks.take(15)
             if (recent.isNotEmpty()) item(key = "recent", span = { GridItemSpan(maxLineSpan) }) {
                 Column {
                     GText("Recently played", 19, weight = FontWeight.Bold, modifier = Modifier.padding(bottom = 10.dp))
@@ -164,7 +174,9 @@ private fun LibraryBody(c: ScreenCtx) {
                 }
             }
             items(shown, key = { it.id }) { p -> PlaylistCard(p) { vm.open(Route.Saved(p)) } }
-            if (shown.isEmpty() && all.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Box { Centered("Nothing here yet") } }
+            if (shown.isEmpty() && all.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
+                Box { Centered(if (vm.libDownloaded) "No playlists with downloaded songs yet. Tap ⬇ on a playlist to save it for offline." else "Nothing here yet") }
+            }
         }
     }
 }

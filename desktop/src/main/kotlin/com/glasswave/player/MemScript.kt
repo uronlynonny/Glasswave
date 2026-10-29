@@ -123,6 +123,21 @@ object MemScript {
                         }
                         "next" -> onUi { ps.next() }
                         "toggle" -> onUi { ps.toggle() }
+                        // fillpl N: adds the N most recent songs to the open playlist.
+                        "fillpl" -> onUi { (vm.stack.lastOrNull() as? Route.Saved)?.info?.let { p -> History.tracks.take(arg.toInt()).forEach { Library.add(p.id, it) } } }
+                        // fps N: how smoothly the window draws over the next N seconds.
+                        "fps" -> { FrameMeter.reset(); Thread.sleep(arg.toLong() * 1000); System.err.println("GW fps: " + FrameMeter.summary()) }
+                        // mixpl: turns Mix on for the open playlist (8 s fades, starting 20 s early) and opens its Mix page; playpl plays it.
+                        "mixpl" -> onUi {
+                            val p = (vm.stack.lastOrNull() as? Route.Saved)?.info
+                            if (p != null) {
+                                val urls = kotlinx.coroutines.runBlocking { Library.tracks(p.id) }.map { it.url }.toSet()
+                                PlaylistMix.save(p.id, PlaylistMix.Mix(true, PlaylistMix.Transition(PlaylistMix.Style.FADE, 8, 20), emptyMap(), urls))
+                                vm.open(Route.Mix(p))
+                            }
+                        }
+                        "playpl" -> onUi { val p = (vm.stack.lastOrNull() as? Route.Mix)?.info; if (p != null) ps.playList(kotlinx.coroutines.runBlocking { Library.tracks(p.id) }, 0) }
+                        "libdl" -> onUi { vm.selectTab(Tab.LIBRARY); vm.libDownloaded = arg == "on" }
                         // scrolltest: scrolls down and up for a few seconds, then says how smooth the frames were.
                         "scrolltest" -> {
                             val w = java.awt.Window.getWindows().first { it is java.awt.Frame && it.isDisplayable }

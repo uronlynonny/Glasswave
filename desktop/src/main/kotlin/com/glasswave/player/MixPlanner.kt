@@ -119,6 +119,27 @@ object MixPlanner {
         return (beats * beat).toLong().coerceIn(5_000, 16_000)
     }
 
+    /**
+     * A change set by hand in a playlist's Mix: the style, length and how early it starts
+     * ([PlaylistMix.Transition]). Starting early skips the rest of the old song.
+     */
+    fun custom(oldMs: Long, tail: MixProfile?, head: MixProfile?, t: PlaylistMix.Transition, canStretch: Boolean): MixPlan {
+        val endAt = if (t.earlySec > 0) (oldMs - t.earlySec * 1000L).coerceAtLeast(oldMs / 2)
+        else (tail?.soundEndMs ?: oldMs).coerceIn(oldMs / 2, oldMs)
+        val start = (head?.soundStartMs ?: 0L).coerceIn(0L, 20_000L)
+        return when (t.style) {
+            PlaylistMix.Style.AUTO -> plan(if (t.earlySec > 0) endAt else oldMs, tail, head, t.seconds, canStretch)
+            PlaylistMix.Style.FADE -> {
+                val len = min(if (t.seconds > 0) t.seconds * 1000L else blendMs(tail, head), endAt / 3)
+                simple(MixStyle.SMART_FADE, endAt - len, max(0L, start - 30), len, "Fade, ${len / 1000} s (your mix)")
+            }
+            PlaylistMix.Style.CUT -> {
+                val len = if (t.seconds > 0) min(t.seconds * 1000L, 3_000L) else 1_200L
+                simple(MixStyle.PLAIN, endAt - len, start, len, "Quick cut (your mix)")
+            }
+        }
+    }
+
     fun plan(oldMs: Long, tail: MixProfile?, head: MixProfile?, mixSeconds: Int = 0, canStretch: Boolean = true): MixPlan {
         val want = if (mixSeconds > 0) mixSeconds * 1000L else blendMs(tail, head)
         val plainLen = min(want, oldMs / 5)

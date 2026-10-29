@@ -243,6 +243,7 @@ internal fun startUp() {
     Accounts.init(ctx)
     Library.init(ctx)
     SearchPicks.init(ctx)
+    PlaylistMix.init(ctx)
     History.init(ctx)
     Downloads.init(ctx)
     SongCache.init(ctx)

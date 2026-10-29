@@ -225,7 +225,9 @@ private fun LyricsBody(ps: PlayerState, state: Load<Lyrics?>, fancy: Boolean, ac
 @Composable
 private fun LyricsBackdrop(art: String?, moving: Boolean) {
     val ctx = LocalContext.current
-    val req = remember(art) { art?.let { ImageRequest.Builder(ctx).data(it).size(96).build() } }
+    // On a computer a live 64 dp blur of the whole window every frame was too slow (lyrics ran at
+    // about 30 fps): a tiny cover stretched smoothly over the window is just as soft, for almost nothing.
+    val req = remember(art) { art?.let { ImageRequest.Builder(ctx).data(it).size(24).build() } }
     val drift by rememberDrift(36_000)
     Box(Modifier.fillMaxSize().background(Color(0xFF0B0C0F))) {
         if (req != null) {
@@ -240,7 +242,8 @@ private fun LyricsBackdrop(art: String?, moving: Boolean) {
             ) {
                 AsyncImage(
                     model = req, contentDescription = null, contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().then(if (Build.VERSION.SDK_INT >= 31) Modifier.blur(64.dp) else Modifier),
+                    modifier = Modifier.fillMaxSize(),
+                    filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
                 )
             }
         }
@@ -291,7 +294,8 @@ private class LineLook(val scale: Float, val alpha: Float, val blur: Float)
 private fun look(d: Int, fancy: Boolean): LineLook = when {
     d == 0 -> LineLook(1f, 1f, 0f)
     // Apple Music style: lines stay readable, only gently dimmed, shrunk and blurred with distance.
-    fancy -> LineLook(0.97f, if (d < 0) 0.34f else (0.46f - abs(d) * 0.04f).coerceAtLeast(0.24f), minOf(abs(d), 3) * 0.8f)
+    // (No blur on far lines on a computer: blurring each line every frame cost too much smoothness.)
+    fancy -> LineLook(0.97f, if (d < 0) 0.34f else (0.46f - abs(d) * 0.04f).coerceAtLeast(0.24f), 0f)
     else -> LineLook(0.97f, if (d < 0) 0.36f else 0.40f, 0f)
 }
 

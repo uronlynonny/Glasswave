@@ -624,7 +624,10 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     /* ---- Getting the next song ready, crossfade and Automix ---- */
 
     /** Automix is on (or Flow is playing, which always mixes), and nothing asks for songs to end on their own. */
-    private fun mixOn() = (Settings.automix || Flow.active) && repeat != Player.REPEAT_MODE_ONE && !SleepTimer.endOfSong
+    private fun mixOn() = (Settings.automix || Flow.active || mixedPlaylist() != null) && repeat != Player.REPEAT_MODE_ONE && !SleepTimer.endOfSong
+
+    /** The playlist with Mix on that's playing now, if the queue is one (see [PlaylistMix]). */
+    private fun mixedPlaylist(): String? = if (Flow.active) null else PlaylistMix.forQueue(items.map { it.url })
 
     private var mixing = false
     private var mixOld: AudioDeck? = null
@@ -690,7 +693,9 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         val had = (if (tail != null) 1 else 0) or (if (head != null) 2 else 0)
         plan?.let { if (planKey == key && (planLocked || had == planHad)) return it }
         // Tempo matching only at normal speed and pitch (a speed you set stays yours).
-        val p = MixPlanner.plan(dur, tail, head, canStretch = AudioDeck.speed == 1f && AudioDeck.pitch == 1f)
+        val stretch = AudioDeck.speed == 1f && AudioDeck.pitch == 1f
+        val p = mixedPlaylist()?.let { id -> MixPlanner.custom(dur, tail, head, PlaylistMix.transition(id, items[cur].url, items[n].url), stretch) }
+            ?: MixPlanner.plan(dur, tail, head, canStretch = stretch)
         plan = p
         planKey = key
         planHad = had

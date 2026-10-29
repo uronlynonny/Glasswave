@@ -716,15 +716,6 @@ private fun MoreSheet(ps: PlayerState, fp: Backdrop, colors: CoverColors, openEq
                     }
                 }
             }
-            SheetLabel("Speed")
-            ChoiceRow(listOf("0.75x", "1x", "1.25x", "1.5x", "2x"), "${if (ps.speed % 1f == 0f) ps.speed.toInt().toString() else ps.speed.toString()}x") {
-                ps.changeSpeed(it.removeSuffix("x").toFloat())
-            }
-            // Higher or lower without changing the speed. More in Settings > Sound & effects.
-            SheetLabel("Pitch")
-            val pitches = listOf("-3", "-2", "-1", "Normal", "+1", "+2", "+3")
-            val now = Sound.pitch.toInt().let { if (it == 0) "Normal" else if (it > 0) "+$it" else "$it" }
-            ChoiceRow(pitches, now) { Sound.updatePitch(if (it == "Normal") 0f else it.toFloat()) }
         }
     }
 }

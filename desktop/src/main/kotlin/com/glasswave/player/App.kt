@@ -192,6 +192,7 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
                     when (key) {
                         is Route.Online -> OnlinePage(ctx, key.item)
                         is Route.Saved -> SavedPage(ctx, key.info)
+                        is Route.Mix -> MixPage(ctx, key.info)
                         Route.Offline -> DownloadsPage(ctx)
                         Route.Pc -> PcMusicPage(ctx)
                         Route.Stats -> StatsPage(ctx)

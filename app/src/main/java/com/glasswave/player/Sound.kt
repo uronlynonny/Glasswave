@@ -87,7 +87,9 @@ object Sound {
         preset = prefs.getString("preset", EqPreset.FLAT.name)?.let { n -> EqPreset.entries.firstOrNull { it.name == n } }
         bass = prefs.getFloat("bass", 0f)
         treble = prefs.getFloat("treble", 0f)
-        pitch = prefs.getFloat("pitch", 0f)
+        // Pitch and speed were taken out of the settings: songs always play as recorded.
+        pitch = 0f
+        prefs.edit { remove("pitch") }
         reverb = prefs.getFloat("reverb", 0f)
         room = runCatching { Room.valueOf(prefs.getString("room", null) ?: "HALL") }.getOrDefault(Room.HALL)
         drive = prefs.getFloat("drive", 0f)
