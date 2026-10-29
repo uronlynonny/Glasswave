@@ -305,6 +305,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     }
 
     fun livePosition(): Long = if (deck.ready) deck.positionMs else positionMs
+    internal fun debugPosition(): Long = deck.positionMs
+    internal fun debugFrames(): Pair<Long, Long> = deck.debugFrames
 
     fun tick() {
         // While playing, the spot in the song is saved every 5 seconds.

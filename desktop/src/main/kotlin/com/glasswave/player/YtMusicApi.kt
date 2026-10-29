@@ -664,10 +664,18 @@ object YtMusicApi {
         val body = JSONObject().put("query", "$title $artist".trim())
             .put("params", java.net.URLDecoder.decode(Filter.SONGS.params!!, "UTF-8"))
         return sections0(call("search", body)).flatMap { it.items }.filterIsInstance<SongItem>().take(12).firstOrNull { s ->
-            s.explicit && YtRepo.sameSong(title, s.track.title) &&
+            s.explicit && YtRepo.sameSong(title, s.track.title) && sameVersion(title, s.track.title) &&
                 (lead.isEmpty() || s.track.artist.lowercase().contains(lead)) &&
                 (seconds <= 0 || s.track.seconds <= 0 || kotlin.math.abs(s.track.seconds - seconds) <= 20)
         }?.let { YtRepo.videoIdFor(it.track.url) }?.takeIf { it != videoId }
+    }
+
+    private val versionWord = Regex("""\b(remix|mix|live|acoustic|version|edit|instrumental|sped|slowed|demo|remaster(ed)?|extended|cover|reprise|unplugged|acapella|a cappella|clean)\b""", RegexOption.IGNORE_CASE)
+
+    /** Same version of a song: a remix only matches a remix, a live one a live one, and so on. */
+    private fun sameVersion(a: String, b: String): Boolean {
+        fun words(t: String) = versionWord.findAll(t).map { it.value.lowercase() }.filter { it != "clean" }.toSet()
+        return words(a) == words(b)
     }
 
     /** The real title, artist, length and cover of a song, straight from YouTube Music. Blocking. */

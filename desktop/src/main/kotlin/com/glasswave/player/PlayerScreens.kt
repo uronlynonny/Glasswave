@@ -164,6 +164,7 @@ fun FullPlayer(ps: PlayerState, colors: CoverColors, onClose: () -> Unit, openEq
     var lyrics by PlayerView::lyrics
     androidx.compose.runtime.LaunchedEffect(PlayerView.queue) { if (PlayerView.queue) { sheet = Sheet.QUEUE; PlayerView.queue = false } }
     androidx.activity.compose.BackHandler(enabled = lyrics) { lyrics = false }
+    val glow = rememberCursorGlow()
 
     Box(
         Modifier
@@ -185,10 +186,13 @@ fun FullPlayer(ps: PlayerState, colors: CoverColors, onClose: () -> Unit, openEq
                     },
                 )
             }
-            .clickable(remember { MutableInteractionSource() }, null) { },
+            .clickable(remember { MutableInteractionSource() }, null) { }
+            .trackCursorGlow(glow),
     ) {
         val fp = rememberBackdrop()
         GlassBackground(colors, hiRes(ps.art), Modifier.backdropSource(fp), artAlpha = 0.55f)
+        // A soft light that follows the mouse, behind the cover and buttons.
+        CursorGlowLayer(glow)
 
         val ui = PlayerUi(ps, fp, colors, onClose, onQueue = { sheet = Sheet.QUEUE }, onMore = { sheet = Sheet.MORE }, onLyrics = { lyrics = true })
         if (isWide()) WideStyle(ui, panel = Settings.playerStyle == PlayerStyle.PANEL) else when (Settings.playerStyle) {
@@ -205,7 +209,7 @@ fun FullPlayer(ps: PlayerState, colors: CoverColors, onClose: () -> Unit, openEq
             enter = if (Settings.glass) slideInVertically(smooth(250)) { it / 5 } + fadeIn(smooth(220)) else fadeIn(smooth(180)),
             exit = if (Settings.glass) slideOutVertically(smooth(200)) { it / 5 } + fadeOut(smooth(180)) else fadeOut(smooth(150)),
         ) {
-            LyricsScreen(ps) { lyrics = false }
+            LyricsScreen(ps, glow) { lyrics = false }
         }
 
         // Sheets: "Up next" and the ••• menu.

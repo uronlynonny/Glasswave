@@ -55,6 +55,12 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun LibraryScreen(c: ScreenCtx) {
+    // Lighter glass in the Library (plain frosted panels, no bending): it scrolls at a steady 60 fps.
+    androidx.compose.runtime.CompositionLocalProvider(LocalLightGlass provides (System.getProperty("gw.lightGlass") != "0")) { LibraryBody(c) }
+}
+
+@Composable
+private fun LibraryBody(c: ScreenCtx) {
     val vm = c.vm
     val all by vm.playlists.collectAsState()
     val pins = Library.pins.toList()

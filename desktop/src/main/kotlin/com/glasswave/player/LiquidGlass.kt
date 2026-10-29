@@ -149,6 +149,9 @@ private fun buildEffect(size: Size, radius: Float, blur: Float, depth: Float, am
  * [corner] is the corner radius (use a big value for a pill). [tint] colours the glass.
  * The glass must not be inside its own backdrop.
  */
+/** Inside this, glass is drawn lighter: a plain see-through frosted panel, no bending (cheaper to scroll). */
+val LocalLightGlass = androidx.compose.runtime.staticCompositionLocalOf { false }
+
 fun Modifier.liquidGlass(
     backdrop: Backdrop,
     corner: Dp,
@@ -160,13 +163,21 @@ fun Modifier.liquidGlass(
 ): Modifier = composed {
     val layer = rememberGraphicsLayer()
     val cache = remember { GlassCache() }
+    val light = LocalLightGlass.current
     var pos by remember { mutableStateOf(Offset.Zero) }
     this
         .onGloballyPositioned { pos = it.positionInRoot() }
         .drawBehind {
             val r = corner.toPx().coerceAtMost(size.minDimension / 2f)
             val cr = CornerRadius(r)
-            if (Settings.glass && size.width >= 1f && size.height >= 1f) {
+            if (light) {
+                drawRoundRect(Color(0xFF0B0F18).copy(alpha = 0.26f), cornerRadius = cr)
+                drawRoundRect(
+                    Brush.linearGradient(listOf(Color.White.copy(alpha = 0.13f), Color.White.copy(alpha = 0.04f))),
+                    cornerRadius = cr,
+                )
+                drawRoundRect(tint, cornerRadius = cr)
+            } else if (Settings.glass && size.width >= 1f && size.height >= 1f) {
                 val key = r + blur.toPx() * 31 + depth.toPx() * 17 + bend.toPx() * 7
                 if (cache.size != size || cache.key != key || cache.effect == null) {
                     cache.size = size

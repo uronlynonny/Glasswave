@@ -242,6 +242,7 @@ internal fun startUp() {
     Spectrum.latencyMs = 1220
     Accounts.init(ctx)
     Library.init(ctx)
+    SearchPicks.init(ctx)
     History.init(ctx)
     Downloads.init(ctx)
     SongCache.init(ctx)
@@ -373,6 +374,16 @@ fun main() {
                 }
             }
             // Minimized: give memory back now, and again now and then while it stays down.
+            // For the checks: counts drawn frames and the longest gap between two (smoothness).
+            if (System.getProperty("gw.memScript") != null) LaunchedEffect(Unit) {
+                var last = 0L
+                while (true) {
+                    androidx.compose.runtime.withFrameNanos { now ->
+                        if (last > 0) FrameMeter.add((now - last) / 1_000_000)
+                        last = now
+                    }
+                }
+            }
             LaunchedEffect(state.isMinimized) {
                 if (!state.isMinimized) return@LaunchedEffect
                 kotlinx.coroutines.delay(2_000)

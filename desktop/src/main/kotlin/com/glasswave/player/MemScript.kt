@@ -123,6 +123,36 @@ object MemScript {
                         }
                         "next" -> onUi { ps.next() }
                         "toggle" -> onUi { ps.toggle() }
+                        // scrolltest: scrolls down and up for a few seconds, then says how smooth the frames were.
+                        "scrolltest" -> {
+                            val w = java.awt.Window.getWindows().first { it is java.awt.Frame && it.isDisplayable }
+                            val r = java.awt.Robot()
+                            r.mouseMove(w.x + w.width / 2, w.y + w.height / 2 + 100)
+                            FrameMeter.reset()
+                            repeat(30) { r.mouseWheel(2); Thread.sleep(60) }
+                            repeat(30) { r.mouseWheel(-2); Thread.sleep(60) }
+                            System.err.println("GW scrolltest $arg: " + FrameMeter.summary())
+                        }
+                        // uncensorcur: which video the playing song's audio really comes from.
+                        "uncensorcur" -> ps.currentTrack()?.let { System.err.println("GW uncensor '${it.title}' ${it.url} -> " + YtRepo.uncensored(it.url)) }
+                        // pick query: as if the playing song was played from a search for [query]; typing: types into search without pressing enter.
+                        "pick" -> ps.currentTrack()?.let { SearchPicks.record(arg, it) }
+                        "typing" -> onUi { vm.selectTab(Tab.SEARCH); vm.onQuery(arg) }
+                        // newpl name: a new playlist of yours with the playing song in it, opened.
+                        "newpl" -> onUi { val p = Library.createPlaylist(arg, ps.currentTrack()); vm.open(Route.Saved(p)) }
+                        // postrace: how smoothly the song position moves (sampled every 10 ms for 4 s).
+                        "postrace" -> {
+                            val t0 = System.nanoTime(); var last = -1L; var jumps = 0; var maxStep = 0L; var stalls = 0
+                            val p0 = ps.debugPosition(); val f0 = ps.debugFrames()
+                            repeat(400) {
+                                val p = ps.debugPosition()
+                                if (last >= 0) { val step = p - last; if (step > maxStep) maxStep = step; if (step == 0L) stalls++; if (step > 30) jumps++ }
+                                last = p; Thread.sleep(10)
+                            }
+                            val wall = (System.nanoTime() - t0) / 1_000_000
+                            val f1 = ps.debugFrames()
+                            System.err.println("GW postrace: wall ${wall}ms, position moved ${last - p0}ms, biggest step ${maxStep}ms, ${stalls} samples stuck, ${jumps} jumps; device frames moved ${(f1.first - f0.first) / 48}ms, device behind written by ${(f1.second - f1.first) / 48}ms")
+                        }
                         // plmenu: opens the first playlist's menu (as a right-click in the side menu does).
                         // hotkey: presses Ctrl+Alt+→ like a person would (the shortcut that works from any window).
                         "hotkey" -> java.awt.Robot().run {
@@ -286,6 +316,7 @@ object MemScript {
                                 val t0 = System.currentTimeMillis()
                                 val ly = kotlinx.coroutines.runBlocking { LyricsRepo.get(t.url, t.title, t.artist, t.seconds) }
                                 System.err.println("GW lyrtime ${t.title}: ${System.currentTimeMillis() - t0} ms, ready before: $was, ${ly?.lines?.size ?: 0} lines")
+                                System.err.println("GW lyrics for ${t.title} - ${t.artist} (${t.seconds}s): source=${ly?.source} synced=${ly?.synced} words=${ly?.wordTimed} dur=${ly?.durationSec} first: " + ly?.lines?.take(6)?.joinToString(" | ") { "${it.ms}: ${it.text}" })
                             }
                         }
                         // streamtest id: can that song's audio be found (18+ songs play another upload)?

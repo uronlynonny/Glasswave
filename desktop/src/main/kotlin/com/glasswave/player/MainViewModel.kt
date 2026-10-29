@@ -326,6 +326,7 @@ class MainViewModel : ViewModel() {
     fun clearRecent() {
         recent.clear()
         Accounts.recentSearches = emptyList()
+        SearchPicks.clear()
     }
 
     fun setSearchFilter(f: YtMusicApi.Filter) {

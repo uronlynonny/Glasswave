@@ -112,7 +112,7 @@ import kotlinx.coroutines.delay
  */
 
 @Composable
-fun LyricsScreen(ps: PlayerState, onClose: () -> Unit) {
+fun LyricsScreen(ps: PlayerState, glow: CursorGlow? = null, onClose: () -> Unit) {
     val url = ps.currentId
     var state by remember(url) { mutableStateOf<Load<Lyrics?>>(Load.Loading) }
     LaunchedEffect(url) {
@@ -132,6 +132,8 @@ fun LyricsScreen(ps: PlayerState, onClose: () -> Unit) {
 
     Box(Modifier.fillMaxSize().clickable(remember { MutableInteractionSource() }, null) { }) {
         LyricsBackdrop(ps.art, fancy)
+        // The player's mouse light, drawn over this screen's own background (behind the lyrics).
+        if (glow != null) CursorGlowLayer(glow)
         if (wide) {
             // Half and half (Apple Music on a computer): a big cover with the controls on the left,
             // the lyrics filling the right half.
@@ -307,9 +309,19 @@ private fun SyncedLyrics(ps: PlayerState, ly: Lyrics, fancy: Boolean, accent: Co
     // The song position (on the lyrics' clock), read every frame while this is open (cheap: it only feeds drawing).
     val pos = remember { mutableLongStateOf(0L) }
     LaunchedEffect(stretch, nudge) {
+        // A steady clock: it runs on its own between readings and is nudged toward each new reading,
+        // so lines change right on time instead of in jumps. A seek or pause snaps it straight there.
+        var smooth = ps.livePosition().toDouble()
+        var lastNs = System.nanoTime()
         while (true) {
             withFrameNanos { }
-            pos.longValue = (ps.livePosition() * stretch).toLong() + nudge
+            val now = System.nanoTime()
+            val measured = ps.livePosition().toDouble()
+            val ahead = if (ps.playing) smooth + (now - lastNs) / 1_000_000.0 * AudioDeck.speed else measured
+            val err = measured - ahead
+            smooth = if (!ps.playing || kotlin.math.abs(err) > 400) measured else ahead + err * 0.08
+            lastNs = now
+            pos.longValue = (smooth * stretch).toLong() + nudge
         }
     }
     // A touch early, so the highlight lands as the line is sung rather than after.

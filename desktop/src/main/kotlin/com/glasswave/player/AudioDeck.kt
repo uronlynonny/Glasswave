@@ -212,6 +212,9 @@ class AudioDeck(private val name: String) {
 
     private fun clearCheckpoints() = synchronized(cpLock) { cpCount = 0; written = 0 }
 
+    /** For the checks: frames the sound device says it has played, and frames handed to it. */
+    internal val debugFrames: Pair<Long, Long> get() = (line?.longFramePosition ?: -1L) to written
+
     /** Where the song is right now, counting only what has actually come out of the speakers. */
     val positionMs: Long
         get() {

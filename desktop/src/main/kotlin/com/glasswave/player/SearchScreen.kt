@@ -112,6 +112,7 @@ fun SearchScreen(c: ScreenCtx) {
                 vm.query.isBlank() -> Explore(c)
                 // Results stay on screen as you keep typing; suggestions sit above them as chips.
                 r is Load.Done -> Column {
+                    YourUsual(c)
                     if (vm.showSuggestions && sug != null && sug.queries.isNotEmpty()) {
                         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(sug.queries.take(5)) { q ->
@@ -130,9 +131,27 @@ fun SearchScreen(c: ScreenCtx) {
                     SearchingLine(vm.searching)
                     Results(c, r.value)
                 }
-                sug != null -> Suggestions(c, sug)
+                sug != null -> Column { YourUsual(c); Suggestions(c, sug) }
                 r == null || r is Load.Loading -> Column { repeat(8) { SkeletonRow() } }
                 r is Load.Failed -> ErrorBox(r.message, c.bg, { c.ps.playList(Downloads.tracks.toList().shuffled(), 0) }) { vm.submitSearch() }
+            }
+        }
+    }
+}
+
+/** The song(s) you usually play when you search something starting like this: right at the top. */
+@Composable
+private fun YourUsual(c: ScreenCtx) {
+    val q = c.vm.query
+    val usual = androidx.compose.runtime.remember(q) { SearchPicks.match(q) }
+    if (usual.isEmpty()) return
+    Column(Modifier.padding(horizontal = 8.dp).padding(bottom = 6.dp)) {
+        GText("You usually play", 13, Faint, FontWeight.SemiBold, modifier = Modifier.padding(start = 12.dp, top = 2.dp, bottom = 2.dp))
+        usual.forEach { t ->
+            TrackRow(t, t.url == c.ps.currentId, c.ps.playing) {
+                SearchPicks.record(q, t)
+                c.vm.rememberQuery()
+                c.ps.playList(listOf(t), 0)
             }
         }
     }
@@ -406,6 +425,7 @@ private fun TopResult(c: ScreenCtx, item: MusicItem, all: List<MusicItem>) {
 
 /** Opening a result also saves the search in Recent (results appear while typing, without pressing search). */
 private fun tapAndRemember(c: ScreenCtx, item: MusicItem, all: List<MusicItem>) {
+    if (item is SongItem) SearchPicks.record(c.vm.query, item.track)
     c.vm.rememberQuery()
     c.tap(item, all)
 }
