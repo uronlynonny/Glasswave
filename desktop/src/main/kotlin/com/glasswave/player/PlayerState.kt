@@ -498,7 +498,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         art = t.thumb
         positionMs = startMs
         durationMs = t.seconds * 1000
-        if (t.title.isNotBlank()) History.add(t.copy(seconds = 0))
+        // Into Recently played once its audio has loaded (a song stuck loading never goes in).
+        historyPending = t
         val changedSong = currentId != t.url
         currentId = t.url
         if (changedSong) Flow.onTrack(t.url, this)
@@ -520,12 +521,15 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
             deck.volume = startVolume()
             if (play) deck.play()
             markPlaying(play)
+            addPendingHistory()
         } else if (!mixing) {
             if (spare.tag == i) spare.stop()
             deck.stop()
             buffering = true
             markPlaying(play)
             load(deck, t, i, req, play, startMs)
+        } else {
+            addPendingHistory()
         }
 
         if (auto) SleepTimer.onSongEnded(this)
@@ -534,6 +538,15 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         verifyCurrent(t)
         applyLevel()
         changed()
+    }
+
+    /** The song waiting to go into Recently played (see [moveTo]). */
+    private var historyPending: Track? = null
+
+    private fun addPendingHistory() {
+        val t = historyPending ?: return
+        historyPending = null
+        if (t.title.isNotBlank() && t.url == currentId) History.add(t.copy(seconds = 0))
     }
 
     private fun load(d: AudioDeck, t: Track, i: Int, req: Int, play: Boolean, startMs: Long = 0) {
@@ -608,6 +621,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         override fun onReady(d: AudioDeck) {
             if (d !== deck) return
             buffering = false
+            addPendingHistory()
             if (d.durationMs > 0) durationMs = d.durationMs
         }
 

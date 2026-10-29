@@ -457,7 +457,7 @@ fun StatsPage(c: ScreenCtx) {
             item(key = "artistsTitle") { SectionTitle("Top artists") }
             item(key = "artists") {
                 DeskLazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(d.topArtists.size) { i ->
+                    items(minOf(5, d.topArtists.size)) { i ->
                         val a = d.topArtists[i]
                         Column(Modifier.width(104.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Box {
@@ -501,16 +501,13 @@ fun StatsPage(c: ScreenCtx) {
             }
         }
         val timeFmt = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
-        Stats.recent(d.history).groupBy { dayLabel(it.play.at) }.forEach { (day, plays) ->
+        val recent = Stats.recent(d.history)
+        val liveAt = recent.indexOfFirst { it.play.track.url == c.ps.currentId }
+        recent.withIndex().groupBy { dayLabel(it.value.play.at) }.forEach { (day, plays) ->
             item(key = "day$day") { GText(day.uppercase(), 12, Faint, FontWeight.SemiBold, modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 4.dp)) }
-            plays.forEachIndexed { i, r ->
-                val p = r.play
-                item(key = "h$day$i${p.at}") {
-                    Row(Modifier.padding(start = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.weight(1f)) { TrackRow(p.track, p.track.url == c.ps.currentId, c.ps.playing) { c.ps.playList(listOf(p.track), 0) } }
-                        if (r.times > 1) RepeatTag(r.times, Modifier.padding(start = 6.dp, end = 6.dp))
-                        GText(timeFmt.format(java.util.Date(p.at)), 12, Faint, modifier = Modifier.padding(end = 6.dp))
-                    }
+            plays.forEach { (n, r) ->
+                item(key = "h$day$n${r.play.at}") {
+                    Box(Modifier.padding(horizontal = 8.dp)) { RecentRow(c, r, n == liveAt, timeFmt.format(java.util.Date(r.play.at))) }
                 }
             }
         }
@@ -524,6 +521,28 @@ private fun LazyListScope.trackList(c: ScreenCtx, tracks: List<Track>, numbered:
     itemsIndexed(tracks.take(shown), key = { i, t -> "$i|${t.url}" }) { i, t ->
         Box(Modifier.padding(horizontal = 8.dp)) {
             TrackRow(t, t.url == c.ps.currentId, c.ps.playing, if (numbered) i + 1 else null, playlistId) { c.ps.playList(tracks, i) }
+        }
+    }
+}
+
+/**
+ * One row of Recently played: the song, then its time with the repeat count under it. The song
+ * that's on now gets one soft highlight (only its latest row), around the whole row.
+ */
+@Composable
+internal fun RecentRow(c: ScreenCtx, r: Stats.Recent, live: Boolean, time: String) {
+    val t = r.play.track
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(if (live) Color.White.copy(alpha = 0.06f) else Color.Transparent),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.weight(1f)) {
+            TrackRow(t, live, c.ps.playing, boxed = false) { c.ps.playList(listOf(t), 0) }
+        }
+        Column(Modifier.padding(start = 6.dp, end = 12.dp), horizontalAlignment = Alignment.End) {
+            GText(time, 12, Faint, maxLines = 1)
+            if (r.times > 1) RepeatTag(r.times, Modifier.padding(top = 3.dp))
         }
     }
 }

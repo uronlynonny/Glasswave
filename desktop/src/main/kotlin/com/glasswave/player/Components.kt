@@ -287,12 +287,9 @@ fun PlayingBadge(playing: Boolean, modifier: Modifier = Modifier, size: Dp = 34.
 /** "Played 3 times in a row": a small repeat sign with the count. */
 @Composable
 fun RepeatTag(times: Int, modifier: Modifier = Modifier) {
-    Row(
-        modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.1f)).padding(horizontal = 7.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Ico(androidx.compose.material.icons.Icons.Rounded.Repeat, Dim, 12.dp)
-        GText("$times", 11, Dim, FontWeight.SemiBold, modifier = Modifier.padding(start = 3.dp))
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Ico(androidx.compose.material.icons.Icons.Rounded.Repeat, Faint, 11.dp)
+        GText("×$times", 11, Faint, FontWeight.Medium, modifier = Modifier.padding(start = 2.dp))
     }
 }
 
@@ -344,6 +341,8 @@ fun TrackRow(
     number: Int? = null,
     playlistId: String? = null,
     menu: Boolean = true,
+    /** False: no highlight box of its own while it plays (the row around it draws one). */
+    boxed: Boolean = true,
     onClick: () -> Unit,
 ) {
     // On a computer, hovering a song shows a play button over its cover (or in place of its number).
@@ -355,7 +354,7 @@ fun TrackRow(
             .clip(RoundedCornerShape(14.dp))
             .hoverable(hover)
             .pressable(0.97f, onClick = onClick)
-            .background(if (current) Color.White.copy(alpha = 0.08f) else Color.Transparent)
+            .background(if (current && boxed) Color.White.copy(alpha = 0.08f) else Color.Transparent)
             .padding(start = 10.dp, end = if (menu) 0.dp else 10.dp, top = 7.dp, bottom = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -112,7 +112,7 @@ fun DeskStatsPage(c: ScreenCtx) {
                 Row(Modifier.padding(top = 18.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                     Ranking("Top artists", Modifier.weight(1f)) {
                         val max = d.topArtists.firstOrNull()?.plays ?: 1
-                        d.topArtists.take(8).forEachIndexed { i, a ->
+                        d.topArtists.take(5).forEachIndexed { i, a ->
                             RankRow(i, artistPhoto(a.name, a.thumb), true, a.name, "${fmt(a.plays.toLong())} plays", a.plays.toFloat() / max, accent) {
                                 c.vm.selectTab(Tab.SEARCH)
                                 c.vm.pickRecent(a.name)
@@ -133,14 +133,12 @@ fun DeskStatsPage(c: ScreenCtx) {
             // Recently played, newest first.
             item(key = "recentTitle") { GText("Recently played", 20, weight = FontWeight.Bold, modifier = Modifier.padding(top = 26.dp, bottom = 6.dp, start = 4.dp)) }
             val timeFmt = java.text.SimpleDateFormat("EEE d MMM · HH:mm", java.util.Locale.getDefault())
-            Stats.recent(d.history).forEachIndexed { i, r ->
+            val recent = Stats.recent(d.history)
+            val liveAt = recent.indexOfFirst { it.play.track.url == c.ps.currentId }
+            recent.forEachIndexed { i, r ->
                 val p = r.play
                 item(key = "h$i${p.at}") {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.weight(1f)) { TrackRow(p.track, p.track.url == c.ps.currentId, c.ps.playing) { c.ps.playList(listOf(p.track), 0) } }
-                        if (r.times > 1) RepeatTag(r.times, Modifier.padding(start = 8.dp))
-                        GText(timeFmt.format(java.util.Date(p.at)), 12, Faint, modifier = Modifier.padding(start = 8.dp, end = 6.dp))
-                    }
+                    RecentRow(c, r, i == liveAt, timeFmt.format(java.util.Date(p.at)))
                 }
             }
             // A quick review, sent to nonny dev.

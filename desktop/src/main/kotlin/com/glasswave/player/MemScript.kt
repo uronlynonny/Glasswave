@@ -192,7 +192,7 @@ object MemScript {
                         }
                         // startpl N: plays the Library's Nth playlist with its Play button (so its card shows it playing).
                         "startpl" -> onUi {
-                            Library.playlists.value.getOrNull(arg.toInt())?.let { p ->
+                            (arg.toIntOrNull()?.let { Library.playlists.value.getOrNull(it) } ?: Library.playlists.value.firstOrNull { it.name == arg })?.let { p ->
                                 System.err.println("GW startpl ${p.name}")
                                 ps.playList(kotlinx.coroutines.runBlocking { Library.tracks(p.id) }, 0, from = p.id)
                             }

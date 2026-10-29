@@ -93,6 +93,9 @@ class PlayerState(private val context: Context) {
         c.moveMediaItem(b + from, b + to)
     }
 
+    /** The song last put into Recently played (once per time it comes on). */
+    private var historyAddedFor: String? = null
+
     fun playNext(index: Int) {
         val c = controller ?: return
         val target = c.currentMediaItemIndex + 1
@@ -145,8 +148,11 @@ class PlayerState(private val context: Context) {
         hasItem = c.mediaItemCount > 0
         buffering = c.playbackState == Player.STATE_BUFFERING
         val id = item?.mediaId
-        if (id != null && id != currentId && title.isNotBlank()) {
+        // Into Recently played once it actually plays (a song stuck loading on bad internet never goes in).
+        if (id != currentId) historyAddedFor = null
+        if (id != null && c.isPlaying && id != historyAddedFor && title.isNotBlank()) {
             History.add(Track(id, title, artist, 0, md.artworkUri?.toString()))
+            historyAddedFor = id
         }
         if (id != currentId) Flow.onTrack(id, this)
         currentId = id
