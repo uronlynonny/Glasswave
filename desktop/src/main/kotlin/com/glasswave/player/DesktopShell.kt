@@ -114,7 +114,7 @@ val RailSpace = RailWidth + 24.dp
  * bottom-left corner and Update in its bottom-right.
  */
 @Composable
-fun Sidebar(vm: MainViewModel, page: Backdrop, modifier: Modifier = Modifier) {
+fun Sidebar(vm: MainViewModel, ps: PlayerState, page: Backdrop, modifier: Modifier = Modifier) {
     val playlists by vm.playlists.collectAsState()
     // Watched before the buttons inside see the pointer, so moving over them keeps it open.
     var hovered by remember { mutableStateOf(false) }
@@ -172,9 +172,23 @@ fun Sidebar(vm: MainViewModel, page: Backdrop, modifier: Modifier = Modifier) {
                         .onRightClick { Menus.openPlaylist(p) },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(Modifier.width(56.dp), contentAlignment = Alignment.Center) { Cover(p.thumb, Modifier.size(38.dp), 8.dp) }
+                    val live = PlayingFrom.id == p.id && ps.hasItem
+                    Box(Modifier.width(56.dp), contentAlignment = Alignment.Center) {
+                        val frame = RoundedCornerShape(11.dp)
+                        Box(
+                            Modifier.size(44.dp).glass(frame)
+                                .then(if (live) Modifier.border(1.2.dp, readable(CoverTint.accent).copy(alpha = 0.85f), frame) else Modifier)
+                                .padding(3.dp),
+                        ) {
+                            Cover(p.thumb, Modifier.fillMaxSize(), 8.dp)
+                            if (live) Box(
+                                Modifier.matchParentSize().clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.5f)),
+                                contentAlignment = Alignment.Center,
+                            ) { EqualizerBars(readable(CoverTint.accent), ps.playing, Modifier.size(16.dp)) }
+                        }
+                    }
                     Column(Modifier.graphicsLayer { alpha = k }) {
-                        GText(p.name, 13, Color.White, FontWeight.Medium, 1, Modifier.wrapContentWidth(Alignment.Start, unbounded = true))
+                        GText(p.name, 13, if (live) readable(CoverTint.accent) else Color.White, FontWeight.Medium, 1, Modifier.wrapContentWidth(Alignment.Start, unbounded = true))
                         GText("${p.count} songs · ${p.source.label}", 11, Faint, maxLines = 1, modifier = Modifier.wrapContentWidth(Alignment.Start, unbounded = true))
                     }
                 }

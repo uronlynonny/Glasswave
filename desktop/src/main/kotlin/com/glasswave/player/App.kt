@@ -222,7 +222,7 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
             )
             // The icon rail, floating over the page as glass (it opens over it on hover).
             Sidebar(
-                vm, page,
+                vm, ps, page,
                 Modifier.align(Alignment.CenterStart).drawWithContent { if (!covered) drawContent() }
                     .padding(bottom = if (ps.hasItem) PlayerBarSpace - 12.dp else 0.dp),
             )

@@ -190,6 +190,20 @@ object MemScript {
                             delay(60)
                             keyRelease(java.awt.event.KeyEvent.VK_RIGHT); keyRelease(java.awt.event.KeyEvent.VK_ALT); keyRelease(java.awt.event.KeyEvent.VK_CONTROL)
                         }
+                        // startpl N: plays the Library's Nth playlist with its Play button (so its card shows it playing).
+                        "startpl" -> onUi {
+                            Library.playlists.value.getOrNull(arg.toInt())?.let { p ->
+                                System.err.println("GW startpl ${p.name}")
+                                ps.playList(kotlinx.coroutines.runBlocking { Library.tracks(p.id) }, 0, from = p.id)
+                            }
+                        }
+                        // resize WxH: sets the window's size (for screenshots).
+                        "resize" -> onUi {
+                            val w = java.awt.Window.getWindows().first { it is java.awt.Frame && it.isDisplayable }
+                            val (a, b) = arg.split("x").map { it.toInt() }
+                            w.setLocation(0, 0)
+                            w.setSize(a, b)
+                        }
                         "plmenu" -> onUi { Library.playlists.value.firstOrNull()?.let { Menus.openPlaylist(it) } }
                         // state: what's loaded right now (song, spot, playing, what's next).
                         "state" -> onUi { System.err.println("GW state '${ps.title}' at ${ps.livePosition() / 1000}s playing=${ps.playing} next: " + ps.upcoming(3).joinToString(" | ") { it.track.title }) }

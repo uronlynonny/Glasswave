@@ -320,7 +320,7 @@ private fun MadeForYou(c: ScreenCtx, seeds: List<Track>) {
         DeskLazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             if (liked >= 3) item(key = "liked") {
                 MixTile("Liked mix", "$liked songs, shuffled", androidx.compose.material.icons.Icons.Rounded.Favorite, Lime) {
-                    scope.launch { c.ps.playList(Library.tracks(Library.LIKED_ID), 0, shuffle = true) }
+                    scope.launch { c.ps.playList(Library.tracks(Library.LIKED_ID), 0, shuffle = true, from = Library.LIKED_ID) }
                 }
             }
             if (offline >= 3) item(key = "offline") {

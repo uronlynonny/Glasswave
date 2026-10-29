@@ -78,6 +78,11 @@ fun OnlinePage(c: ScreenCtx, item: MusicItem) {
                 tracks = tracks,
                 c = c,
                 showDownload = item !is ArtistItem,
+                listId = when (item) {
+                    is AlbumItem -> Library.savedId(item.browseId)
+                    is PlaylistItem -> Library.savedId(item.browseId)
+                    else -> null
+                },
                 extra = { CollectionActions(c, item, page?.title ?: item.title, page?.thumb ?: hiRes(item.thumb), tracks) },
             )
         }
@@ -129,6 +134,7 @@ fun SavedPage(c: ScreenCtx, start: PlaylistInfo) {
             PageHeader(
                 list, if (p.id == Library.LIKED_ID) tracks.firstOrNull()?.thumb else p.thumb, p.name,
                 p.source.label, false, tracks, c,
+                listId = p.id,
                 extra = {
                     // Mix: blend this playlist's songs into each other, like Spotify (lit up while it's on).
                     @Suppress("UNUSED_VARIABLE") val mv = PlaylistMix.version
@@ -586,6 +592,8 @@ private fun PageHeader(
     tracks: List<Track>,
     c: ScreenCtx,
     showDownload: Boolean = true,
+    /** The playlist's id in the Library (for saved albums and playlists too), so Play / Shuffle mark it as playing. */
+    listId: String? = null,
     icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Rounded.MusicNote,
     extra: @Composable () -> Unit = {},
 ) {
@@ -650,8 +658,8 @@ private fun PageHeader(
         if (tracks.isNotEmpty()) {
             Spacer(Modifier.height(14.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                GlassButton("Play", c.bg, Modifier.weight(1f), accent = true, icon = Icons.Rounded.PlayArrow) { c.ps.playList(tracks, 0) }
-                GlassButton("Shuffle", c.bg, Modifier.weight(1f), icon = Icons.Rounded.Shuffle) { c.ps.playList(tracks, 0, shuffle = true) }
+                GlassButton("Play", c.bg, Modifier.weight(1f), accent = true, icon = Icons.Rounded.PlayArrow) { c.ps.playList(tracks, 0, from = listId) }
+                GlassButton("Shuffle", c.bg, Modifier.weight(1f), icon = Icons.Rounded.Shuffle) { c.ps.playList(tracks, 0, shuffle = true, from = listId) }
             }
         }
         Spacer(Modifier.height(10.dp))

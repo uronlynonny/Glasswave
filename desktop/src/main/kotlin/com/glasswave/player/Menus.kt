@@ -437,8 +437,8 @@ private fun PlaylistMenuBody(p: PlaylistInfo, ps: PlayerState) {
                 if (songs.isEmpty()) Menus.say("${p.name} has no songs yet") else what(songs)
             }
         }
-        MenuRow(Icons.Rounded.PlayArrow, "Play") { withSongs { ps.playList(it, 0) } }
-        MenuRow(Icons.Rounded.Shuffle, "Shuffle") { withSongs { ps.playList(it, 0, shuffle = true) } }
+        MenuRow(Icons.Rounded.PlayArrow, "Play") { withSongs { ps.playList(it, 0, from = p.id) } }
+        MenuRow(Icons.Rounded.Shuffle, "Shuffle") { withSongs { ps.playList(it, 0, shuffle = true, from = p.id) } }
         MenuRow(Icons.AutoMirrored.Rounded.PlaylistPlay, "Play next") {
             withSongs { songs -> if (!ps.hasItem) ps.playList(songs, 0) else songs.asReversed().forEach { ps.playNextTrack(it) }; Menus.say("${p.name} plays next") }
         }

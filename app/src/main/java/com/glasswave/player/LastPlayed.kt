@@ -74,6 +74,7 @@ object LastPlayed {
 
     fun clear() {
         prefs.edit { clear() }
+        PlayingFrom.set(null)
     }
 
     /** Puts the saved queue back into the player, paused. Does nothing if the setting is off or nothing was saved. */

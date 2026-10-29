@@ -192,13 +192,15 @@ class PlayerState(private val context: Context) {
         controller?.addMediaItems(tracks.map { it.toMediaItem() })
     }
 
-    fun playList(tracks: List<Track>, index: Int, shuffle: Boolean = false, fromFlow: Boolean = false, startMs: Long = 0) {
+    /** [from]: the playlist started as a whole (its Play or Shuffle), so its card shows it playing. */
+    fun playList(tracks: List<Track>, index: Int, shuffle: Boolean = false, fromFlow: Boolean = false, startMs: Long = 0, from: String? = null) {
         val c = controller ?: return
         if (tracks.isEmpty()) return
         error = null
         Autoplay.added.clear()
         Queued.ids.clear()
         if (!fromFlow) Flow.stop()
+        PlayingFrom.set(from)
         c.shuffleModeEnabled = shuffle
         val start = if (shuffle) tracks.indices.random() else index
         c.setMediaItems(tracks.map { it.toMediaItem() }, start, startMs)

@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -250,6 +251,16 @@ fun EqualizerBars(color: Color, playing: Boolean, modifier: Modifier = Modifier)
             }
         },
     )
+}
+
+/** On a playlist's cover while that playlist plays: bouncing bars on a small dark disc (they rest while paused). */
+@Composable
+fun PlayingBadge(playing: Boolean, modifier: Modifier = Modifier, size: Dp = 34.dp) {
+    Box(
+        modifier.size(size).clip(CircleShape).background(Color.Black.copy(alpha = 0.6f))
+            .border(0.5.dp, Color.White.copy(alpha = 0.2f), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) { EqualizerBars(readable(CoverTint.accent), playing, Modifier.size(size * 0.5f)) }
 }
 
 /** A ring that fills as a download goes, smoothly. */

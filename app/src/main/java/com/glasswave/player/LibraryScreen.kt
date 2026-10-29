@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -167,7 +168,7 @@ fun LibraryScreen(c: ScreenCtx) {
                     }
                 }
             }
-            items(shown, key = { it.id }) { p -> PlaylistCard(p) { vm.open(Route.Saved(p)) } }
+            items(shown, key = { it.id }) { p -> PlaylistCard(p, c.ps) { vm.open(Route.Saved(p)) } }
             if (shown.isEmpty() && all.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
                 Box { Centered(if (vm.libDownloaded) "No playlists with downloaded songs yet. Tap ⬇ on a playlist to save it for offline." else "Nothing here yet") }
             }
@@ -178,14 +179,20 @@ fun LibraryScreen(c: ScreenCtx) {
 /** A playlist in the grid. Tap to open, hold for Pin / Rename / Delete. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PlaylistCard(p: PlaylistInfo, onOpen: () -> Unit) {
+private fun PlaylistCard(p: PlaylistInfo, ps: PlayerState, onOpen: () -> Unit) {
+    // Lit up while this playlist was started as a whole (not when one of its songs plays on its own).
+    val live = PlayingFrom.id == p.id && ps.hasItem
+    val box = RoundedCornerShape(18.dp)
     Column(
-        Modifier.combinedClickable(
+        Modifier.glass(box)
+            .then(if (live) Modifier.border(1.5.dp, readable(CoverTint.accent).copy(alpha = 0.85f), box) else Modifier)
+            .then(Modifier.combinedClickable(
             interactionSource = remember { MutableInteractionSource() },
             indication = null,
             onLongClick = { Menus.openPlaylist(p) },
             onClick = onOpen,
-        ),
+        ))
+            .padding(8.dp),
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
             if (p.id == Library.LIKED_ID) {
@@ -204,10 +211,11 @@ private fun PlaylistCard(p: PlaylistInfo, onOpen: () -> Unit) {
                     contentAlignment = Alignment.Center,
                 ) { Ico(Icons.Rounded.PushPin, Lime, 15.dp) }
             }
+            if (live) PlayingBadge(ps.playing, Modifier.align(Alignment.BottomStart).padding(8.dp))
         }
         Spacer(Modifier.height(8.dp))
-        GText(p.name, 14, Color.White, FontWeight.Medium, 1)
-        GText("${p.source.label} · ${p.count}", 12, Dim, maxLines = 1)
+        GText(p.name, 14, if (live) readable(CoverTint.accent) else Color.White, FontWeight.Medium, 1, Modifier.padding(horizontal = 2.dp))
+        GText("${p.source.label} · ${p.count}", 12, Dim, maxLines = 1, modifier = Modifier.padding(horizontal = 2.dp))
     }
 }
 

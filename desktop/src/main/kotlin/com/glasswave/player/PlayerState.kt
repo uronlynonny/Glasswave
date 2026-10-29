@@ -212,13 +212,15 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         changed()
     }
 
-    fun playList(tracks: List<Track>, index: Int, shuffle: Boolean = false, fromFlow: Boolean = false, startMs: Long = 0) {
+    /** [from]: the playlist started as a whole (its Play or Shuffle), so its card shows it playing. */
+    fun playList(tracks: List<Track>, index: Int, shuffle: Boolean = false, fromFlow: Boolean = false, startMs: Long = 0, from: String? = null) {
         if (tracks.isEmpty()) return
         error = null
         Autoplay.added.clear()
         Queued.ids.clear()
         autoplayFor = null
         if (!fromFlow) Flow.stop()
+        PlayingFrom.set(from)
         items.clear(); base.clear(); shuf.clear()
         items += tracks
         base += tracks.indices
@@ -353,6 +355,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
             .put("shuffle", shuffle)
             .put("repeat", repeat)
             .put("at", System.currentTimeMillis())
+            .put("from", PlayingFrom.id ?: "")
         val text = o.toString()
         val write = Runnable {
             runCatching {
@@ -389,6 +392,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         shuf += order("shuf")
         shuffle = o.optBoolean("shuffle", false)
         repeat = o.optInt("repeat", Player.REPEAT_MODE_OFF)
+        PlayingFrom.set(o.optString("from").ifEmpty { null })
         moveTo(o.optInt("cur", 0).coerceIn(tracks.indices), play = false, auto = false, startMs = o.optLong("pos", 0L))
         changed()
         main.postDelayed(forgetIdle, FORGET_AFTER_MS)
@@ -402,6 +406,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         stopAll()
         items.clear(); base.clear(); shuf.clear()
         Flow.stop()
+        PlayingFrom.set(null)
         queueVersion++
         main.removeCallbacks(saveLater)
         saver.execute { runCatching { sessionFile.delete() } }
