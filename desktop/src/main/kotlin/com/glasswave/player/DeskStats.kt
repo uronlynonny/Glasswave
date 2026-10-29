@@ -133,14 +133,18 @@ fun DeskStatsPage(c: ScreenCtx) {
             // Recently played, newest first.
             item(key = "recentTitle") { GText("Recently played", 20, weight = FontWeight.Bold, modifier = Modifier.padding(top = 26.dp, bottom = 6.dp, start = 4.dp)) }
             val timeFmt = java.text.SimpleDateFormat("EEE d MMM · HH:mm", java.util.Locale.getDefault())
-            d.history.take(60).forEachIndexed { i, p ->
+            Stats.recent(d.history).forEachIndexed { i, r ->
+                val p = r.play
                 item(key = "h$i${p.at}") {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.weight(1f)) { TrackRow(p.track, p.track.url == c.ps.currentId, c.ps.playing) { c.ps.playList(listOf(p.track), 0) } }
+                        if (r.times > 1) RepeatTag(r.times, Modifier.padding(start = 8.dp))
                         GText(timeFmt.format(java.util.Date(p.at)), 12, Faint, modifier = Modifier.padding(start = 8.dp, end = 6.dp))
                     }
                 }
             }
+            // A quick review, sent to nonny dev.
+            item(key = "feedback") { FeedbackBar(c.bg, Modifier.padding(top = 26.dp, bottom = 12.dp)) }
         }
         GlassCircle(44.dp, c.bg, Modifier.padding(start = 14.dp, top = 6.dp), onClick = { c.vm.back() }) {
             Ico(Icons.AutoMirrored.Rounded.ArrowBack, Color.White, 22.dp)

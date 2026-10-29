@@ -281,10 +281,8 @@ private fun CoverArt(ps: PlayerState, modifier: Modifier) {
         if (u != null) {
             AsyncImage(
                 model = u, contentDescription = null, contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().livingCover(alive),
             )
-            // While it plays, the cover gently ripples and drifts on top.
-            if (Settings.livingCover && Settings.animations) LivingArt(u, alive, Modifier.fillMaxSize())
         }
         MusicVideoLayer(ps, Modifier.fillMaxSize())
     }

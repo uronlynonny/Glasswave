@@ -71,6 +71,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
@@ -281,6 +282,18 @@ fun PlayingBadge(playing: Boolean, modifier: Modifier = Modifier, size: Dp = 34.
             .border(0.5.dp, Color.White.copy(alpha = 0.2f), CircleShape),
         contentAlignment = Alignment.Center,
     ) { EqualizerBars(readable(CoverTint.accent), playing, Modifier.size(size * 0.5f)) }
+}
+
+/** "Played 3 times in a row": a small repeat sign with the count. */
+@Composable
+fun RepeatTag(times: Int, modifier: Modifier = Modifier) {
+    Row(
+        modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.1f)).padding(horizontal = 7.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Ico(androidx.compose.material.icons.Icons.Rounded.Repeat, Dim, 12.dp)
+        GText("$times", 11, Dim, FontWeight.SemiBold, modifier = Modifier.padding(start = 3.dp))
+    }
 }
 
 /** A ring that fills as a download goes, smoothly. */

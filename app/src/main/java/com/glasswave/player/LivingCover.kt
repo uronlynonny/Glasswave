@@ -30,8 +30,8 @@ object VideoState {
 }
 
 /**
- * Brings a still cover to life, like a short looping clip: the picture slowly ripples and drifts,
- * and a soft light passes over it now and then.
+ * Brings a still cover to life, like a short looping live photo: a slow drift and zoom, and a soft
+ * light passing over it now and then. The picture itself is never bent or rippled.
  * Made on the phone from the cover itself while the song plays; when it stops, the picture eases
  * back to still. Runs at about 30 frames a second to stay light.
  */
@@ -44,11 +44,7 @@ half4 main(float2 p) {
     float2 uv = p / size;
     float z = 1.0 + amt * 0.06 * (0.5 - 0.5 * cos(t * 0.33));
     float2 c = float2(0.5 + amt * 0.035 * sin(t * 0.21), 0.5 + amt * 0.03 * sin(t * 0.17));
-    float2 q = (uv - c) / (z + amt * 0.03) + c;
-    // A slow ripple flowing through the picture, like a short looping clip.
-    q += amt * float2(
-        0.0060 * sin(uv.y * 6.2 + t * 0.62) + 0.0040 * sin((uv.x * 3.1 + uv.y * 2.3) - t * 0.41),
-        0.0060 * cos(uv.x * 5.4 - t * 0.53) + 0.0040 * sin((uv.y * 3.6 - uv.x * 1.7) + t * 0.37));
+    float2 q = (uv - c) / z + c;
     q = clamp(q, float2(0.001), float2(0.999));
     half4 col = image.eval(q * size);
     float d = uv.x + uv.y * 0.6 - (fract(t * 0.055) * 2.4 - 0.4);

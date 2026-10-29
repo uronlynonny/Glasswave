@@ -221,6 +221,8 @@ object MemScript {
                         }
                         // stats: opens your listening stats.
                         "stats" -> onUi { vm.open(Route.Stats) }
+                        // fakeplays N: records the song playing as played N times in a row (to see Recently played group them).
+                        "fakeplays" -> { var t: Track? = null; onUi { t = ps.currentTrack() }; t?.let { tr -> repeat(arg.toInt()) { Stats.record(tr, 60_000); Thread.sleep(30) } } }
                         // pcfolder path: adds a music folder on this PC. pcplay title: plays one of its songs.
                         "pcfolder" -> {
                             onUi { PcMusic.addFolder(File(arg)); PcMusic.refresh() }
@@ -238,8 +240,11 @@ object MemScript {
                         "wheel" -> {
                             val w = java.awt.Window.getWindows().first { it is java.awt.Frame && it.isDisplayable }
                             val r = java.awt.Robot()
+                            onUi { (w as? java.awt.Frame)?.isAlwaysOnTop = true; w.toFront() }
+                            Thread.sleep(300)
                             r.mouseMove(w.x + w.width / 2, w.y + w.height / 2)
-                            r.mouseWheel(arg.toInt())
+                            repeat(arg.toInt()) { r.mouseWheel(1); Thread.sleep(25) }
+                            onUi { (w as? java.awt.Frame)?.isAlwaysOnTop = false }
                         }
                         // seedlyrics title|file: gives a song on this PC lyrics from a saved-lyrics file (for recordings).
                         "seedlyrics" -> {

@@ -20,6 +20,24 @@ import org.json.JSONObject
 object Stats {
     data class Play(val track: Track, val at: Long, val ms: Long)
 
+    /** One row of Recently played: a song, and how many times in a row it was played (on repeat). */
+    data class Recent(val play: Play, val times: Int)
+
+    /** The latest [max] plays, newest first; a song played back to back is one row with its count. */
+    fun recent(history: List<Play>, max: Int = 20): List<Recent> {
+        val out = ArrayList<Recent>()
+        for (p in history) {
+            val last = out.lastOrNull()
+            if (last != null && last.play.track.url == p.track.url) {
+                out[out.lastIndex] = last.copy(times = last.times + 1)
+            } else {
+                if (out.size == max) break
+                out += Recent(p, 1)
+            }
+        }
+        return out
+    }
+
     data class Ranked(val track: Track, val plays: Int, val ms: Long)
     data class Artist(val name: String, val plays: Int, val ms: Long, val thumb: String?)
     data class Summary(

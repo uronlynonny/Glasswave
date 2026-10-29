@@ -449,8 +449,8 @@ fun StatsPage(c: ScreenCtx) {
                 GText("${r.plays} plays", 12, Faint, modifier = Modifier.padding(end = 6.dp))
             }
         }
-        // Listening history, day by day
-        item(key = "historyTitle") { SectionTitle("Listening history") }
+        // Recently played, day by day: the latest 20, a song on repeat shown once with its count.
+        item(key = "historyTitle") { SectionTitle("Recently played") }
         val fmt = java.text.SimpleDateFormat("EEEE d MMMM", java.util.Locale.getDefault())
         val today = java.util.Calendar.getInstance()
         fun dayLabel(at: Long): String {
@@ -464,17 +464,21 @@ fun StatsPage(c: ScreenCtx) {
             }
         }
         val timeFmt = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
-        d.history.groupBy { dayLabel(it.at) }.forEach { (day, plays) ->
+        Stats.recent(d.history).groupBy { dayLabel(it.play.at) }.forEach { (day, plays) ->
             item(key = "day$day") { GText(day.uppercase(), 12, Faint, FontWeight.SemiBold, modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 4.dp)) }
-            plays.forEachIndexed { i, p ->
+            plays.forEachIndexed { i, r ->
+                val p = r.play
                 item(key = "h$day$i${p.at}") {
                     Row(Modifier.padding(start = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.weight(1f)) { TrackRow(p.track, p.track.url == c.ps.currentId, c.ps.playing) { c.ps.playList(listOf(p.track), 0) } }
+                        if (r.times > 1) RepeatTag(r.times, Modifier.padding(start = 6.dp, end = 6.dp))
                         GText(timeFmt.format(java.util.Date(p.at)), 12, Faint, modifier = Modifier.padding(end = 6.dp))
                     }
                 }
             }
         }
+        // A quick review, sent to nonny dev.
+        item(key = "feedback") { FeedbackBar(c.bg, Modifier.padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 12.dp)) }
     }
 }
 
