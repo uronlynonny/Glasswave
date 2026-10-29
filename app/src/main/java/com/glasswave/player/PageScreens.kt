@@ -35,6 +35,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.rounded.MoreHoriz
@@ -49,6 +50,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 /** Album, artist or playlist from YouTube Music. */
 @Composable
@@ -106,6 +111,18 @@ fun SavedPage(c: ScreenCtx, start: PlaylistInfo) {
     LaunchedEffect(p.id, Library.version) { c.vm.reloadSaved(p.id) }
     val tracks = c.vm.savedTracks
     var query by androidx.compose.runtime.remember(p.id) { androidx.compose.runtime.mutableStateOf("") }
+    // Recommended songs, like Spotify's, for playlists you made (not Liked songs or saved ones).
+    val mine = p.source == Source.LOCAL && p.id != Library.LIKED_ID && !p.id.startsWith(Library.SAVED_PREFIX)
+    var picks by androidx.compose.runtime.remember(p.id) { androidx.compose.runtime.mutableStateOf<List<Track>?>(null) }
+    var round by androidx.compose.runtime.remember(p.id) { androidx.compose.runtime.mutableStateOf(0) }
+    val seen = androidx.compose.runtime.remember(p.id) { mutableSetOf<String>() }
+    LaunchedEffect(p.id, round, c.vm.savedLoaded) {
+        if (!mine || !c.vm.savedLoaded) return@LaunchedEffect
+        picks = null
+        val got = suggestionsFor(p.name, c.vm.savedTracks, seen)
+        seen += got.map { it.url }
+        picks = got
+    }
     PageFrame(c, list) {
         item(key = "head") {
             PageHeader(
@@ -132,7 +149,76 @@ fun SavedPage(c: ScreenCtx, start: PlaylistInfo) {
                 trackList(c, found(tracks, query), numbered = false, playlistId = p.id)
             }
         }
+        // Hidden once loaded with nothing to show (no internet, say).
+        val have = tracks.map { it.url }.toSet()
+        val show = picks?.filter { it.url !in have }
+        if (mine && c.vm.savedLoaded && show?.isEmpty() != true) {
+            item(key = "recTitle") {
+                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 10.dp, top = 26.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        GText(if (tracks.isEmpty()) "Let's find something for your playlist" else "Recommended songs", 21, weight = FontWeight.Bold, maxLines = 2)
+                        Spacer(Modifier.height(2.dp))
+                        GText(if (tracks.isEmpty()) "Based on its name and what you played lately" else "Based on what's in this playlist", 13, Faint, maxLines = 1)
+                    }
+                    Box(Modifier.clip(RoundedCornerShape(16.dp)).pressable(0.9f) { round++ }.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        GText("Refresh", 14, Color.White, FontWeight.SemiBold)
+                    }
+                }
+            }
+            if (show == null) items(4, key = { "recWait$it" }) { SkeletonRow() }
+            else itemsIndexed(show, key = { _, t -> "rec|${t.url}" }) { _, t ->
+                SuggestRow(c, t) {
+                    Menus.say(if (Library.add(p.id, t)) "Added to ${p.name}" else "Already in ${p.name}")
+                    val left = picks?.filter { it.url != t.url }
+                    picks = left
+                    // All of them added: fetch a new batch.
+                    if (left.isNullOrEmpty()) round++
+                }
+            }
+        }
     }
+}
+
+/** A suggested song: tap it to play it, or the ＋ to add it to the playlist. */
+@Composable
+private fun SuggestRow(c: ScreenCtx, t: Track, onAdd: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f)) {
+            TrackRow(t, t.url == c.ps.currentId, c.ps.playing, menu = false) { c.ps.playList(listOf(t), 0) }
+        }
+        Box(Modifier.size(44.dp).pressable(0.85f, onClick = onAdd), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(28.dp).clip(CircleShape).border(1.5.dp, Dim, CircleShape), contentAlignment = Alignment.Center) {
+                Ico(Icons.Rounded.Add, Color.White, 18.dp)
+            }
+        }
+    }
+}
+
+/**
+ * About ten songs to suggest for one of your playlists: YouTube Music's radio for a few of its
+ * songs, or when it's empty, songs found by its name and radio for what you played lately.
+ * Never a song already in it; songs in [skip] (shown before) only when there's little else.
+ * Empty when offline.
+ */
+private suspend fun suggestionsFor(name: String, have: List<Track>, skip: Set<String>): List<Track> = coroutineScope {
+    val haveUrls = have.map { it.url }.toSet()
+    val haveKeys = have.map { YtRepo.songKey(it.title, it.artist) }.toSet()
+    val byName = if (have.isNotEmpty() || name.isBlank() || name == "My playlist") emptyList() else runCatching {
+        YtMusicApi.search(name, YtMusicApi.Filter.SONGS).sections.flatMap { s -> s.items.filterIsInstance<SongItem>() }.map { it.track }
+    }.getOrDefault(emptyList())
+    val seeds = if (have.isNotEmpty()) have.shuffled().take(3)
+        else byName.take(2) + History.tracks.toList().take(12).shuffled().take(2)
+    val radios = seeds.map { s ->
+        async(Dispatchers.IO) {
+            runCatching { YtRepo.videoIdFor(s.url)?.let { NotInterested.thin(YtMusicApi.radio(it)) } ?: emptyList() }.getOrDefault(emptyList())
+        }
+    }
+    val pool = (byName.take(8) + radios.awaitAll().flatMap { it.drop(1).take(20) })
+        .shuffled()
+        .filter { it.url !in haveUrls && YtRepo.songKey(it.title, it.artist) !in haveKeys }
+        .distinctBy { YtRepo.songKey(it.title, it.artist) }
+    val fresh = pool.filter { it.url !in skip }
+    (if (fresh.size >= 5) fresh else fresh + pool.filter { it.url in skip }).take(10)
 }
 
 /** Songs saved on the phone. Plays without internet. */

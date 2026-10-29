@@ -50,7 +50,7 @@ object YtRepo {
 
     fun initMatches(context: Context) {
         matches = context.getSharedPreferences("matches", Context.MODE_PRIVATE)
-        explicit = context.getSharedPreferences("explicit", Context.MODE_PRIVATE)
+        explicit = context.getSharedPreferences("explicit_v2", Context.MODE_PRIVATE)
         ageAlt = context.getSharedPreferences("age_alt", Context.MODE_PRIVATE)
     }
 

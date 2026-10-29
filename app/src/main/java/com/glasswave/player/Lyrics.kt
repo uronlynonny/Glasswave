@@ -333,7 +333,9 @@ object LyricsRepo {
             val c = cands.optJSONObject(0) ?: continue
             val dl = "https://lyrics.kugou.com/download?charset=utf8&client=pc&ver=1&id=${c.optString("id")}&accesskey=${c.optString("accesskey")}"
             // KuGou starts with credit lines ("作词 : ..."); leave those out.
+            val titleKey = title.substringBefore(" (").substringBefore(" [").trim().lowercase()
             fun credits(lines: List<LyricLine>) = lines.filterNot { l ->
+                (l.ms < 5_000 && l.text.contains(" - ") && titleKey.isNotEmpty() && l.text.lowercase().contains(titleKey)) ||
                 l.text.contains("：") || l.text.contains(" : ") || Regex("作词|作曲|编曲|制作|Lyricist|Composer|Producer", RegexOption.IGNORE_CASE).containsMatchIn(l.text)
             }
             // The word-by-word version (KRC) first; the plain timed version if that doesn't work out.
