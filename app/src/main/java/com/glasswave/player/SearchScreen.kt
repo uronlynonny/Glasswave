@@ -36,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +56,14 @@ import androidx.compose.ui.unit.sp
 fun SearchScreen(c: ScreenCtx) {
     val vm = c.vm
     LaunchedEffect(Unit) { vm.loadGenres() }
+    // Opened from the round Search button: straight into the box, keyboard up.
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    LaunchedEffect(vm.focusSearch) {
+        if (!vm.focusSearch) return@LaunchedEffect
+        vm.focusSearch = false
+        runCatching { focus.requestFocus(); keyboard?.show() }
+    }
     Column(Modifier.fillMaxSize().imePadding()) {
         Header("Search")
         // Search field
@@ -79,7 +88,7 @@ fun SearchScreen(c: ScreenCtx) {
                     cursorBrush = SolidColor(Accent),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { vm.submitSearch() }),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
             }
             if (vm.query.isNotEmpty()) {
@@ -179,12 +188,22 @@ private fun Suggestions(c: ScreenCtx, s: YtMusicApi.Suggestions) {
     }
 }
 
+/** The Explore tab: Moods & genres to browse (the round Search button has the search box). */
+@Composable
+fun ExploreScreen(c: ScreenCtx) {
+    LaunchedEffect(Unit) { c.vm.loadGenres() }
+    Column(Modifier.fillMaxSize()) {
+        Header("Explore")
+        Box(Modifier.weight(1f).fillMaxWidth()) { Explore(c, showRecent = false) }
+    }
+}
+
 /** Empty search box: recent searches and Moods & genres to browse. */
 @Composable
-private fun Explore(c: ScreenCtx) {
+private fun Explore(c: ScreenCtx, showRecent: Boolean = true) {
     val vm = c.vm
     LazyColumn(contentPadding = PaddingValues(bottom = c.bottom)) {
-        if (vm.recent.isNotEmpty()) {
+        if (showRecent && vm.recent.isNotEmpty()) {
             item(key = "recentHead") {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     GText("Recent", 19, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -213,6 +232,8 @@ private fun Explore(c: ScreenCtx) {
                     }
                 }
             }
+        } else if (!showRecent) {
+            item(key = "hint") { Centered("Moods & genres show here when you're online.") }
         } else if (vm.recent.isEmpty()) {
             item(key = "hint") { Centered("Find any song, album, artist or video on YouTube Music.") }
         }

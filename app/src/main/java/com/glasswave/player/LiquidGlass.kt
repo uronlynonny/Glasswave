@@ -175,12 +175,18 @@ fun Modifier.liquidGlass(
         .drawBehind {
             val r = corner.toPx().coerceAtMost(size.minDimension / 2f)
             val cr = CornerRadius(r)
+            // Frosted glass: what's behind is only blurred (no bending), under a calm dark fill with one
+            // hairline edge and no shine.
+            val clean = Settings.cleanLook
             if (liquidSupported && Settings.glass && size.width >= 1f && size.height >= 1f) {
-                val key = r + blur.toPx() * 31 + depth.toPx() * 17 + bend.toPx() * 7
+                val bl = if (clean) maxOf(blur.toPx(), 16.dp.toPx()) else blur.toPx()
+                val d = if (clean) 0f else depth.toPx()
+                val bn = if (clean) 0f else bend.toPx()
+                val key = r + bl * 31 + d * 17 + bn * 7
                 if (cache.size != size || cache.key != key || cache.effect == null) {
                     cache.size = size
                     cache.key = key
-                    cache.effect = buildEffect(size, r, blur.toPx(), depth.toPx(), bend.toPx()).asComposeRenderEffect()
+                    cache.effect = buildEffect(size, r, bl, d, bn).asComposeRenderEffect()
                 }
                 layer.renderEffect = cache.effect
                 layer.record {
@@ -191,6 +197,11 @@ fun Modifier.liquidGlass(
                 layer.setRoundRectOutline(Offset.Zero, size, r)
                 layer.clip = true
                 drawLayer(layer)
+                if (clean) drawRoundRect(CleanFill, cornerRadius = cr)
+                drawRoundRect(tint, cornerRadius = cr)
+            } else if (clean) {
+                // Nothing blurred behind: a more solid fill so what's underneath doesn't show through.
+                drawRoundRect(CleanSolid, cornerRadius = cr)
                 drawRoundRect(tint, cornerRadius = cr)
             } else {
                 // Older phones: frosted look without sampling what's behind.
@@ -201,6 +212,17 @@ fun Modifier.liquidGlass(
                 )
             }
             // Thin rim that catches the light, tinted by [rim] (e.g. the cover's colour).
+            if (clean) {
+                val hw = 0.6.dp.toPx()
+                drawRoundRect(
+                    CleanEdge,
+                    topLeft = Offset(hw / 2, hw / 2),
+                    size = Size(size.width - hw, size.height - hw),
+                    cornerRadius = CornerRadius((r - hw / 2).coerceAtLeast(0f)),
+                    style = Stroke(hw),
+                )
+                return@drawBehind
+            }
             val sw = 0.8.dp.toPx()
             drawRoundRect(
                 Brush.linearGradient(

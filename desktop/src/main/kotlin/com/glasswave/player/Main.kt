@@ -252,6 +252,7 @@ internal fun startUp() {
     ArtistArt.init(ctx)
     LyricsRepo.init(ctx)
     Loudness.init(ctx)
+    AnimatedCovers.init(ctx)
     MixLibrary.init(ctx)
     MixLibrary.decoder = MixAudio
     GlassTier.init(ctx)

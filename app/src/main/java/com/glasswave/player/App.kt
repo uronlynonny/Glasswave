@@ -42,9 +42,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Search
@@ -75,6 +77,8 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
     BackHandler(enabled = full) { full = false }
     BackHandler(enabled = !full && vm.showYtLogin) { vm.showYtLogin = false }
     BackHandler(enabled = !full && !vm.showYtLogin && vm.stack.isNotEmpty()) { vm.back() }
+    // Settings has no tab of its own any more (it opens from Home), so Back goes home from it.
+    BackHandler(enabled = !full && !vm.showYtLogin && vm.stack.isEmpty() && vm.tab == Tab.SETTINGS) { vm.selectTab(Tab.HOME) }
     BackHandler(enabled = vm.voiceOpen) { vm.voiceOpen = false }
     BackHandler(enabled = Menus.anyOpen) {
         Menus.closeName()
@@ -174,6 +178,7 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
                         Route.Phone -> PhoneMusicPage(ctx)
                         Route.Stats -> StatsPage(ctx)
                         Tab.HOME -> HomeScreen(ctx)
+                        Tab.EXPLORE -> ExploreScreen(ctx)
                         Tab.SEARCH -> SearchScreen(ctx)
                         Tab.LIBRARY -> LibraryScreen(ctx)
                         Tab.SETTINGS -> SettingsScreen(ctx)
@@ -387,27 +392,50 @@ class ScreenCtx(
 
 @Composable
 private fun TabBar(vm: MainViewModel, page: Backdrop) {
-    BoxWithConstraints(
-        Modifier.fillMaxWidth().height(64.dp).liquidGlass(page, 32.dp, blur = 6.dp, depth = 20.dp, bend = 26.dp).padding(5.dp),
-    ) {
-        val tabs = Tab.entries
-        val w = maxWidth / tabs.size
-        // The highlight pill slides to the selected tab.
-        val x by animateDpAsState(w * vm.tab.ordinal, smooth(200), label = "pill")
-        val pill by animateColorAsState(tabShade(CoverTint.accent).copy(alpha = 0.17f), tween(450), label = "pillColor")
-        Box(
-            Modifier
-                .offset(x = x)
-                .width(w)
-                .fillMaxHeight()
-                .clip(CircleShape)
-                .background(pill),
-        )
-        Row(Modifier.fillMaxSize()) {
-            tabs.forEach { t -> TabItem(t, vm.tab == t) { vm.selectTab(t) } }
+    Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
+        BoxWithConstraints(
+            Modifier.weight(1f).fillMaxHeight().liquidGlass(page, 32.dp, blur = 6.dp, depth = 20.dp, bend = 26.dp).padding(5.dp),
+        ) {
+            val tabs = BarTabs
+            val w = maxWidth / tabs.size
+            val i = tabs.indexOf(vm.tab)
+            // The highlight pill slides to the selected tab (and fades out on Search and Settings).
+            val x by animateDpAsState(w * maxOf(i, 0), smooth(200), label = "pill")
+            val shown by animateFloatAsState(if (i >= 0) 1f else 0f, smooth(180), label = "pillShown")
+            // Frosted glass: a soft lighter highlight. Liquid glass: a hint of the cover's colour.
+            val pill by animateColorAsState(
+                if (Settings.cleanLook) Color.White.copy(alpha = 0.14f) else tabShade(CoverTint.accent).copy(alpha = 0.17f),
+                tween(450), label = "pillColor",
+            )
+            Box(
+                Modifier
+                    .offset(x = x)
+                    .width(w)
+                    .fillMaxHeight()
+                    .graphicsLayer { alpha = shown }
+                    .clip(CircleShape)
+                    .background(pill),
+            )
+            Row(Modifier.fillMaxSize()) {
+                tabs.forEach { t -> TabItem(t, vm.tab == t) { vm.selectTab(t) } }
+            }
         }
+        Spacer(Modifier.width(10.dp))
+        // Search: its own round button beside the bar. It opens with the keyboard up.
+        val searching = vm.tab == Tab.SEARCH
+        GlassCircle(
+            64.dp, page,
+            tint = if (searching) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.06f),
+            onClick = {
+                vm.focusSearch = true
+                vm.selectTab(Tab.SEARCH)
+            },
+        ) { Ico(Icons.Rounded.Search, if (searching || Settings.cleanLook) Color.White else Color.White.copy(alpha = 0.8f), 26.dp) }
     }
 }
+
+/** The tabs in the bottom bar. */
+private val BarTabs = listOf(Tab.HOME, Tab.EXPLORE, Tab.LIBRARY)
 
 /** The cover colour, adjusted for the tab bar: lighter if it's dark, a touch darker if it's glaring. */
 private fun tabShade(c: Color): Color {
@@ -423,13 +451,19 @@ private fun tabShade(c: Color): Color {
 private fun RowScope.TabItem(tab: Tab, selected: Boolean, onClick: () -> Unit) {
     // The selected tab takes the cover's colour: lifted when the cover is dark, deepened when it's
     // very bright, so it always reads on the glass. The others get a faint hint of it.
-    val tint = tabShade(CoverTint.accent)
+    // Frosted glass keeps it white: full white when selected, softer otherwise.
+    val tint = if (Settings.cleanLook) Color.White else tabShade(CoverTint.accent)
     val color by animateColorAsState(
-        if (selected) tint else androidx.compose.ui.graphics.lerp(Color.White, tint, 0.25f).copy(alpha = 0.72f),
+        when {
+            selected -> tint
+            Settings.cleanLook -> Color.White.copy(alpha = 0.62f)
+            else -> androidx.compose.ui.graphics.lerp(Color.White, tint, 0.25f).copy(alpha = 0.72f)
+        },
         tween(450), label = "tabColor",
     )
-   val icon = when (tab) {
+    val icon = when (tab) {
         Tab.HOME -> if (selected) Icons.Rounded.Home else Icons.Outlined.Home
+        Tab.EXPLORE -> if (selected) Icons.Rounded.GridView else Icons.Outlined.GridView
         Tab.SEARCH -> Icons.Rounded.Search
         Tab.LIBRARY -> if (selected) Icons.Rounded.LibraryMusic else Icons.Outlined.LibraryMusic
         Tab.SETTINGS -> if (selected) Icons.Rounded.Settings else Icons.Outlined.Settings

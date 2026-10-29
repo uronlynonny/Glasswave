@@ -200,7 +200,8 @@ fun GlassButton(
 @Composable
 fun Chip(text: String, selected: Boolean, backdrop: Backdrop, onClick: () -> Unit) {
     val tint by animateColorAsState(
-        if (selected) Color.White.copy(alpha = 0.92f) else Color.White.copy(alpha = 0.05f),
+        // Frosted glass: unselected chips are just the frosted pill.
+        if (selected) Color.White.copy(alpha = 0.92f) else if (Settings.cleanLook) Color.Transparent else Color.White.copy(alpha = 0.05f),
         smooth(220), label = "chip",
     )
     val textColor by animateColorAsState(if (selected) Color.Black else Color.White, smooth(220), label = "chipText")
@@ -522,7 +523,17 @@ fun PullRefresh(refreshing: Boolean, onRefresh: () -> Unit, backdrop: Backdrop, 
 @Composable
 fun Toggle(on: Boolean, onChange: (Boolean) -> Unit) {
     val knob by animateDpAsState(if (on) 22.dp else 2.dp, bouncy(Spring.StiffnessMedium), label = "knob")
-    val track by animateColorAsState(if (on) Color(0xFF34C759) else Color.White.copy(alpha = 0.16f), smooth(220), label = "track")
+    val clean = Settings.cleanLook
+    // Frosted glass is black and white: a white track with a dark knob when on, see-through grey when off.
+    val track by animateColorAsState(
+        when {
+            clean -> if (on) Color.White else Color.White.copy(alpha = 0.18f)
+            on -> Color(0xFF34C759)
+            else -> Color.White.copy(alpha = 0.16f)
+        },
+        smooth(220), label = "track",
+    )
+    val knobColor = if (clean) Color(0xFF111113) else Color.White
     Box(
         Modifier
             .size(width = 50.dp, height = 30.dp)
@@ -530,7 +541,7 @@ fun Toggle(on: Boolean, onChange: (Boolean) -> Unit) {
             .background(track)
             .clickable(remember { MutableInteractionSource() }, null) { onChange(!on) },
     ) {
-        Box(Modifier.offset(x = knob, y = 2.dp).size(26.dp).clip(CircleShape).background(Color.White))
+        Box(Modifier.offset(x = knob, y = 2.dp).size(26.dp).clip(CircleShape).background(knobColor))
     }
 }
 

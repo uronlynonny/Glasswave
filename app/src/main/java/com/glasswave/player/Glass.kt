@@ -67,6 +67,16 @@ val Accent: Color get() = CoverTint.accent
 val Dim = Color.White.copy(alpha = 0.6f)
 val Faint = Color.White.copy(alpha = 0.4f)
 
+/**
+ * Frosted glass (Settings > Look): calm frosted glass. A see-through dark fill (the cover's colours
+ * still glow through), as solid as the Glass panels slider says.
+ */
+val CleanFill: Color get() = Color.Black.copy(alpha = (0.40f * Settings.glassOpacity).coerceIn(0.15f, 0.8f))
+/** Frosted glass where nothing behind is blurred (floating bars, older phones): more solid, so content doesn't show through. */
+val CleanSolid: Color get() = Color.Black.copy(alpha = (0.62f * Settings.glassOpacity).coerceIn(0.3f, 0.9f))
+/** Frosted glass: the single hairline edge. */
+val CleanEdge = Color.White.copy(alpha = 0.09f)
+
 /* ---------------- Motion ---------------- */
 
 /**
@@ -258,7 +268,7 @@ fun Modifier.glass(
     shape: Shape = RoundedCornerShape(24.dp),
     base: Float = 0.25f,
     light: Float = 0.12f,
-): Modifier = this
+): Modifier = if (Settings.cleanLook) this.clip(shape).background(CleanFill).border(0.5.dp, CleanEdge, shape) else this
     .clip(shape)
     // How solid the glass is (Settings > Look).
     .background(Color(0xFF0B0F18).copy(alpha = (base * Settings.glassOpacity).coerceIn(0f, 0.95f)))

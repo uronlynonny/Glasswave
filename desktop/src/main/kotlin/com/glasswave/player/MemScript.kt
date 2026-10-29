@@ -122,6 +122,21 @@ object MemScript {
                             onUi { ps.playList(hits.take(10), 0) }
                         }
                         "next" -> onUi { ps.next() }
+                        // animcover: looks up the playing song's animated cover (Apple Music) and prints its address.
+                        // "animcover off" / "animcover on" turn animated covers off and on; "animcover cpu"
+                        // prints how much of one core its decoding thread used over 5 s.
+                        "animcover" -> if (arg == "cpu") {
+                            val mx = java.lang.management.ManagementFactory.getThreadMXBean()
+                            fun used() = Thread.getAllStackTraces().keys.filter { it.name == "animated-cover" }.sumOf { mx.getThreadCpuTime(it.id).coerceAtLeast(0) }
+                            val a = used()
+                            Thread.sleep(5000)
+                            System.err.println("GW animcover cpu=${(used() - a) / 50_000_000}% of one core")
+                        } else if (arg.isNotEmpty()) onUi { AnimatedCovers.enabled = arg == "on" } else {
+                            var t: Track? = null
+                            onUi { t = ps.currentTrack() }
+                            val song = t
+                            System.err.println("GW animcover ${song?.title} / ${song?.artist}: " + (song?.let { kotlinx.coroutines.runBlocking { AnimatedCovers.videoFor(it) } }))
+                        }
                         "toggle" -> onUi { ps.toggle() }
                         // fillpl N: adds the N most recent songs to the open playlist.
                         "fillpl" -> onUi { (vm.stack.lastOrNull() as? Route.Saved)?.info?.let { p -> History.tracks.take(arg.toInt()).forEach { Library.add(p.id, it) } } }

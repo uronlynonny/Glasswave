@@ -226,8 +226,8 @@ private fun LyricsBody(ps: PlayerState, state: Load<Lyrics?>, fancy: Boolean, ac
 private fun LyricsBackdrop(art: String?, moving: Boolean) {
     val ctx = LocalContext.current
     // On a computer a live 64 dp blur of the whole window every frame was too slow (lyrics ran at
-    // about 30 fps): a tiny cover stretched smoothly over the window is just as soft, for almost nothing.
-    val req = remember(art) { art?.let { ImageRequest.Builder(ctx).data(it).size(24).build() } }
+    // about 30 fps): a cover only 6 pixels across, stretched smoothly over the window, leaves just its colours, for almost nothing.
+    val req = remember(art) { art?.let { ImageRequest.Builder(ctx).data(it).size(6).precision(coil3.size.Precision.EXACT).memoryCacheKey("lyricsbg:$it").build() } }
     val drift by rememberDrift(36_000)
     Box(Modifier.fillMaxSize().background(Color(0xFF0B0C0F))) {
         if (req != null) {

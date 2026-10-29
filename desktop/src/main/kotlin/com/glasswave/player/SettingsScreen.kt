@@ -48,6 +48,35 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.Animation
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.BarChart
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.BlurOn
+import androidx.compose.material.icons.rounded.Brightness4
+import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.Contrast
+import androidx.compose.material.icons.rounded.Devices
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Hearing
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Lyrics
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.SignalCellularAlt
+import androidx.compose.material.icons.rounded.SurroundSound
+import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Waves
+import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Storage
@@ -82,7 +111,7 @@ import kotlinx.coroutines.withContext
 private enum class SettingsPage(val title: String, val subtitle: String, val icon: ImageVector, val color: Color) {
     LOOK("Look", "Colours, wallpaper, fonts, visualizer, player style", Icons.Rounded.Palette, Color(0xFFAF52DE)),
     AUDIO("Player & audio", "Quality, Automix, autoplay", Icons.Rounded.MusicNote, Color(0xFFFF375F)),
-    SOUND("Sound & effects", "10-band equalizer, bass, speed, pitch, reverb", Icons.Rounded.GraphicEq, Color(0xFFFF9F0A)),
+    SOUND("Sound & effects", "10-band equalizer, bass, reverb", Icons.Rounded.GraphicEq, Color(0xFFFF9F0A)),
     ACCOUNTS("Accounts", "YouTube Music, Spotify and Discord", Icons.Rounded.AccountCircle, Color(0xFF0A84FF)),
     SYNC("Sync", "Bring your playlists in", Icons.Rounded.Sync, Color(0xFF30D158)),
     STORAGE("Storage & privacy", "Downloads, saved songs, history", Icons.Rounded.Storage, Color(0xFFFF9F0A)),
@@ -93,12 +122,86 @@ private enum class SettingsPage(val title: String, val subtitle: String, val ico
 
 @Composable
 private fun Group(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    if (title != null) GText(title.uppercase(), 13, Faint, FontWeight.SemiBold, modifier = Modifier.padding(start = 30.dp, top = 22.dp, bottom = 8.dp))
-    else Spacer(Modifier.height(14.dp))
+    val clean = Settings.cleanLook
+    // Frosted glass: a small grey heading over a calm frosted card (the card's look comes from glass()).
+    if (title != null) {
+        if (clean) GText(title.uppercase(), 12, CleanGrey, FontWeight.SemiBold, 1, Modifier.padding(start = 32.dp, top = 26.dp, bottom = 8.dp))
+        else GText(title.uppercase(), 13, Faint, FontWeight.SemiBold, modifier = Modifier.padding(start = 30.dp, top = 22.dp, bottom = 8.dp))
+    } else Spacer(Modifier.height(14.dp))
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp).glass(RoundedCornerShape(22.dp), base = 0.28f, light = 0.08f).padding(vertical = 4.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp).glass(RoundedCornerShape(if (clean) 20.dp else 22.dp), base = 0.28f, light = 0.08f).padding(vertical = 4.dp),
         content = content,
     )
+}
+
+/** Frosted glass's grey for headings and values (see-through, so it reads over any colour). */
+private val CleanGrey = Color.White.copy(alpha = 0.55f)
+
+/** Frosted glass: a plain white icon at the start of a row, picked from its title. Nothing in liquid glass. */
+@Composable
+private fun RowIcon(title: String) {
+    if (!Settings.cleanLook) return
+    Ico(iconFor(title), Color.White, 22.dp)
+    Spacer(Modifier.width(14.dp))
+}
+
+/** An icon that fits a setting, found from words in its title (Tune when nothing fits). */
+private fun iconFor(title: String): ImageVector {
+    val t = title.lowercase()
+    fun has(vararg w: String) = w.any { it in t }
+    return when {
+        has("frosted glass") -> Icons.Rounded.Contrast
+        has("colour", "color", "theme") -> Icons.Rounded.Palette
+        has("glass", "blur") -> Icons.Rounded.BlurOn
+        has("darken") -> Icons.Rounded.Brightness4
+        has("animation") -> Icons.Rounded.Animation
+        has("cover") -> Icons.Rounded.Album
+        has("automix", "flow") -> Icons.Rounded.AutoAwesome
+        has("autoplay") -> Icons.AutoMirrored.Rounded.PlaylistPlay
+        has("silence") -> Icons.AutoMirrored.Rounded.VolumeOff
+        has("leveling", "equalizer") -> Icons.Rounded.Equalizer
+        has("lyrics") -> Icons.Rounded.Lyrics
+        has("quality", "visualizer", "bass", "treble", "distortion") -> Icons.Rounded.GraphicEq
+        has("download") -> Icons.Rounded.Download
+        has("wi-fi", "wifi") -> Icons.Rounded.Wifi
+        has("data") -> Icons.Rounded.SignalCellularAlt
+        has("remember what was") -> Icons.Rounded.Restore
+        has("history", "remember") -> Icons.Rounded.History
+        has("cache", "storage", "space") -> Icons.Rounded.Storage
+        has("report") -> Icons.Rounded.BugReport
+        has("count me", "usage") -> Icons.Rounded.BarChart
+        has("shuffle") -> Icons.Rounded.Shuffle
+        has("privacy") -> Icons.Rounded.Lock
+        has("account", "sign in") -> Icons.Rounded.AccountCircle
+        has("listening") -> Icons.Rounded.Headphones
+        has("sync", "devices") -> Icons.Rounded.Devices
+        has("performance", "frame") -> Icons.Rounded.Speed
+        has("reverb") -> Icons.Rounded.Waves
+        has("stereo", "left / right") -> Icons.Rounded.SurroundSound
+        has("mono") -> Icons.Rounded.Hearing
+        has("language") -> Icons.Rounded.Language
+        has("notification") -> Icons.Rounded.Notifications
+        has("sleep") -> Icons.Rounded.Bedtime
+        has("keyboard") -> Icons.Rounded.Keyboard
+        has("update") -> Icons.Rounded.SystemUpdate
+        has("about") -> Icons.Rounded.Info
+        else -> Icons.Rounded.Tune
+    }
+}
+
+/** Frosted glass: a few short choices as one dark pill, the picked part white with dark text. */
+@Composable
+private fun <T> Segmented(options: List<T>, selected: T, label: (T) -> String, onPick: (T) -> Unit) {
+    Row(Modifier.fillMaxWidth().height(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.10f)).padding(3.dp)) {
+        options.forEach { o ->
+            val on = o == selected
+            val bg by androidx.compose.animation.animateColorAsState(if (on) Color.White else Color.Transparent, smooth(200), label = "segment")
+            Box(
+                Modifier.weight(1f).fillMaxSize().clip(CircleShape).background(bg).pressable(0.97f) { onPick(o) },
+                contentAlignment = Alignment.Center,
+            ) { GText(label(o), 14, if (on) Color.Black else Color.White, FontWeight.SemiBold, 1) }
+        }
+    }
 }
 
 @Composable
@@ -128,6 +231,7 @@ private fun SwitchRow(title: String, detail: String, on: Boolean, onChange: (Boo
         Modifier.fillMaxWidth().pressable(0.98f) { onChange(!on) }.padding(horizontal = 18.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        RowIcon(title)
         Column(Modifier.weight(1f)) {
             GText(title, 16, weight = FontWeight.Medium)
             GText(detail, 13, Dim)
@@ -140,6 +244,15 @@ private fun SwitchRow(title: String, detail: String, on: Boolean, onChange: (Boo
 /** A list of choices with an animated check mark on the picked one. */
 @Composable
 private fun <T> Choices(options: List<T>, selected: T, title: (T) -> String, detail: (T) -> String, onPick: (T) -> Unit) {
+    // Frosted glass: a few short choices become one segmented pill, with the picked one's detail under it.
+    if (Settings.cleanLook && options.size in 2..4 && options.all { title(it).length <= 12 }) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Segmented(options, selected, title, onPick)
+            val d = detail(selected)
+            if (d.isNotEmpty()) GText(d, 13, Dim, modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 10.dp))
+        }
+        return
+    }
     options.forEachIndexed { i, o ->
         if (i > 0) Divider()
         Row(
@@ -161,10 +274,11 @@ private fun <T> Choices(options: List<T>, selected: T, title: (T) -> String, det
 @Composable
 private fun NavRow(title: String, detail: String, icon: ImageVector, color: Color, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().pressable(0.98f, onClick = onClick).padding(horizontal = 14.dp, vertical = 11.dp),
+        Modifier.fillMaxWidth().pressable(0.98f, onClick = onClick).padding(horizontal = if (Settings.cleanLook) 18.dp else 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconTile(icon, color)
+        // Frosted glass: just the white icon, no tile.
+        if (Settings.cleanLook) Ico(icon, Color.White, 22.dp) else IconTile(icon, color)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             GText(title, 16, weight = FontWeight.Medium)
@@ -187,6 +301,7 @@ private fun ResetColours() {
         }.padding(horizontal = 18.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        RowIcon("Reset colours")
         Column(Modifier.weight(1f)) {
             GText("Reset to default colours", 16, if (same) Faint else Color.White, FontWeight.Medium)
             GText("Cover colours on, normal colour strength and glass", 13, Dim)
@@ -198,7 +313,9 @@ private fun ResetColours() {
 
 @Composable
 private fun Divider() {
-    Box(Modifier.padding(start = 18.dp).fillMaxWidth().height(0.5.dp).background(Color.White.copy(alpha = 0.12f)))
+    // Frosted glass: starts after the row icons, and fainter.
+    if (Settings.cleanLook) Box(Modifier.padding(start = 54.dp).fillMaxWidth().height(0.5.dp).background(Color.White.copy(alpha = 0.08f)))
+    else Box(Modifier.padding(start = 18.dp).fillMaxWidth().height(0.5.dp).background(Color.White.copy(alpha = 0.12f)))
 }
 
 /* ---------------- Screen ---------------- */
@@ -250,7 +367,10 @@ fun SettingsScreen(c: ScreenCtx) {
 private fun Main(c: ScreenCtx, open: (SettingsPage) -> Unit) {
     Group {
         SettingsPage.entries.forEachIndexed { i, p ->
-            if (i > 0) Box(Modifier.padding(start = 60.dp).fillMaxWidth().height(0.5.dp).background(Color.White.copy(alpha = 0.12f)))
+            if (i > 0) {
+                if (Settings.cleanLook) Divider()
+                else Box(Modifier.padding(start = 60.dp).fillMaxWidth().height(0.5.dp).background(Color.White.copy(alpha = 0.12f)))
+            }
             NavRow(p.title, p.subtitle, p.icon, p.color) { open(p) }
         }
     }
@@ -267,6 +387,9 @@ private fun Main(c: ScreenCtx, open: (SettingsPage) -> Unit) {
 
 @Composable
 private fun Look() {
+    Group("Style") {
+        SwitchRow("Frosted glass", "Calm frosted panels, like a classic music app. Turn off for liquid glass.", Settings.cleanLook) { Settings.updateCleanLook(it) }
+    }
     Group("App colours") {
         SwitchRow("Colours from the cover", "The app takes each song's cover colours", Settings.accentColor == null) { on ->
             Settings.updateAccentColor(if (on) null else Settings.lastOwnAccent() ?: AccentSwatches[0])
@@ -319,10 +442,17 @@ private fun Look() {
         Choices(CoverMotion.entries, Settings.coverMotion, { it.label }, { it.detail }) { Settings.updateCoverMotion(it) }
     }
     Note("When a song has an official music video, it plays silently in place of the cover, in time with the song. On a weak connection the cover is shown instead. You can also change this from the player's ••• menu.")
+    Group("Animated covers") {
+        SwitchRow(
+            "Animated covers",
+            "Plays the looping cover video some albums have (from Apple Music) in place of the still cover. Downloaded once per album.",
+            AnimatedCovers.enabled,
+        ) { AnimatedCovers.enabled = it }
+    }
     Group("Living cover") {
         SwitchRow(
             "Bring still covers to life",
-            "While a song plays, the cover slowly drifts with a soft passing light, like a live photo. Uses no data.",
+            "While a song plays, covers without a video slowly ripple and drift with a soft passing light. Uses no data.",
             Settings.livingCover,
         ) { Settings.updateLivingCover(it) }
     }
@@ -360,7 +490,7 @@ private fun Audio(c: ScreenCtx) {
             Settings.updateShowModeButtons(it)
         }
     }
-    Note("Equalizer, bass, speed, pitch and reverb are under Settings > Sound & effects. Sleep timer and downloads are in the player's ••• menu.")
+    Note("Equalizer, bass and reverb are under Settings > Sound & effects. Sleep timer and downloads are in the player's ••• menu.")
 }
 
 @Composable
@@ -761,11 +891,13 @@ private fun SliderRow(
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            RowIcon(title)
             GText(title, 16, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
-            GText(value, 14, Dim)
+            GText(value, 14, if (Settings.cleanLook) CleanGrey else Dim)
         }
         Spacer(Modifier.height(6.dp))
-        GlassSlider(v, range, center, snap, onChange = onChange)
+        // Frosted glass: the slider lines up with the title, after the icon.
+        Box(Modifier.padding(start = if (Settings.cleanLook) 36.dp else 0.dp)) { GlassSlider(v, range, center, snap, onChange = onChange) }
     }
 }
 

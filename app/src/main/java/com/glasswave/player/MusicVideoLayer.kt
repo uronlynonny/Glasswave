@@ -78,12 +78,103 @@ private fun videoHeight(ctx: Context): Int? {
 }
 
 /**
+ * Whether a new animated cover may be downloaded on this connection, and how big (pixels across),
+ * or null for "only ones already downloaded".
+ */
+private fun clipSide(ctx: Context): Int? {
+    if (!AnimatedCovers.enabled || Settings.savingData) return null
+    val cm = ctx.getSystemService(ConnectivityManager::class.java) ?: return null
+    val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return null
+    val unmetered = caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+    return when {
+        unmetered -> 720
+        AnimatedCovers.onMobileData -> 480
+        else -> null
+    }
+}
+
+/**
+ * What covers the still cover on the full player: the album's animated cover (Apple Music's
+ * "motion artwork") when it has one, otherwise the song's music video (see [SongVideoLayer]).
+ * Draws nothing until the first frame is ready, then fades in. Drawn only while the full player is open.
+ */
+@Composable
+fun MusicVideoLayer(ps: PlayerState, modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    val trackUrl = ps.currentId ?: return
+    var clip by remember { mutableStateOf<java.io.File?>(null) }
+    // Until the animated cover has been looked for, the music video waits (so they don't swap).
+    var looked by remember(trackUrl) { mutableStateOf(false) }
+    LaunchedEffect(trackUrl, AnimatedCovers.enabled, AnimatedCovers.onMobileData) {
+        val t = ps.currentTrack()?.takeIf { it.url == trackUrl && AnimatedCovers.enabled }
+        if (t == null) {
+            clip = null
+        } else {
+            // Already downloaded (e.g. the next song on the same album): straight away, on any connection.
+            clip = AnimatedCovers.clipFor(t, 720, online = false)
+            val side = clipSide(ctx)
+            if (clip == null && side != null) clip = AnimatedCovers.clipFor(t, side, online = true)
+        }
+        looked = true
+    }
+    val f = clip
+    if (f != null) AnimatedCoverClip(f, ps.playing, modifier)
+    else if (looked) SongVideoLayer(ps, modifier)
+}
+
+/** Plays the animated cover [file] silently, round and round, cropped to fill like the cover. */
+@OptIn(UnstableApi::class)
+@Composable
+private fun AnimatedCoverClip(file: java.io.File, playing: Boolean, modifier: Modifier) {
+    val ctx = LocalContext.current
+    var visible by remember(file) { mutableStateOf(false) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { VideoState.showing = false } }
+    LaunchedEffect(visible) { VideoState.showing = visible }
+    val alpha by animateFloatAsState(if (visible) 1f else 0f, smooth(250), label = "clipFade")
+    val player = remember(file) {
+        ExoPlayer.Builder(ctx).build().apply {
+            volume = 0f
+            repeatMode = Player.REPEAT_MODE_ONE
+            setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(file)))
+            prepare()
+        }
+    }
+    var texture by remember(file) { mutableStateOf<TextureView?>(null) }
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onRenderedFirstFrame() { visible = true }
+            override fun onVideoSizeChanged(size: VideoSize) { texture?.let { cropToFill(it, size) } }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) { visible = false }
+        }
+        player.addListener(listener)
+        onDispose {
+            player.removeListener(listener)
+            player.release()
+        }
+    }
+    // Moves while the song plays, holds still while it's paused.
+    LaunchedEffect(player, playing) { player.playWhenReady = playing }
+    key(file) {
+        AndroidView(
+            factory = { c ->
+                TextureView(c).also { tv ->
+                    texture = tv
+                    player.setVideoTextureView(tv)
+                    tv.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> cropToFill(v as TextureView, player.videoSize) }
+                }
+            },
+            modifier = modifier.graphicsLayer { this.alpha = alpha },
+        )
+    }
+}
+
+/**
  * The song's music video, muted, playing in step with the song. Draws nothing until the first
- * frame is ready, then fades in over the cover. Drawn only while the full player is open.
+ * frame is ready, then fades in over the cover.
  */
 @OptIn(UnstableApi::class)
 @Composable
-fun MusicVideoLayer(ps: PlayerState, modifier: Modifier = Modifier) {
+private fun SongVideoLayer(ps: PlayerState, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     val trackUrl = ps.currentId ?: return
     var match by remember(trackUrl) { mutableStateOf<YtMusicApi.MusicVideo?>(null) }

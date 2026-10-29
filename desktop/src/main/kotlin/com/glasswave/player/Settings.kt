@@ -111,6 +111,8 @@ object Settings {
     var colorStrength by mutableFloatStateOf(1f); private set
     /** 0.3..1.8: how see-through (low) or solid (high) the glass panels are. */
     var glassOpacity by mutableFloatStateOf(1f); private set
+    /** Frosted glass: calm frosted panels, simple icons and black-and-white toggles, instead of liquid glass. On by default. */
+    var cleanLook by mutableStateOf(true); private set
 
     fun updateAccentColor(argb: Int?) {
         accentColor = argb
@@ -197,6 +199,7 @@ object Settings {
         wallpaperDim = prefs.getFloat("wallpaper_dim", 0.35f)
         colorStrength = prefs.getFloat("color_strength", 1f)
         glassOpacity = prefs.getFloat("glass_opacity", 1f)
+        cleanLook = prefs.getBoolean("clean_look", true) || System.getProperty("gw.cleanLook") == "1"
     }
 
     fun updateFrameRate(f: FrameRate) { frameRate = f; prefs.edit { putString("frame_rate", f.name) } }
@@ -230,6 +233,7 @@ object Settings {
 
     fun updateAnimations(on: Boolean) { animations = on; prefs.edit { putBoolean("animations", on) } }
     fun updateGlass(on: Boolean) { glass = on; prefs.edit { putBoolean("glass", on) } }
+    fun updateCleanLook(on: Boolean) { cleanLook = on; prefs.edit { putBoolean("clean_look", on) } }
     fun updatePlayerStyle(s: PlayerStyle) { playerStyle = s; prefs.edit { putString("player_style", s.name) } }
     fun updateButtonStyle(s: ButtonStyle) { buttonStyle = s; prefs.edit { putString("button_style", s.name) } }
     fun updateShowModeButtons(on: Boolean) { showModeButtons = on; prefs.edit { putBoolean("mode_buttons", on) } }

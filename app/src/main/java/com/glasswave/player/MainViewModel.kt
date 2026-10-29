@@ -51,7 +51,8 @@ fun artistPhoto(name: String, fallback: String?): String? {
     return photo
 }
 
-enum class Tab(val label: String) { HOME("Home"), SEARCH("Search"), LIBRARY("Library"), SETTINGS("Settings") }
+/** The bottom bar shows Home, Explore and Library, with Search as its own round button. Settings opens from Home. */
+enum class Tab(val label: String) { HOME("Home"), EXPLORE("Explore"), SEARCH("Search"), LIBRARY("Library"), SETTINGS("Settings") }
 
 /** A page opened on top of a tab. */
 sealed interface Route {
@@ -245,6 +246,8 @@ class MainViewModel : ViewModel() {
     var searching by mutableStateOf(false)
         private set
     var voiceOpen by mutableStateOf(false)
+    /** Set by the round Search button: the search box takes focus and the keyboard comes up. */
+    var focusSearch by mutableStateOf(false)
 
     /** Recent results, so going back to a search (or switching filters back) is instant. */
     private val searchCache = object : LinkedHashMap<String, Pair<List<Section>, Pair<String, Boolean>?>>(32, 0.75f, true) {

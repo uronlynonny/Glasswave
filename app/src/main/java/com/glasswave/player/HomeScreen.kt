@@ -29,6 +29,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Settings as SettingsIcon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -113,11 +114,17 @@ fun HomeScreen(c: ScreenCtx) {
                 val ask = androidx.compose.runtime.remember { askLines.random() }
                 Row(Modifier.padding(start = 20.dp, end = 14.dp, top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
+                        // The app's name, small, over a big greeting.
+                        GText("GLASSWAVE", 12, Faint, FontWeight.Bold, 1)
                         GText(hello, 34, weight = FontWeight.Bold, maxLines = 1)
                         GText(ask, 15, Dim, maxLines = 1)
                     }
-                    // Top right: updates, then your YouTube Music picture.
+                    // Top right: updates, Settings (it has no tab of its own), then your YouTube Music picture.
                     UpdateButton()
+                    Spacer(Modifier.width(8.dp))
+                    GlassCircle(40.dp, c.bg, onClick = { vm.selectTab(Tab.SETTINGS) }) {
+                        Ico(Icons.Rounded.SettingsIcon, Color.White, 22.dp)
+                    }
                     Spacer(Modifier.width(8.dp))
                     ProfileButton { vm.profileOpen = true }
                 }
