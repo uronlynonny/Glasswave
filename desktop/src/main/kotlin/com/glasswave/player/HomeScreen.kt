@@ -259,8 +259,24 @@ private fun Hero(c: ScreenCtx, s: Section) {
 @Composable
 fun SectionBody(c: ScreenCtx, s: Section) {
     val songs = s.items.count { it is SongItem }
-    // Big covers instead (Settings > Look > Layout): song shelves become rows of cards too.
-    if (!Settings.homeCovers && songs * 2 > s.items.size && s.items.size > 4) {
+    val songShelf = songs * 2 > s.items.size && s.items.size > 4
+    // Big covers (the button at the top of Home): the same songs as a grid, four across.
+    if (Settings.homeCovers && songShelf) {
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+            val gap = 16.dp
+            val cols = 4
+            val cell = (maxWidth - gap * (cols - 1)) / cols
+            Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                s.items.chunked(cols).forEach { line ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        line.forEach { item -> ShapeCard(item, cell) { c.tap(item, s.items) } }
+                    }
+                }
+            }
+        }
+        return
+    }
+    if (songShelf) {
         DeskHorizontalGrid(
             rows = GridCells.Fixed(4),
             contentPadding = PaddingValues(horizontal = 10.dp),
