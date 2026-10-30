@@ -31,6 +31,8 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ViewList
+import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -124,6 +126,15 @@ fun HomeScreen(c: ScreenCtx) {
                         UpdateButton()
                         Spacer(Modifier.width(8.dp))
                     }
+                    // Home's songs as a list or big covers.
+                    GlassCircle(44.dp, c.bg, onClick = { Settings.updateHomeCovers(!Settings.homeCovers) }) {
+                        Ico(
+                            if (Settings.homeCovers) androidx.compose.material.icons.Icons.AutoMirrored.Rounded.ViewList
+                            else androidx.compose.material.icons.Icons.Rounded.GridView,
+                            Color.White, 22.dp,
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
                     ProfileButton { vm.profileOpen = true }
                 }
             }

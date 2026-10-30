@@ -270,7 +270,8 @@ internal fun startUp() {
     boot("Updater.init") { Updater.init(ctx) }
     boot("Profile.init") { Profile.init(ctx) }
     boot("Profile.refresh") { Profile.refresh() }
-    boot("YtRepo.initMatches") { YtRepo.initMatches(ctx) }
+    // Saved song matches: read in the background (about 0.15 s), so the window opens sooner.
+    Thread { YtRepo.initMatches(ctx) }.apply { isDaemon = true; name = "matches"; start() }
     boot("AppVolume.init") { AppVolume.init() }
     boot("WinMemory.startGuard") { WinMemory.startGuard() }
     val lastPlayed = History.tracks.firstOrNull()?.url

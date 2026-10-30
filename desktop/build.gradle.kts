@@ -13,7 +13,7 @@ plugins {
 val appBuild = file("../app/build.gradle.kts").readText()
 // Glasswave for Windows has its own version number, separate from the phone app.
 // Raise it for every Windows release: installed copies update themselves to a higher number.
-val appVersion = "1.2.28"
+val appVersion = "1.2.29"
 // Which computer this build is for: the one building it (a Mac build has to be made on a Mac).
 val hostOs = System.getProperty("os.name").lowercase()
 val isMac = hostOs.startsWith("mac")
@@ -126,9 +126,6 @@ compose.desktop {
             "-XX:TieredStopAtLevel=1", "-XX:ReservedCodeCacheSize=32m", "-XX:CICompilerCount=1", "-Xss512k",
             "-Dsun.java2d.uiScale.enabled=true",
         )
-        // Windows: a small Glasswave card shows the moment you open it, while the app gets going
-        // (it closes by itself when the window appears). Before, nothing showed for several seconds.
-        if (!isMac) jvmArgs += "-splash:${'$'}APPDIR/resources/splash.png"
         nativeDistributions {
             // Files shipped beside the app: the YouTube Music sign-in window (see signInHelper).
             appResourcesRootDir.set(layout.buildDirectory.dir("appres"))
@@ -239,12 +236,7 @@ val macSignInHelper by tasks.registering {
     }
 }
 val signInFor = if (isMac) macSignInHelper else signInHelper
-// The splash card, shipped with the app's files (see -splash above).
-val splashRes by tasks.registering(Copy::class) {
-    from(file("icons/splash.png"))
-    into(layout.buildDirectory.dir("appres/common"))
-}
-tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(signInFor, splashRes) }
+tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(signInFor) }
 
 // Checks (screenCheck, deckCheck, voiceCheck…) never touch your real Glasswave: unless a check
 // picks its own folder, it keeps its library, history, listening stats and cache in build/check-data.
@@ -290,7 +282,7 @@ tasks.register<JavaExec>("screenCheck") {
 tasks.register<JavaExec>("memCheck") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("com.glasswave.player.MainKt")
-    jvmArgs(compose.desktop.application.jvmArgs.filterNot { it.startsWith("-splash") })
+    jvmArgs(compose.desktop.application.jvmArgs)
     (project.findProperty("gwscript") as String?)?.let { systemProperty("gw.memScript", it) }
     systemProperty("gw.noCheckIn", "1")
     (project.findProperty("renderApi") as String?)?.let { systemProperty("skiko.renderApi", it) }

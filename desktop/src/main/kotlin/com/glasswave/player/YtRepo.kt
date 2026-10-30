@@ -38,6 +38,7 @@ object YtRepo {
     private const val URL_LIFETIME_MS = 3 * 60 * 60 * 1000L
 
     /** Spotify song -> YouTube Music song it was matched to. Saved so each song is only searched once. */
+    @Volatile
     private var matches: SharedPreferences? = null
 
     @Synchronized
@@ -55,6 +56,7 @@ object YtRepo {
     }
 
     /** 18+ song -> another upload of it that plays without signing in. Saved so it's found once. */
+    @Volatile
     private var ageAlt: SharedPreferences? = null
 
     private fun ageRestricted(e: Throwable): Boolean =
@@ -123,6 +125,7 @@ object YtRepo {
     }
 
     /** Clean song -> its explicit version ("" when it has none). Saved so each song is checked once. */
+    @Volatile
     private var explicit: SharedPreferences? = null
     private val explicitNow = ConcurrentHashMap<String, String>()
 

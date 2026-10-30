@@ -403,14 +403,14 @@ private fun Look() {
         Choices(
             listOf(false, true), Settings.homeCovers,
             { if (it) "Covers" else "List" },
-            { if (it) "Home's song shelves show big covers." else "Home's song shelves show a list of songs." },
+            { if (it) "Home's song shelves show big covers. (Also the button at the top of Home.)" else "Home's song shelves show a list of songs. (Also the button at the top of Home.)" },
         ) { Settings.updateHomeCovers(it) }
         Divider()
         GText("Library", 15, Color.White, FontWeight.SemiBold, modifier = Modifier.padding(start = 18.dp, top = 12.dp))
         Choices(
             listOf(false, true), Settings.libraryList,
             { if (it) "List" else "Grid" },
-            { if (it) "Your playlists in a list. (Also the button at the top of the Library.)" else "Your playlists as big covers. (Also the button at the top of the Library.)" },
+            { if (it) "Your playlists in a list." else "Your playlists as big covers." },
         ) { Settings.updateLibraryList(it) }
     }
     Group("App colours") {

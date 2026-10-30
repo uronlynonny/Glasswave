@@ -35,8 +35,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.GridView
-import androidx.compose.material.icons.automirrored.rounded.ViewList
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Link
@@ -87,14 +85,6 @@ private fun LibraryBody(c: ScreenCtx) {
     Column(Modifier.fillMaxSize()) {
         Header("Library") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // List or grid of big covers.
-                GlassCircle(44.dp, c.bg, onClick = { Settings.updateLibraryList(!Settings.libraryList) }) {
-                    Ico(
-                        if (Settings.libraryList) androidx.compose.material.icons.Icons.Rounded.GridView
-                        else androidx.compose.material.icons.Icons.AutoMirrored.Rounded.ViewList,
-                        Color.White, 22.dp,
-                    )
-                }
                 GlassCircle(44.dp, c.bg, onClick = { Menus.newPlaylist() }) {
                     Ico(Icons.Rounded.Add, Color.White, 24.dp)
                 }
