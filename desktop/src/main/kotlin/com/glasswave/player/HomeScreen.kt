@@ -248,7 +248,8 @@ private fun Hero(c: ScreenCtx, s: Section) {
 @Composable
 fun SectionBody(c: ScreenCtx, s: Section) {
     val songs = s.items.count { it is SongItem }
-    if (songs * 2 > s.items.size && s.items.size > 4) {
+    // Big covers instead (Settings > Look > Layout): song shelves become rows of cards too.
+    if (!Settings.homeCovers && songs * 2 > s.items.size && s.items.size > 4) {
         DeskHorizontalGrid(
             rows = GridCells.Fixed(4),
             contentPadding = PaddingValues(horizontal = 10.dp),

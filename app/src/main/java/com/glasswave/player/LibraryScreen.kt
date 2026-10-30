@@ -35,6 +35,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.automirrored.rounded.ViewList
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Link
@@ -79,6 +81,14 @@ fun LibraryScreen(c: ScreenCtx) {
     Column(Modifier.fillMaxSize()) {
         Header("Library") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // List or grid of big covers.
+                GlassCircle(44.dp, c.bg, onClick = { Settings.updateLibraryList(!Settings.libraryList) }) {
+                    Ico(
+                        if (Settings.libraryList) androidx.compose.material.icons.Icons.Rounded.GridView
+                        else androidx.compose.material.icons.Icons.AutoMirrored.Rounded.ViewList,
+                        Color.White, 22.dp,
+                    )
+                }
                 GlassCircle(44.dp, c.bg, onClick = { Menus.newPlaylist() }) {
                     Ico(Icons.Rounded.Add, Color.White, 24.dp)
                 }
@@ -168,7 +178,11 @@ fun LibraryScreen(c: ScreenCtx) {
                     }
                 }
             }
-            items(shown, key = { it.id }) { p -> PlaylistCard(p, c.ps) { vm.open(Route.Saved(p)) } }
+            if (Settings.libraryList) {
+                items(shown, key = { "l" + it.id }, span = { GridItemSpan(maxLineSpan) }) { p -> PlaylistRow(p, c.ps) { vm.open(Route.Saved(p)) } }
+            } else {
+                items(shown, key = { it.id }) { p -> PlaylistCard(p, c.ps) { vm.open(Route.Saved(p)) } }
+            }
             if (shown.isEmpty() && all.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
                 Box { Centered(if (vm.libDownloaded) "No playlists with downloaded songs yet. Tap ⬇ on a playlist to save it for offline." else "Nothing here yet") }
             }
@@ -216,6 +230,45 @@ private fun PlaylistCard(p: PlaylistInfo, ps: PlayerState, onOpen: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         GText(p.name, 14, if (live) readable(CoverTint.accent) else Color.White, FontWeight.Medium, 1, Modifier.padding(horizontal = 2.dp))
         GText("${p.source.label} · ${p.count}", 12, Dim, maxLines = 1, modifier = Modifier.padding(horizontal = 2.dp))
+    }
+}
+
+/** A playlist in the Library's list view: cover, name, where it's from and how many songs. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PlaylistRow(p: PlaylistInfo, ps: PlayerState, onOpen: () -> Unit) {
+    val live = PlayingFrom.id == p.id && ps.hasItem
+    val box = RoundedCornerShape(16.dp)
+    Row(
+        Modifier.fillMaxWidth().glass(box)
+            .then(if (live) Modifier.border(1.5.dp, readable(CoverTint.accent).copy(alpha = 0.85f), box) else Modifier)
+            .combinedClickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onLongClick = { Menus.openPlaylist(p) },
+                onClick = onOpen,
+            )
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(56.dp)) {
+            if (p.id == Library.LIKED_ID) {
+                Box(
+                    Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
+                        .background(Brush.linearGradient(listOf(Lime, Color(0xFF3F6A12), Color(0xFF0E1A06)))),
+                    contentAlignment = Alignment.Center,
+                ) { Ico(Icons.Rounded.Favorite, Color.Black.copy(alpha = 0.85f), 26.dp) }
+            } else {
+                Cover(p.thumb, Modifier.fillMaxSize(), 10.dp, fallback = Icons.AutoMirrored.Rounded.QueueMusic)
+            }
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            GText(p.name, 16, if (live) readable(CoverTint.accent) else Color.White, FontWeight.Medium, 1)
+            GText("${p.source.label} · ${p.count} songs", 13, Dim, maxLines = 1)
+        }
+        if (Library.isPinned(p.id)) Ico(Icons.Rounded.PushPin, Lime, 18.dp, Modifier.padding(horizontal = 6.dp))
+        if (live) EqualizerBars(readable(CoverTint.accent), ps.playing, Modifier.padding(horizontal = 8.dp))
     }
 }
 
