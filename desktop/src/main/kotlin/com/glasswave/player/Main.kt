@@ -234,36 +234,45 @@ object GpuMemory {
 }
 
 /** Everything the phone app set up when it started. */
+/** Starting up: with -Dgw.bootTimes=1, how long each step takes goes to the log. */
+private val bootTimes = System.getProperty("gw.bootTimes") == "1"
+private val bootStart = System.nanoTime()
+internal inline fun boot(name: String, f: () -> Unit) {
+    val t = System.nanoTime()
+    f()
+    if (bootTimes) System.err.println("GW boot $name ${(System.nanoTime() - t) / 1_000_000} ms (at ${(System.nanoTime() - bootStart) / 1_000_000} ms)")
+}
+
 internal fun startUp() {
     val ctx = AppContext
-    Settings.init(ctx)
-    Sound.init(ctx)
+    boot("Settings.init") { Settings.init(ctx) }
+    boot("Sound.init") { Sound.init(ctx) }
     // Sound waits about 1.2 s at the speaker (see AudioDeck), so the visualizer shows readings from then.
     Spectrum.latencyMs = 1220
-    Accounts.init(ctx)
-    Library.init(ctx)
-    SearchPicks.init(ctx)
-    PlaylistMix.init(ctx)
-    History.init(ctx)
-    Downloads.init(ctx)
-    SongCache.init(ctx)
-    NotInterested.init(ctx)
-    GenreArt.init(ctx)
-    ArtistArt.init(ctx)
-    LyricsRepo.init(ctx)
-    Loudness.init(ctx)
-    AnimatedCovers.init(ctx)
-    MixLibrary.init(ctx)
+    boot("Accounts.init") { Accounts.init(ctx) }
+    boot("Library.init") { Library.init(ctx) }
+    boot("SearchPicks.init") { SearchPicks.init(ctx) }
+    boot("PlaylistMix.init") { PlaylistMix.init(ctx) }
+    boot("History.init") { History.init(ctx) }
+    boot("Downloads.init") { Downloads.init(ctx) }
+    boot("SongCache.init") { SongCache.init(ctx) }
+    boot("NotInterested.init") { NotInterested.init(ctx) }
+    boot("GenreArt.init") { GenreArt.init(ctx) }
+    boot("ArtistArt.init") { ArtistArt.init(ctx) }
+    boot("LyricsRepo.init") { LyricsRepo.init(ctx) }
+    boot("Loudness.init") { Loudness.init(ctx) }
+    boot("AnimatedCovers.init") { AnimatedCovers.init(ctx) }
+    boot("MixLibrary.init") { MixLibrary.init(ctx) }
     MixLibrary.decoder = MixAudio
-    GlassTier.init(ctx)
-    Stats.init(ctx)
-    Sync.init(ctx)
-    Updater.init(ctx)
-    Profile.init(ctx)
-    Profile.refresh()
-    YtRepo.initMatches(ctx)
-    AppVolume.init()
-    WinMemory.startGuard()
+    boot("GlassTier.init") { GlassTier.init(ctx) }
+    boot("Stats.init") { Stats.init(ctx) }
+    boot("Sync.init") { Sync.init(ctx) }
+    boot("Updater.init") { Updater.init(ctx) }
+    boot("Profile.init") { Profile.init(ctx) }
+    boot("Profile.refresh") { Profile.refresh() }
+    boot("YtRepo.initMatches") { YtRepo.initMatches(ctx) }
+    boot("AppVolume.init") { AppVolume.init() }
+    boot("WinMemory.startGuard") { WinMemory.startGuard() }
     val lastPlayed = History.tracks.firstOrNull()?.url
     // Load FFmpeg now (it takes a few seconds), so the first song you pick starts quickly.
     Thread { runCatching { org.bytedeco.javacv.FFmpegFrameGrabber.tryLoad(); AudioDeck.warmUp() } }.apply { isDaemon = true }.start()
@@ -307,11 +316,12 @@ fun main() {
         System.setProperty("apple.awt.application.appearance", "NSAppearanceNameDarkAqua")
         System.setProperty("apple.awt.application.name", "Glasswave")
     }
+    if (bootTimes) System.err.println("GW boot main() reached ${System.currentTimeMillis() - java.lang.management.ManagementFactory.getRuntimeMXBean().startTime} ms after the JVM started")
     // Already open: that window comes to the front instead of a second copy starting.
     if (!SingleInstance.claim()) return
     startUp()
     application {
-        val ps = remember { PlayerState().also { it.connect(); GlobalKeys.start(it) } }
+        val ps = remember { PlayerState().also { p -> boot("player") { p.connect(); GlobalKeys.start(p) } } }
         // The keyboard's media keys go to Glasswave while it has a song loaded.
         LaunchedEffect(ps.hasItem) { GlobalKeys.mediaKeys(ps.hasItem) }
         val vm = remember { MainViewModel() }
@@ -340,6 +350,7 @@ fun main() {
         }
         // Open centred, and small enough to sit above the taskbar on any screen.
         val state = rememberWindowState(size = startSize(), position = WindowPosition(androidx.compose.ui.Alignment.Center))
+        remember { if (bootTimes) System.err.println("GW boot opening the window at ${(System.nanoTime() - bootStart) / 1_000_000} ms") }
         Window(
             onCloseRequest = { if (Os.isMac) shown = false else quitAll() },
             visible = shown,
@@ -394,6 +405,7 @@ fun main() {
                     kotlinx.coroutines.delay(60_000)
                 }
             }
+            LaunchedEffect(Unit) { if (bootTimes) System.err.println("GW boot window drawn ${(System.nanoTime() - bootStart) / 1_000_000} ms after startUp began") }
             // Someone opened Glasswave again while it was already running: show this window.
             LaunchedEffect(SingleInstance.showRequests) {
                 if (SingleInstance.showRequests == 0) return@LaunchedEffect

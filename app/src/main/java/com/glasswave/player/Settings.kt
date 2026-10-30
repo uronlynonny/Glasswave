@@ -206,7 +206,7 @@ object Settings {
 
     /** Data saver: low quality streaming, no music videos behind the cover, smaller pictures. */
     var dataSaver by mutableStateOf(DataSaver.OFF); private set
-    fun updateDataSaver(d: DataSaver) { dataSaver = d; prefs.edit { putString("data_saver", d.name) } }
+    fun updateDataSaver(d: DataSaver) { dataSaver = d; prefs.edit { putString("data_saver", d.name) }; listeners.forEach { it() } }
 
     /** Whether data saver is cutting back right now (it may be waiting for mobile data). */
     val savingData: Boolean get() = dataSaver == DataSaver.ALWAYS || (dataSaver == DataSaver.MOBILE && Net.metered)
@@ -218,6 +218,7 @@ object Settings {
         quality = q
         prefs.edit { putString("quality", q.name) }
         YtRepo.forgetStreamUrls()
+        listeners.forEach { it() } // the player switches the song that's on
     }
 
     fun updateSkipSilence(on: Boolean) {

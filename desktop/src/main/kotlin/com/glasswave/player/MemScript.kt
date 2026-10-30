@@ -221,6 +221,9 @@ object MemScript {
                         }
                         // stats: opens your listening stats.
                         "stats" -> onUi { vm.open(Route.Stats) }
+                        // quality LOW|NORMAL|HIGH: changes the quality setting. artistnamed Name: opens an artist like the stats page does.
+                        "quality" -> onUi { Settings.updateQuality(Quality.valueOf(arg)) }
+                        "artistnamed" -> onUi { Menus.artistNamed = arg }
                         // fakeplays N: records the song playing as played N times in a row (to see Recently played group them).
                         "fakeplays" -> { var t: Track? = null; onUi { t = ps.currentTrack() }; t?.let { tr -> repeat(arg.toInt()) { Stats.record(tr, 60_000); Thread.sleep(30) } } }
                         // pcfolder path: adds a music folder on this PC. pcplay title: plays one of its songs.

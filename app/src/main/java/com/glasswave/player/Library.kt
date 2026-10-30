@@ -250,9 +250,13 @@ object Library {
 
     fun isLiked(url: String) = url in liked
 
+    /** Told when a song is liked or unliked (the notification's heart follows). */
+    val likeListeners = mutableListOf<() -> Unit>()
+
     fun toggleLike(t: Track) {
         val like = !isLiked(t.url)
         if (like) add(LIKED_ID, t) else remove(LIKED_ID, t.url)
+        likeListeners.forEach { it() }
         // Signed in to YouTube Music: like it there too (quietly; Glasswave's own list is what counts).
         if (Accounts.ytSignedIn) Thread {
             runCatching { YtRepo.videoIdFor(t.url)?.let { YtMusicApi.rate(it, like) } }

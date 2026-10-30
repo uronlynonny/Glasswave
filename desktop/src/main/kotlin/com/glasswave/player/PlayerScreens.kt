@@ -493,7 +493,7 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
             DevicesButton()
 
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                Badge(Settings.quality.label.uppercase())
+                Box(Modifier.pressable(0.9f) { nextQuality() }) { Badge(Settings.quality.label.uppercase()) }
                 ps.currentId?.let { id ->
                     // On the phone: a small tick in the cover's colour. Downloading: a filling ring.
                     val pct = Downloads.progress[id]
@@ -609,6 +609,14 @@ private fun Badge(text: String) {
     Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.12f)).padding(horizontal = 7.dp, vertical = 3.dp)) {
         GText(text, 10, Color.White.copy(alpha = 0.75f), FontWeight.Bold)
     }
+}
+
+/** Tapping the quality badge: Low, Normal, High and round again. The song that's on switches straight away. */
+private fun nextQuality() {
+    val all = Quality.entries
+    val q = all[(all.indexOf(Settings.quality) + 1) % all.size]
+    Settings.updateQuality(q)
+    Menus.say("Audio quality: ${q.label}")
 }
 
 /* ---------------- Shuffle and repeat ---------------- */

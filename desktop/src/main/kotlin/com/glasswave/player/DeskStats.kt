@@ -114,8 +114,7 @@ fun DeskStatsPage(c: ScreenCtx) {
                         val max = d.topArtists.firstOrNull()?.plays ?: 1
                         d.topArtists.take(5).forEachIndexed { i, a ->
                             RankRow(i, artistPhoto(a.name, a.thumb), true, a.name, "${fmt(a.plays.toLong())} plays", a.plays.toFloat() / max, accent) {
-                                c.vm.selectTab(Tab.SEARCH)
-                                c.vm.pickRecent(a.name)
+                                Menus.artistNamed = a.name
                             }
                         }
                     }

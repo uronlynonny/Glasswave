@@ -531,68 +531,8 @@ fun Shimmer(modifier: Modifier, corner: Dp = 12.dp) {
  */
 @Composable
 fun PullRefresh(refreshing: Boolean, onRefresh: () -> Unit, backdrop: Backdrop, content: @Composable () -> Unit) {
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val trigger = with(density) { 96.dp.toPx() }
-    var pull by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
-    val refresh by androidx.compose.runtime.rememberUpdatedState(onRefresh)
-    val conn = remember {
-        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): Offset {
-                if (available.y < 0 && pull > 0) {
-                    val used = maxOf(available.y, -pull)
-                    pull += used
-                    return Offset(0f, used)
-                }
-                return Offset.Zero
-            }
-
-            override fun onPostScroll(consumed: Offset, available: Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): Offset {
-                if (source == androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput && available.y > 0) {
-                    pull = (pull + available.y * 0.5f).coerceAtMost(trigger * 1.6f)
-                    return Offset(0f, available.y)
-                }
-                return Offset.Zero
-            }
-
-            override suspend fun onPreFling(available: androidx.compose.ui.unit.Velocity): androidx.compose.ui.unit.Velocity {
-                val was = pull
-                if (was >= trigger) refresh()
-                pull = 0f
-                return if (was > 0) available else androidx.compose.ui.unit.Velocity.Zero
-            }
-        }
-    }
-    val target = if (refreshing) trigger * 0.75f else pull
-    val y by animateFloatAsState(target, if (pull > 0 && !refreshing) androidx.compose.animation.core.snap() else bouncy(), label = "pull")
-    Box(Modifier.fillMaxSize().nestedScroll(conn)) {
-        Box(Modifier.fillMaxSize().graphicsLayer { translationY = y * 0.45f }) { content() }
-        if (y > 1f) {
-            Box(
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .graphicsLayer {
-                        translationY = y - 44.dp.toPx()
-                        val s = (y / trigger).coerceIn(0.3f, 1f)
-                        scaleX = s
-                        scaleY = s
-                        alpha = (y / trigger).coerceIn(0f, 1f)
-                    }
-                    .size(44.dp)
-                    .liquidGlass(backdrop, 22.dp, depth = 10.dp, bend = 10.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                // Spins only while it's showing and loading (a hidden spinner still costs frames).
-                val turn = if (refreshing) {
-                    val spin = rememberInfiniteTransition(label = "pullSpin")
-                    spin.animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing)), label = "turn")
-                } else null
-                Ico(
-                    androidx.compose.material.icons.Icons.Rounded.Refresh, Color.White, 22.dp,
-                    Modifier.graphicsLayer { rotationZ = turn?.value ?: ((y / trigger) * 270f) },
-                )
-            }
-        }
-    }
+    // PC: no pull-to-refresh (scrolling up past the top kept popping a refresh circle); Refresh is in the sidebar.
+    content()
 }
 
 /** A glass on/off switch with a sliding knob. */

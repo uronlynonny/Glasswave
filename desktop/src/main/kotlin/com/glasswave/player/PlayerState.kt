@@ -478,6 +478,40 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
 
     /** Each song change gets a number, so a slow lookup for a song you've skipped past is ignored. */
     private var request = 0
+
+    init { Settings.onQuality += { main.post { requalify() } } }
+
+    /**
+     * The quality setting changed: the song that's on switches to it right away, from the same
+     * spot. It keeps playing while the new stream is found, so there's only a blink.
+     */
+    private fun requalify() {
+        val t = items.getOrNull(cur) ?: return
+        if (mixing || Downloads.fileFor(t.url) != null || PcMusic.fileOf(t.url) != null) return
+        val req = request
+        worker.execute {
+            val src = try {
+                val uri = android.net.Uri.parse(t.url)
+                val page = if (uri.scheme == "gwmatch") {
+                    YtRepo.match(uri.getQueryParameter("q") ?: return@execute, uri.getQueryParameter("d")?.toLongOrNull() ?: 0)
+                } else t.url
+                AudioSource.Remote(YtRepo.streamUrl(page), t)
+            } catch (e: Exception) {
+                return@execute
+            }
+            main.post {
+                if (req != request || items.getOrNull(cur)?.url != t.url || mixing) return@post
+                spare.stop()
+                val at = if (atEnd) 0L else livePosition()
+                deck.volume = startVolume()
+                deck.eqReady = mixOn()
+                deck.stretchReady = false
+                deck.automation = null
+                buffering = true
+                deck.load(src, at, playing, cur)
+            }
+        }
+    }
     /** How many times the current song has been picked back up after an error (see [recover]). */
     private var recoveries = 0
 

@@ -220,7 +220,11 @@ object Settings {
         quality = q
         prefs.edit { putString("quality", q.name) }
         YtRepo.forgetStreamUrls()
+        onQuality.forEach { it() }
     }
+
+    /** Told when the quality setting changes (the player switches the song that's on). */
+    val onQuality = mutableListOf<() -> Unit>()
 
     fun updateSkipSilence(on: Boolean) {
         skipSilence = on

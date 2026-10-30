@@ -118,6 +118,8 @@ object Menus {
     fun closeSong() { song = null }
     /** A song whose artist page should open (tapping the artist's name in the full player). */
     var artistOf by mutableStateOf<Track?>(null)
+    /** An artist to find by name and open (from your stats). */
+    var artistNamed by mutableStateOf<String?>(null)
     /** The songs of an album or playlist that isn't in your Library (its menu can play or save them). */
     var playlistSongs: List<Track>? = null
     fun openPlaylist(p: PlaylistInfo, songs: List<Track>? = null) { playlistSongs = songs; playlist = p }
@@ -161,6 +163,19 @@ object Menus {
 fun BoxScope.MenuLayer(ps: PlayerState, backdrop: Backdrop, open: (MusicItem) -> Unit) {
     val sheetOpen = Menus.song != null || Menus.playlist != null
     // The full player's artist name: find the artist and open their page.
+    // An artist from your stats: search YouTube Music for them by name and open their page.
+    Menus.artistNamed?.let { name ->
+        LaunchedEffect(name) {
+            val item = try {
+                val found = YtMusicApi.search(name, YtMusicApi.Filter.ARTISTS).sections.flatMap { it.items }.filterIsInstance<ArtistItem>()
+                found.firstOrNull { it.title.equals(name.trim(), ignoreCase = true) } ?: found.firstOrNull()
+            } catch (e: Exception) {
+                null
+            }
+            Menus.artistNamed = null
+            if (item == null) Menus.say("Couldn't find $name") else open(item)
+        }
+    }
     Menus.artistOf?.let { t ->
         LaunchedEffect(t) {
             val item = try {

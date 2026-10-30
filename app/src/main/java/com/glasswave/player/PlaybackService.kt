@@ -249,7 +249,79 @@ class PlaybackService : MediaSessionService() {
     private val saver = Executors.newSingleThreadExecutor()
     private var cacheFactory: CacheDataSource.Factory? = null
     private val main = Handler(Looper.getMainLooper())
-    private val settingsListener: () -> Unit = { session?.player?.let { applySettings(it); maybeAutoplay(it); applyLevel(it); listenAhead(it) } }
+    private val settingsListener: () -> Unit = { session?.player?.let { applySettings(it); maybeAutoplay(it); applyLevel(it); listenAhead(it); requalify(it) } }
+
+    /* ---- The like button in the notification and on the lock screen ---- */
+
+    private val likeCommand = androidx.media3.session.SessionCommand("glasswave.like", android.os.Bundle.EMPTY)
+
+    private val sessionCallback = object : MediaSession.Callback {
+        @OptIn(UnstableApi::class)
+        override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
+            val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon().add(likeCommand).build()
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailableSessionCommands(commands)
+                .setCustomLayout(listOf(likeButton(session.player)))
+                .build()
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: androidx.media3.session.SessionCommand,
+            args: android.os.Bundle,
+        ): com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.SessionResult> {
+            if (customCommand.customAction == likeCommand.customAction) {
+                val p = session.player
+                p.currentMediaItem?.let { item ->
+                    val md = item.mediaMetadata
+                    Library.toggleLike(Track(item.mediaId, md.title?.toString() ?: "", md.artist?.toString() ?: "", 0, md.artworkUri?.toString()))
+                }
+                updateLikeButton(p)
+                return com.google.common.util.concurrent.Futures.immediateFuture(androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS))
+            }
+            return super.onCustomCommand(session, controller, customCommand, args)
+        }
+    }
+
+    /** A heart: filled when the song that's on is in Liked songs. */
+    @OptIn(UnstableApi::class)
+    private fun likeButton(p: Player): androidx.media3.session.CommandButton {
+        val liked = p.currentMediaItem?.mediaId?.let { Library.isLiked(it) } == true
+        return androidx.media3.session.CommandButton.Builder()
+            .setDisplayName(if (liked) "Remove from Liked songs" else "Like")
+            .setIconResId(if (liked) R.drawable.ic_n_liked else R.drawable.ic_n_like)
+            .setSessionCommand(likeCommand)
+            .build()
+    }
+
+    private val likeListener: () -> Unit = { main.post { session?.player?.let { updateLikeButton(it) } } }
+
+    /** Keeps the heart right (new song, or liked or unliked). */
+    private fun updateLikeButton(p: Player) {
+        session?.setCustomLayout(listOf(likeButton(p)))
+    }
+
+    /** The quality the song that's on was loaded at. */
+    private var loadedQuality: Quality? = null
+
+    /**
+     * The quality setting (or data saver) changed: reload the song that's on at the new quality,
+     * from the same spot. Downloaded songs and your own files stay as they are.
+     */
+    private fun requalify(p: Player) {
+        val q = Settings.streamQuality()
+        val was = loadedQuality
+        loadedQuality = q
+        if (was == null || was == q || mixing) return
+        val url = p.currentMediaItem?.mediaId ?: return
+        if (Downloads.fileFor(url) != null || PhoneMusic.isPhoneSong(url)) return
+        if (p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED) return
+        val at = p.currentPosition
+        p.stop()
+        p.prepare()
+        p.seekTo(at)
+    }
     private val mixListener: (String) -> Unit = { url -> main.post { session?.player?.let { onMixKnown(it, url) } } }
     private val soundListener: () -> Unit = { session?.player?.let { applyPitch(it) } }
 
@@ -385,6 +457,8 @@ class PlaybackService : MediaSessionService() {
         applySettings(player)
         applyPitch(player)
         Settings.listeners += settingsListener
+        loadedQuality = Settings.streamQuality()
+        Library.likeListeners += likeListener
         Sound.listeners += soundListener
 
         player.addListener(object : Player.Listener {
@@ -484,7 +558,8 @@ class PlaybackService : MediaSessionService() {
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        session = MediaSession.Builder(this, player).setSessionActivity(openPlayer).build()
+        session = MediaSession.Builder(this, player).setSessionActivity(openPlayer).setCallback(sessionCallback).build()
+        updateLikeButton(player)
 
         // The home-screen widget follows the song and the play state.
         livePlayer = player
@@ -495,6 +570,7 @@ class PlaybackService : MediaSessionService() {
                         Player.EVENT_MEDIA_METADATA_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED,
                     )
                 ) pushWidget(p)
+                if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) updateLikeButton(p)
             }
         })
         pushWidget(player)
@@ -1171,6 +1247,7 @@ class PlaybackService : MediaSessionService() {
         }
         livePlayer = null
         Settings.listeners -= settingsListener
+        Library.likeListeners -= likeListener
         Sound.listeners -= soundListener
         main.removeCallbacks(fader)
         worker.shutdownNow()

@@ -290,6 +290,7 @@ class AudioDeck(private val name: String) {
     private fun post(gen: Int, f: () -> Unit) = SwingUtilities.invokeLater { if (gen == generation) f() }
 
     private fun run(gen: Int, source: AudioSource, startMs: Long) {
+        quietLogs
         var grabber: FFmpegFrameGrabber? = null
         var net: AheadStream? = null
         var lastReadMs = 0L
@@ -580,12 +581,15 @@ class AudioDeck(private val name: String) {
         private const val BUFFER_BYTES = RATE * 4 * 6 / 5
         private val FORMAT = AudioFormat(RATE.toFloat(), 16, 2, true, false)
 
-        init {
-            avutil.av_log_set_level(avutil.AV_LOG_ERROR)
-        }
+        /**
+         * FFmpeg's own messages: errors only. Done off the main thread: touching FFmpeg loads all its
+         * files, which takes seconds (done here at startup it held the window back by about 4 s).
+         */
+        internal val quietLogs by lazy { avutil.av_log_set_level(avutil.AV_LOG_ERROR) }
 
         /** Loads the audio libraries ahead of time (the first load is slow). */
         fun warmUp() {
+            quietLogs
             runCatching { AudioSystem.getSourceDataLine(FORMAT) }
         }
     }

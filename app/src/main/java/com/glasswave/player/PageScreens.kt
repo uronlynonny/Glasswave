@@ -458,7 +458,7 @@ fun StatsPage(c: ScreenCtx) {
                 androidx.compose.foundation.lazy.LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     items(minOf(5, d.topArtists.size)) { i ->
                         val a = d.topArtists[i]
-                        Column(Modifier.width(104.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(Modifier.width(104.dp).pressable(0.95f) { Menus.artistNamed = a.name }, horizontalAlignment = Alignment.CenterHorizontally) {
                             Box {
                                 Cover(artistPhoto(a.name, a.thumb), Modifier.size(104.dp), 0.dp, circle = true)
                                 Box(

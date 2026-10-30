@@ -524,18 +524,24 @@ object YtMusicApi {
         Suggestions(queries.take(8), items(json).take(4))
     }
 
-    /** A Moods & genres tile for browsing ("Chill", "Hip-Hop", "Workout"...). */
-    data class Genre(val title: String, val item: CategoryItem)
+    /** A Moods & genres tile for browsing ("Chill", "Hip-Hop", "Workout"...). [mood]: from the "Moods & moments" group. */
+    data class Genre(val title: String, val item: CategoryItem, val mood: Boolean = false)
 
     suspend fun genres(): List<Genre> = withContext(Dispatchers.IO) {
         val json = browse(JSONObject().put("browseId", "FEmusic_moods_and_genres"))
-        collect(json, "musicNavigationButtonRenderer").mapNotNull { b ->
+        fun buttons(node: Any?, mood: Boolean) = collect(node, "musicNavigationButtonRenderer").mapNotNull { b ->
             val title = ytText(b.opt("buttonText"))
             val ep = b.path("clickCommand.browseEndpoint") as? JSONObject ?: return@mapNotNull null
             val id = ep.optString("browseId").ifEmpty { return@mapNotNull null }
             val color = (b.path("solid.leftStripeColor") as? Number)?.toLong() ?: 0xFF5E5CE6
-            if (title.isEmpty()) null else Genre(title, CategoryItem(id, ep.optString("params").ifEmpty { null }, title, color))
-        }.distinctBy { it.title }
+            if (title.isEmpty()) null else Genre(title, CategoryItem(id, ep.optString("params").ifEmpty { null }, title, color), mood)
+        }
+        // The page has a "Moods & moments" group and a "Genres" group; tell them apart by the group's name.
+        val groups = collect(json, "gridRenderer")
+        val all = if (groups.isEmpty()) buttons(json, false) else groups.flatMap { g ->
+            buttons(g, ytText(g.path("header.gridHeaderRenderer.title")).contains("mood", true))
+        }
+        all.ifEmpty { buttons(json, false) }.distinctBy { it.title }
     }
 
     /** An album, artist, playlist or mood/genre page. */

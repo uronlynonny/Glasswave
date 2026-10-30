@@ -19,6 +19,7 @@ object ForYou {
     suspend fun shelves(): List<Section> = coroutineScope {
         val month = Stats.summary(Stats.Period.MONTH)
         val all = Stats.summary(Stats.Period.ALL)
+        learnTaste(month, all)
         // Your most played (stats), or what you played lately if there are no stats yet.
         val favourites = (month.topSongs + all.topSongs).map { it.track }.distinctBy { it.url }.take(25)
             .ifEmpty { History.tracks.toList().take(25) }
@@ -52,12 +53,48 @@ object ForYou {
     }
 
     /**
+     * The artists you really listen to, lowercased: played more than once (stats), liked or
+     * downloaded. (Not everything that ever played: Autoplay's picks would count too.)
+     * Worked out with your shelves on each Home load.
+     */
+    @Volatile private var taste: Set<String> = emptySet()
+
+    private suspend fun learnTaste(month: Stats.Summary, all: Stats.Summary) {
+        val liked = runCatching { Library.tracks(Library.LIKED_ID) }.getOrDefault(emptyList())
+        taste = ((month.topArtists + all.topArtists).filter { it.plays >= 2 }.map { it.name } +
+            (liked + Downloads.tracks.toList()).map { it.artist })
+            .flatMap { it.split(',', '&') }
+            .map { it.trim().lowercase() }
+            .filter { it.length >= 3 }
+            .toSet()
+    }
+
+    /**
+     * Only YouTube shelves that fit what you play: a shelf stays if it has your artists in it.
+     * YouTube's general shelves for your country (charts, "All hits"...) go, so Home is about your
+     * music even when YouTube Music isn't personalising it (signed out, or the sign-in expired).
+     * With too little listening to tell yet, everything stays.
+     */
+    private fun yourShelves(yt: List<Section>): List<Section> {
+        val known = taste
+        if (known.size < 3) return yt
+        fun yours(i: MusicItem): Boolean {
+            val text = ((i as? SongItem)?.track?.artist.orEmpty() + " " + i.subtitle + " " + i.title).lowercase()
+            return known.any { text.contains(it) }
+        }
+        return yt.filter { s ->
+            val hits = s.items.count { yours(it) }
+            hits >= 4 || (hits > 0 && hits * 2 >= s.items.size)
+        }
+    }
+
+    /**
      * Mixes your shelves into YouTube Music's Home: "Picked for you" absorbs YouTube's quick picks,
      * every song shelf is reshuffled so it looks different on each load, and the rest follow.
      */
     fun mix(yt: List<Section>, mine: List<Section>): List<Section> {
         fun isSongs(s: Section) = s.items.count { it is SongItem } * 2 > s.items.size
-        val shuffledYt = yt.map { s -> if (isSongs(s)) s.copy(items = s.items.shuffled()) else s }.toMutableList()
+        val shuffledYt = yourShelves(yt).map { s -> if (isSongs(s)) s.copy(items = s.items.shuffled()) else s }.toMutableList()
         val minePicked = mine.firstOrNull { it.title == "Picked for you" }
         if (minePicked != null) {
             val i = shuffledYt.indexOfFirst { it.title == "Picked for you" }
