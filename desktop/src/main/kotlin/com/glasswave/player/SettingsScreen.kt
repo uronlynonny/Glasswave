@@ -776,6 +776,7 @@ private fun About(c: ScreenCtx) {
         Column(Modifier.padding(18.dp)) {
             GText("Glasswave " + Updater.currentVersion(), 18, weight = FontWeight.Bold)
             GText("Made by " + Credits.AUTHOR, 14, CoverTint.accent, FontWeight.SemiBold)
+            GText(Credits.COPYRIGHT, 12, Faint)
             Spacer(Modifier.height(6.dp))
             GText(
                 "A light YouTube Music player with liquid glass. Songs stream from YouTube Music; Spotify playlists are matched to YouTube Music.",
