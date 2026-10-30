@@ -34,6 +34,12 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.border
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material.icons.rounded.OutlinedFlag
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Pause
@@ -156,12 +162,58 @@ fun LyricsScreen(ps: PlayerState, onClose: () -> Unit) {
                         GText(ps.title, 16, weight = FontWeight.SemiBold, maxLines = 1)
                         GText(ps.artist, 13, Color.White.copy(alpha = 0.7f), maxLines = 1)
                     }
+                    Spacer(Modifier.width(46.dp)) // room for the report flag
                     Box(Modifier.size(46.dp).pressable(0.85f, onClick = onClose), contentAlignment = Alignment.Center) {
                         Ico(Icons.Rounded.Close, Color.White, 26.dp)
                     }
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) { LyricsBody(ps, state, fancy, accent) }
                 Column(Modifier.padding(horizontal = 24.dp)) { MiniControls(ps) }
+            }
+        }
+        // Report the lyrics (top right; on a phone, beside the close button).
+        ReportLyrics(ps, state, Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = if (wide) 16.dp else 10.dp, end = if (wide) 16.dp else 54.dp))
+    }
+}
+
+/**
+ * The flag at the top of the lyrics: tell nonny dev the lyrics are wrong, out of sync or missing.
+ * It goes to their alerts with the song, the problem and where in the song it was.
+ */
+@Composable
+private fun ReportLyrics(ps: PlayerState, state: Load<Lyrics?>, modifier: Modifier = Modifier) {
+    var open by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    Column(modifier, horizontalAlignment = Alignment.End) {
+        Box(Modifier.size(46.dp).pressable(0.85f) { open = !open }, contentAlignment = Alignment.Center) {
+            Ico(Icons.Rounded.OutlinedFlag, Color.White.copy(alpha = if (open) 1f else 0.8f), 23.dp)
+        }
+        if (open) {
+            val shape = RoundedCornerShape(16.dp)
+            Column(
+                Modifier.padding(top = 4.dp).width(230.dp).clip(shape).background(Color(0xF0171920))
+                    .border(0.5.dp, Color.White.copy(alpha = 0.12f), shape).padding(vertical = 6.dp),
+            ) {
+                GText("Report these lyrics", 12, Color.White.copy(alpha = 0.55f), FontWeight.SemiBold, modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 4.dp))
+                listOf("Wrong lyrics", "Out of sync", "No lyrics").forEach { kind ->
+                    GText(
+                        kind, 15, Color.White, FontWeight.Medium,
+                        modifier = Modifier.fillMaxWidth().pressable(0.97f) {
+                            open = false
+                            val url = ps.currentId ?: return@pressable
+                            val title = ps.title
+                            val artist = ps.artist
+                            val at = ps.positionMs
+                            val ly = (state as? Load.Done)?.value
+                            val from = ly?.let { it.source + if (it.synced) " (synced)" else " (not synced)" }
+                            scope.launch {
+                                val ok = withContext(Dispatchers.IO) { Reviews.lyricsProblem(ctx, title, artist, url, kind, at, from) }
+                                Menus.say(if (ok) "Thanks! nonny dev will look at this song's lyrics" else "Couldn't send. Check your internet and try again.")
+                            }
+                        }.padding(horizontal = 16.dp, vertical = 10.dp),
+                    )
+                }
             }
         }
     }

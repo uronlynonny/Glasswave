@@ -143,4 +143,30 @@ object Reviews {
             YtRepo.http.newCall(req).execute().use { it.isSuccessful }
         }.getOrDefault(false).also { if (it) sent++ }
     }
+
+    /** Songs already reported this run (one report per song and problem). */
+    private val reported = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    /**
+     * A lyrics problem for nonny dev: [kind] is "Wrong lyrics", "Out of sync" or "No lyrics", with
+     * where in the song it was and where the lyrics came from. True once it's delivered. Call off
+     * the main thread.
+     */
+    fun lyricsProblem(context: Context, title: String, artist: String, url: String, kind: String, atMs: Long, from: String?): Boolean {
+        if (!reported.add("$url|$kind")) return true
+        val at = "%d:%02d".format(atMs / 60_000, (atMs / 1000) % 60)
+        val body = "\"$title\" by $artist\n$kind (at $at)\n" + (from?.let { "Lyrics from: $it\n" } ?: "") + "$url\n\n" + run {
+            val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
+            "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE}, Glasswave $version"
+        }
+        return runCatching {
+            val req = Request.Builder().url("https://ntfy.sh/$TOPIC")
+                .post(body.toRequestBody("text/plain; charset=utf-8".toMediaType()))
+                .header("Title", "Lyrics: $kind")
+                .header("Tags", "memo").header("Priority", "3")
+                .apply { if (url.startsWith("https://")) header("Click", url) }
+                .build()
+            YtRepo.http.newCall(req).execute().use { it.isSuccessful }
+        }.getOrDefault(false).also { if (!it) reported.remove("$url|$kind") }
+    }
 }
