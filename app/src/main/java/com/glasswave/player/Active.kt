@@ -44,4 +44,53 @@ object Active {
             }
         }.apply { isDaemon = true }.start()
     }
+
+    /* ---- Live users ---- */
+
+    /**
+     * For nonny dev's live users page: while Glasswave is open or playing it says "still here"
+     * every 2 minutes, and "bye" when it stops, with the same random id, the platform, the version
+     * and whether it's playing. Nothing else. It goes to its own topic, so the daily count above
+     * isn't touched. Off along with "count me" in Settings.
+     */
+    private const val LIVE_TOPIC = "glasswave-nonny-re7mnsuqhuis-live"
+    @Volatile private var liveAt = 0L
+    @Volatile private var liveOn = false
+    @Volatile private var livePlaying = false
+
+    /** Called now and then with whether the app is in use ([on]) and playing. Safe to call often. */
+    fun live(on: Boolean, playing: Boolean) {
+        if (!::prefs.isInitialized || !Settings.countMe) return
+        val now = System.currentTimeMillis()
+        when {
+            on && (!liveOn || playing != livePlaying || now - liveAt >= 120_000) -> {
+                liveOn = true
+                livePlaying = playing
+                liveAt = now
+                sendLive(if (playing) "playing" else "open")
+            }
+            !on && liveOn -> {
+                liveOn = false
+                sendLive("bye")
+            }
+        }
+    }
+
+    /** Closing: "bye" right away (waits a moment at most). */
+    fun liveBye() {
+        if (!liveOn) return
+        liveOn = false
+        sendLive("bye").join(1500)
+    }
+
+    private fun sendLive(state: String): Thread = Thread {
+        runCatching {
+            val body = JSONObject().put("id", id()).put("p", "android").put("v", Updater.currentVersion()).put("s", state).toString()
+            val req = Request.Builder().url("https://ntfy.sh/$LIVE_TOPIC")
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .header("Title", "live").header("Priority", "1")
+                .build()
+            YtRepo.http.newCall(req).execute().close()
+        }
+    }.apply { isDaemon = true; start() }
 }

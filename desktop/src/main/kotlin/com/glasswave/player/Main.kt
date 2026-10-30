@@ -332,6 +332,7 @@ fun main() {
         val quitAll = {
             // Tell your phone this computer stopped playing (a second at most).
             Thread { Sync.goodbye() }.apply { isDaemon = true; start() }.join(1500)
+            Active.liveBye()
             // A downloaded update installs quietly as the app closes.
             Discord.shutdown()
             Updater.installOnExit()

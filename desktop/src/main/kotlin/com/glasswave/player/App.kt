@@ -85,6 +85,15 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
         Menus.closePlaylist()
     }
 
+    // Live users (see Active.live): in use while playing or while the window is up.
+    LaunchedEffect(Unit) {
+        while (true) {
+            val up = java.awt.Frame.getFrames().any { it.isVisible && (it.extendedState and java.awt.Frame.ICONIFIED) == 0 }
+            Active.live(ps.playing || up, ps.playing)
+            kotlinx.coroutines.delay(20_000L)
+        }
+    }
+
     // Look for a new version when the app opens (at most every three hours), and after an update
     // say once what's new.
     LaunchedEffect(Unit) {

@@ -94,6 +94,16 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
         }
     }
 
+    // Live users (see Active.live): in use while Glasswave is on screen or playing.
+    val lifecycle = @Suppress("DEPRECATION") androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(Unit) {
+        while (true) {
+            val onScreen = lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
+            Active.live(onScreen || ps.playing, ps.playing)
+            delay(20_000L)
+        }
+    }
+
     // Look for a new version when the app opens (at most every three hours), and after an update
     // say once what's new.
     LaunchedEffect(Unit) {
