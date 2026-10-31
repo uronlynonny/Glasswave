@@ -1,11 +1,11 @@
 {
-  "lastTime": 1793411565,
+  "lastTime": 1793414613,
   "totals": {
     "visits": 106,
     "siteDownloads": 34,
-    "apk": 197
+    "apk": 198
   },
-  "apkTotal": 160,
+  "apkTotal": 161,
   "hours": [
     {
       "t": 1792763089,
@@ -1098,9 +1098,15 @@
       "v": 0,
       "d": 0,
       "a": 0
+    },
+    {
+      "t": 1793418019,
+      "v": 0,
+      "d": 0,
+      "a": 1
     }
   ],
-  "updated": 1793414612,
+  "updated": 1793418019,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -1183,7 +1189,7 @@
       "m": "\"Mutlu Ol Yeter\" by Müslüm Gürses wouldn't play (tried 4 times).\nERROR_CODE_IO_UNSPECIFIED\nIOException: YouTube lookup failed\nParsingException: URL not accepted: https://music.youtube.com/watch?v=cdkco-e250A\n\nXiaomi M2101K7BG, Android 13, Glasswave 0.18.12\nhttps://music.youtube.com/watch?v=cdkco-e250A"
     }
   ],
-  "lastActiveTime": 1793414318,
+  "lastActiveTime": 1793417054,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -1323,6 +1329,7 @@
     },
     "2026-10-31": {
       "a": [
+        "7b35404e-f47e-417d-b856-13d2e544ae4f",
         "97b14727-911d-4245-9d38-1ef73d84dcf8"
       ],
       "w": [
@@ -1334,7 +1341,7 @@
   },
   "active": {
     "today": {
-      "a": 1,
+      "a": 2,
       "w": 3
     },
     "week": {
@@ -1383,7 +1390,7 @@
       },
       {
         "d": "2026-10-31",
-        "a": 1,
+        "a": 2,
         "w": 3
       }
     ]
