@@ -76,10 +76,22 @@ import coil3.compose.AsyncImage
 import java.awt.Cursor
 import java.awt.MouseInfo
 
-/** The mini player: a small window that floats over your other apps (button in the player bar). */
+/**
+ * The mini player: a small window that floats over your other apps. While its button in the player
+ * bar is on, it shows whenever the main window is minimized, and its expand button (or a double-click)
+ * brings the main window back and tucks the mini player away again.
+ */
 object Mini {
-    var open by mutableStateOf(false)
-    fun toggle() { open = !open }
+    /** The mini player button is on. */
+    val enabled get() = Settings.miniEnabled
+    /** On screen right now. */
+    var shown by mutableStateOf(false)
+    fun toggle() = setEnabled(!enabled)
+    fun setEnabled(on: Boolean) { Settings.updateMiniEnabled(on); shown = on }
+    /** Back to the full app; the mini player comes back next time the main window is minimized. */
+    fun expand() { shown = false; SingleInstance.showMain() }
+    /** The main window was minimized (or hidden), or brought back. */
+    fun mainMinimized(down: Boolean) { if (enabled) shown = down }
 }
 
 /** For checks: frames the mini player drew, and the longest wait between two. */
@@ -92,44 +104,81 @@ internal object MiniFrames {
 /** Space around the glass inside the window, so its shadow has room (the window itself is see-through). */
 private val Margin = 14.dp
 
+/** The mini player's window is always this size (window units); only the card inside it changes, see [MiniGeom]. */
+private const val CANVAS = 760
+private const val MIN_W = 220
+private const val MIN_H = 96
+
 /**
- * The mini player window. Drag it anywhere, resize it from any edge or corner, and it
- * changes layout with its size: a slim strip, or a tall card with the cover on top. How see-through,
- * how deep and how round it is, and its style, are under Settings > Look > Mini player.
+ * Where the card sits inside the window and how big it is (including the room for its shadow).
+ * Resizing a see-through window is slow on Windows, so the window never resizes: the card does, and
+ * the window's shape follows the card so clicks around it go to whatever is behind.
+ */
+internal object MiniGeom {
+    var card by mutableStateOf(java.awt.Rectangle(0, 0, 330, 118))
+    /** A resize drag is going on (the shadow is left off until it ends, to keep it smooth). */
+    var dragging by mutableStateOf(false)
+}
+
+/**
+ * The mini player window. Drag it anywhere, resize it from any edge or corner, and it changes layout
+ * with its size: a slim strip, or a tall card with the cover on top. How see-through, how deep and how
+ * round it is, and its style, are under Settings > Look > Mini player.
  */
 @Composable
 fun MiniPlayerWindow(ps: PlayerState, icon: Painter) {
-    if (!Mini.open) return
-    val saved = remember { Settings.miniBounds?.takeIf { onSomeScreen(it[0], it[1]) } }
-    val state = rememberWindowState(
-        position = if (saved != null) WindowPosition(saved[0].dp, saved[1].dp) else WindowPosition(Alignment.BottomEnd),
-        size = DpSize((saved?.get(2) ?: 330).dp, (saved?.get(3) ?: 118).dp),
-    )
+    if (!Mini.shown) return
+    // Where the card goes on screen: where you left it, or the bottom-right corner.
+    val start = remember {
+        val saved = Settings.miniBounds?.takeIf { onSomeScreen(it[0], it[1]) }
+        if (saved != null) {
+            java.awt.Rectangle(saved[0], saved[1], saved[2].coerceIn(MIN_W, CANVAS), saved[3].coerceIn(MIN_H, CANVAS))
+        } else {
+            val b = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
+            java.awt.Rectangle(b.x + b.width - 330 - 8, b.y + b.height - 118 - 8, 330, 118)
+        }
+    }
+    remember { MiniGeom.card = java.awt.Rectangle(0, 0, start.width, start.height) }
+    val state = rememberWindowState(position = WindowPosition(start.x.dp, start.y.dp), size = DpSize(CANVAS.dp, CANVAS.dp))
+    // Windows: the mini player draws with Direct3D. Its see-through window redraws several times
+    // faster that way than with OpenGL (about 50 frames a second against 10 while resizing, in the
+    // checks). The main window keeps OpenGL (see main()); the setting is put back once this window
+    // has made its drawing surface.
+    if (Os.isWindows) remember { System.setProperty("skiko.renderApi", "DIRECT3D") }
     Window(
-        onCloseRequest = { Mini.open = false },
+        onCloseRequest = { Mini.setEnabled(false) },
         state = state,
         title = "Glasswave mini player",
         icon = icon,
         undecorated = true,
         transparent = true,
-        resizable = true,
+        resizable = false,
         alwaysOnTop = Settings.miniOnTop,
         onPreviewKeyEvent = { e ->
             if (e.type != KeyEventType.KeyDown) return@Window false
             when (e.key) {
                 Key.Spacebar -> { ps.toggle(); true }
-                Key.Escape -> { Mini.open = false; true }
+                Key.Escape -> { Mini.expand(); true }
                 else -> false
             }
         },
     ) {
-        LaunchedEffect(Unit) { window.minimumSize = java.awt.Dimension(220, 96) }
-        // Remember where it is and how big, a moment after it stops moving.
-        LaunchedEffect(state.position, state.size) {
+        if (Os.isWindows) LaunchedEffect(Unit) {
+            while (!window.isDisplayable) kotlinx.coroutines.delay(16)
+            kotlinx.coroutines.delay(600)
+            System.setProperty("skiko.renderApi", "OPENGL")
+            GpuMemory.limit(window)
+        }
+        // Only the card takes clicks; around it they go to the window behind.
+        val card = MiniGeom.card
+        LaunchedEffect(card) { runCatching { window.shape = card } }
+        // Remember where the card is and how big, a moment after you stop moving or resizing it.
+        LaunchedEffect(state.position, card, MiniGeom.dragging) {
+            if (MiniGeom.dragging) return@LaunchedEffect
             kotlinx.coroutines.delay(500)
             val p = state.position
-            if (p is WindowPosition.Absolute && MiniDrag.card == null) {
-                Settings.updateMiniBounds(p.x.value.toInt(), p.y.value.toInt(), state.size.width.value.toInt(), state.size.height.value.toInt())
+            if (p is WindowPosition.Absolute) {
+                Settings.updateMiniBounds(p.x.value.toInt() + card.x, p.y.value.toInt() + card.y, card.width, card.height)
             }
         }
         MiniCard(ps, window)
@@ -178,21 +227,16 @@ internal fun MiniCard(ps: PlayerState, window: java.awt.Window) {
     val shape = RoundedCornerShape(radius)
     val art = hiRes(ps.art)
     val colors = rememberCoverColors(art)
-    // While you drag an edge, the window is already full size and only the card changes (smooth);
-    // otherwise the card fills the window.
-    val live = MiniDrag.card
-    val place = if (live != null) {
-        Modifier.offset(live.x.dp, live.y.dp).size(live.width.dp, live.height.dp)
-    } else Modifier.fillMaxSize()
-    Box(place.padding(Margin)) {
+    val card = MiniGeom.card
+    Box(Modifier.offset(card.x.dp, card.y.dp).size(card.width.dp, card.height.dp).padding(Margin)) {
         Box(
             Modifier
                 .fillMaxSize()
                 .hoverable(hover)
-                .shadow(if (live != null) 0.dp else (1f + 13f * depth).dp, shape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
+                .shadow(if (MiniGeom.dragging) 0.dp else (1f + 13f * depth).dp, shape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
                 .clip(shape)
                 // Double-click: back to the full app.
-                .pointerInput(Unit) { detectTapGestures(onDoubleTap = { Mini.open = false; SingleInstance.showMain() }) }
+                .pointerInput(Unit) { detectTapGestures(onDoubleTap = { Mini.expand() }) }
                 .moveWindow(window),
         ) {
             // The back: the song's colour, its blurred cover, or dark glass, as see-through as you set it.
@@ -228,8 +272,8 @@ internal fun MiniCard(ps: PlayerState, window: java.awt.Window) {
             // Open Glasswave and close, shown while the mouse is over it.
             AnimatedVisibility(hovered, Modifier.align(Alignment.TopEnd), enter = fadeIn(), exit = fadeOut()) {
                 Row(Modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    SmallButton(Icons.Rounded.OpenInFull, 13.dp) { SingleInstance.showMain() }
-                    SmallButton(Icons.Rounded.Close, 15.dp) { Mini.open = false }
+                    SmallButton(Icons.Rounded.OpenInFull, 13.dp) { Mini.expand() }
+                    SmallButton(Icons.Rounded.Close, 15.dp) { Mini.setEnabled(false) }
                 }
             }
             // Resize from any edge or corner.
@@ -369,56 +413,48 @@ private fun Modifier.moveWindow(window: java.awt.Window): Modifier = pointerInpu
 }
 
 /**
- * Resizing without the stutter: redrawing a see-through window at a new size each step is slow on
- * Windows, so when a drag starts the window grows once to the most it can be in that direction,
- * then only the card changes size inside it (plain drawing, as smooth as the screen allows), and when
- * you let go the window shrinks to fit the card.
+ * Resizing from an edge: the window never changes size, only the card inside it does (plain drawing,
+ * as smooth as the screen allows). If the card has no room to grow the way you drag, the window
+ * first slides once so the card sits at the far side.
  */
 internal object MiniDrag {
-    /** Where the card sits inside the stretched window during a drag (window units), or null. */
-    var card by mutableStateOf<java.awt.Rectangle?>(null)
-    private val MAX = System.getProperty("gw.miniMax")?.toIntOrNull() ?: 1000
     private var window: java.awt.Window? = null
     private var grab = java.awt.Point()
     private var from = java.awt.Rectangle()
-    private var big = java.awt.Rectangle()
     private var dx = 0
     private var dy = 0
-    private var last = java.awt.Rectangle()
 
     fun start(w: java.awt.Window, edgeX: Int, edgeY: Int, mouse: java.awt.Point) {
         window = w; dx = edgeX; dy = edgeY; grab = mouse
-        from = w.bounds
-        last = from
-        val bx = if (dx < 0) from.x + from.width - MAX else from.x
-        val by = if (dy < 0) from.y + from.height - MAX else from.y
-        big = java.awt.Rectangle(bx, by, if (dx != 0) MAX else from.width, if (dy != 0) MAX else from.height)
-        card = java.awt.Rectangle(from.x - big.x, from.y - big.y, from.width, from.height)
-        w.bounds = big
+        val now = MiniGeom.card
+        val nx = when { dx > 0 -> 0; dx < 0 -> CANVAS - now.width; else -> now.x }
+        val ny = when { dy > 0 -> 0; dy < 0 -> CANVAS - now.height; else -> now.y }
+        if (nx != now.x || ny != now.y) {
+            w.setLocation(w.x + now.x - nx, w.y + now.y - ny)
+            MiniGeom.card = java.awt.Rectangle(nx, ny, now.width, now.height)
+        }
+        from = MiniGeom.card
+        MiniGeom.dragging = true
     }
 
     fun move(mouse: java.awt.Point) {
-        val w = window ?: return
+        if (window == null) return
         val mx = mouse.x - grab.x
         val my = mouse.y - grab.y
-        val min = w.minimumSize
         var x = from.x
         var y = from.y
         var width = from.width
         var height = from.height
-        if (dx > 0) width = (from.width + mx).coerceIn(min.width, MAX)
-        if (dx < 0) { width = (from.width - mx).coerceIn(min.width, MAX); x = from.x + from.width - width }
-        if (dy > 0) height = (from.height + my).coerceIn(min.height, MAX)
-        if (dy < 0) { height = (from.height - my).coerceIn(min.height, MAX); y = from.y + from.height - height }
-        last = java.awt.Rectangle(x, y, width, height)
-        card = java.awt.Rectangle(x - big.x, y - big.y, width, height)
+        if (dx > 0) width = (from.width + mx).coerceIn(MIN_W, CANVAS - from.x)
+        if (dx < 0) { width = (from.width - mx).coerceIn(MIN_W, from.x + from.width); x = from.x + from.width - width }
+        if (dy > 0) height = (from.height + my).coerceIn(MIN_H, CANVAS - from.y)
+        if (dy < 0) { height = (from.height - my).coerceIn(MIN_H, from.y + from.height); y = from.y + from.height - height }
+        MiniGeom.card = java.awt.Rectangle(x, y, width, height)
     }
 
     fun end() {
-        val w = window ?: return
         window = null
-        card = null
-        w.bounds = last
+        MiniGeom.dragging = false
     }
 }
 

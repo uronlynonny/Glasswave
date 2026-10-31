@@ -471,7 +471,7 @@ private fun Look() {
         Choices(listOf(PlayerStyle.CARD, PlayerStyle.PANEL), Settings.playerStyle, { it.label }, { it.detail }) { Settings.updatePlayerStyle(it) }
     }
     Group("Mini player") {
-        SwitchRow("Mini player", "A small player that floats over your other apps. Drag it anywhere, and drag its bottom-right corner to make it bigger or smaller.", Mini.open) { Mini.open = it }
+        SwitchRow("Mini player", "A small player that floats over your other apps. Drag it anywhere, and drag its bottom-right corner to make it bigger or smaller.", Mini.enabled) { Mini.setEnabled(it) }
         Divider()
         Choices(MiniStyle.entries, Settings.miniStyle, { it.label }, { it.detail }) { Settings.updateMiniStyle(it) }
         Divider()
@@ -482,7 +482,7 @@ private fun Look() {
         SwitchRow("Keep on top", "Stays above your other windows.", Settings.miniOnTop) { Settings.updateMiniOnTop(it) }
         SwitchRow("Progress bar", "Shows how far into the song you are. Click or drag it to jump.", Settings.miniProgress) { Settings.updateMiniProgress(it) }
     }
-    Note("Also opens from the mini player button in the player bar, next to full screen. While it's in front, Space plays and pauses and Esc closes it.")
+    Note("While it's on, the mini player shows up whenever you minimize Glasswave. Its expand button, or a double-click, brings Glasswave back. Also turns on from the mini player button in the player bar. Space plays and pauses while it's in front.")
     Group("Play button") {
         Choices(ButtonStyle.entries, Settings.buttonStyle, { it.label }, { it.detail }) { Settings.updateButtonStyle(it) }
     }

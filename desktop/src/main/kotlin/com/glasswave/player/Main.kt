@@ -197,7 +197,7 @@ object WinMemory {
 object GpuMemory {
     /** What the graphics store may keep between frames. */
     private const val LIMIT = 32L * 1024 * 1024
-    private var done: Any? = null
+    private val done = java.util.Collections.newSetFromMap(java.util.WeakHashMap<Any, Boolean>())
 
     private fun field(o: Any, name: String): Any? {
         var c: Class<*>? = o.javaClass
@@ -225,10 +225,10 @@ object GpuMemory {
                 ?.invoke(layer) ?: return
             val handler = field(redrawer, "contextHandler") ?: return
             val ctx = field(handler, "context") as? org.jetbrains.skia.DirectContext ?: return
-            if (done === ctx) return
+            if (ctx in done) return
             ctx.resourceCacheLimit = LIMIT
             android.util.Log.i("Glasswave", "Graphics memory limited to ${LIMIT shr 20} MB")
-            done = ctx
+            done += ctx
         }.onFailure { android.util.Log.w("Glasswave", "Couldn't limit graphics memory", it) }
     }
 }
@@ -406,6 +406,8 @@ fun main() {
                     }
                 }
             }
+            // Mini player button on: minimizing this window brings up the mini player, and bringing it back tucks it away.
+            LaunchedEffect(state.isMinimized, shown) { Mini.mainMinimized(state.isMinimized || !shown) }
             LaunchedEffect(state.isMinimized) {
                 if (!state.isMinimized) return@LaunchedEffect
                 kotlinx.coroutines.delay(2_000)

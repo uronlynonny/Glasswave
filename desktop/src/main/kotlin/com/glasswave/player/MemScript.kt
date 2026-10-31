@@ -139,18 +139,19 @@ object MemScript {
                         }
                         "toggle" -> onUi { ps.toggle() }
                         // mini on|off: the mini player window. miniinfo: how that window is set up. minisize w h: resizes it.
-                        "mini" -> onUi { Mini.open = arg == "on" }
+                        "mini" -> onUi { Mini.setEnabled(arg == "on") }
                         "miniinfo" -> onUi {
                             val m = java.awt.Window.getWindows().firstOrNull { (it as? java.awt.Frame)?.title == "Glasswave mini player" && it.isDisplayable } as? java.awt.Frame
-                            System.err.println(if (m == null) "GW miniinfo: no mini window" else "GW miniinfo: at ${m.x},${m.y} size ${m.width}x${m.height} onTop=${m.isAlwaysOnTop} undecorated=${m.isUndecorated} seeThrough=${(m as? androidx.compose.ui.awt.ComposeWindow)?.isTransparent} bg=${m.background} opaque=${m.isOpaque} saved=${Settings.miniBounds}")
+                            System.err.println(if (m == null) "GW miniinfo: no mini window" else "GW miniinfo: at ${m.x},${m.y} size ${m.width}x${m.height} onTop=${m.isAlwaysOnTop} undecorated=${m.isUndecorated} seeThrough=${(m as? androidx.compose.ui.awt.ComposeWindow)?.isTransparent} bg=${m.background} opaque=${m.isOpaque} api=${(m as? androidx.compose.ui.awt.ComposeWindow)?.renderApi} mainApi=${(java.awt.Window.getWindows().firstOrNull { (it as? java.awt.Frame)?.title == "Glasswave" && it.isDisplayable } as? androidx.compose.ui.awt.ComposeWindow)?.renderApi} card=${MiniGeom.card} shape=${m.shape?.bounds} saved=${Settings.miniBounds}")
                         }
                         // minishot file: puts the mini player over this test copy's own window and saves a picture of just that spot.
                         "minishot" -> {
                             val main = java.awt.Window.getWindows().first { (it as? java.awt.Frame)?.title == "Glasswave" && it.isDisplayable }
                             val m = java.awt.Window.getWindows().first { (it as? java.awt.Frame)?.title == "Glasswave mini player" && it.isDisplayable }
-                            onUi { (main as java.awt.Frame).isAlwaysOnTop = true; main.toFront(); m.setLocation(main.x + main.width / 2 - m.width / 2, main.y + main.height / 3); m.toFront() }
+                            onUi { (main as java.awt.Frame).isAlwaysOnTop = true; main.toFront(); m.setLocation(main.x + main.width / 2 - MiniGeom.card.width / 2 - MiniGeom.card.x, main.y + main.height / 3 - MiniGeom.card.y); m.toFront() }
                             Thread.sleep(1200)
-                            val img = java.awt.Robot().createScreenCapture(m.bounds)
+                            val c = MiniGeom.card
+                            val img = java.awt.Robot().createScreenCapture(java.awt.Rectangle(m.x + c.x, m.y + c.y, c.width, c.height))
                             javax.imageio.ImageIO.write(img, "png", File(arg))
                             onUi { (main as java.awt.Frame).isAlwaysOnTop = false }
                         }
@@ -162,26 +163,40 @@ object MemScript {
                             var worst = 0L
                             var total = 0L
                             val t0 = System.nanoTime()
-                            val direct = "direct" in arg
-                            val start = m.bounds
-                            if (!direct) onUi { MiniDrag.start(m, 1, 1, java.awt.Point(0, 0)) }
+                            onUi { MiniDrag.start(m, 1, 1, java.awt.Point(0, 0)) }
                             for (i in 0 until n) {
                                 val f = (1 - Math.cos(i * Math.PI * 2 / n)) / 2
                                 val a = System.nanoTime()
-                                if (direct) onUi { m.bounds = java.awt.Rectangle(start.x, start.y, (start.width + 300 * f).toInt(), (start.height + 280 * f).toInt()) }
-                                else onUi { MiniDrag.move(java.awt.Point((300 * f).toInt(), (280 * f).toInt())) }
+                                onUi { MiniDrag.move(java.awt.Point((300 * f).toInt(), (280 * f).toInt())) }
                                 val took = (System.nanoTime() - a) / 1_000_000
                                 worst = maxOf(worst, took); total += took
                                 Thread.sleep(8)
                             }
-                            if (!direct) onUi { MiniDrag.end() }
+                            onUi { MiniDrag.end() }
                             Thread.sleep(300)
                             val secs = (System.nanoTime() - t0) / 1e9
                             System.err.println("GW miniresize [" + (m as? androidx.compose.ui.awt.ComposeWindow)?.renderApi + "]: $n steps in %.1f s, app busy %d ms per step (worst %d ms), mini drew %d frames (%.0f a second), longest gap %d ms".format(secs, total / n, worst, MiniFrames.count, MiniFrames.count / secs, MiniFrames.maxGapMs))
                         }
+                        // mainmin / mainback: minimizes this test copy's main window, or brings it back.
+                        // miniexpand: the mini player's expand button. ministate: whether it's on and showing.
+                        "mainmin", "mainback" -> onUi {
+                            val main = java.awt.Window.getWindows().first { (it as? java.awt.Frame)?.title == "Glasswave" && it.isDisplayable } as java.awt.Frame
+                            main.extendedState = if (parts[0] == "mainmin") java.awt.Frame.ICONIFIED else java.awt.Frame.NORMAL
+                        }
+                        "miniexpand" -> onUi { Mini.expand() }
+                        // minimove x y: puts the mini player's card at that spot on screen.
+                        "minimove" -> onUi {
+                            val (x, y) = arg.split(" ").map { it.toInt() }
+                            java.awt.Window.getWindows().first { (it as? java.awt.Frame)?.title == "Glasswave mini player" && it.isDisplayable }.setLocation(x - MiniGeom.card.x, y - MiniGeom.card.y)
+                        }
+                        "ministate" -> onUi {
+                            val main = java.awt.Window.getWindows().first { (it as? java.awt.Frame)?.title == "Glasswave" && it.isDisplayable } as java.awt.Frame
+                            val m = java.awt.Window.getWindows().firstOrNull { (it as? java.awt.Frame)?.title == "Glasswave mini player" && it.isDisplayable }
+                            System.err.println("GW ministate: button on=${Mini.enabled}, mini showing=${Mini.shown} (window ${if (m != null) "open" else "closed"}), main minimized=${main.extendedState and java.awt.Frame.ICONIFIED != 0}")
+                        }
                         "minisize" -> onUi {
                             val (w, h) = arg.split(" ").map { it.toInt() }
-                            java.awt.Window.getWindows().firstOrNull { (it as? java.awt.Frame)?.title == "Glasswave mini player" && it.isDisplayable }?.setSize(w, h)
+                            MiniGeom.card = java.awt.Rectangle(MiniGeom.card.x, MiniGeom.card.y, w, h)
                         }
                         // fillpl N: adds the N most recent songs to the open playlist.
                         "fillpl" -> onUi { (vm.stack.lastOrNull() as? Route.Saved)?.info?.let { p -> History.tracks.take(arg.toInt()).forEach { Library.add(p.id, it) } } }
