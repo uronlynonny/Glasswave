@@ -24,6 +24,7 @@ class SignInExpired(service: String) : IOException("$service sign-in expired")
 object YtMusicApi {
     private const val ORIGIN = "https://music.youtube.com"
     private const val CLIENT_VERSION = "1.20251015.01.00"
+    private const val ANDROID_VERSION = "7.27.52"
     private val JSON = "application/json".toMediaType()
 
     enum class Filter(val label: String, val params: String?) {
@@ -491,6 +492,43 @@ object YtMusicApi {
     }
 
     /** YouTube Music's own lyrics for a song (plain text, no timing), or null if it has none. */
+    /**
+     * YouTube Music's own lyrics, timed line by line: [start ms, line]. Asking the way the phone app
+     * does gets the timings (the website only gets plain text). Signed out, so nothing is saved to
+     * your account. Null when the song has no timed lyrics. Blocking.
+     */
+    fun timedLyrics(videoId: String): List<Pair<Long, String>>? {
+        val next = call("next", JSONObject().put("videoId", videoId).put("isAudioOnly", true))
+        val id = collect(next, "browseEndpoint").map { it.optString("browseId") }.firstOrNull { it.startsWith("MPLYt") }
+            ?: return null
+        val body = JSONObject().put("browseId", id).put(
+            "context",
+            JSONObject().put(
+                "client",
+                JSONObject().put("clientName", "ANDROID_MUSIC").put("clientVersion", ANDROID_VERSION)
+                    .put("androidSdkVersion", 34).put("hl", "en"),
+            ),
+        )
+        val req = Request.Builder().url("$ORIGIN/youtubei/v1/browse?prettyPrint=false")
+            .post(body.toString().toRequestBody(JSON))
+            .header("User-Agent", "com.google.android.apps.youtube.music/$ANDROID_VERSION (Linux; U; Android 14) gzip")
+            .build()
+        val json = YtRepo.http.newCall(req).execute().use { r ->
+            if (!r.isSuccessful) throw IOException("YouTube Music replied ${r.code}")
+            JSONObject(r.body?.string() ?: "{}")
+        }
+        fun find(n: Any?): JSONArray? = when (n) {
+            is JSONObject -> n.optJSONArray("timedLyricsData") ?: n.keys().asSequence().firstNotNullOfOrNull { find(n.opt(it)) }
+            is JSONArray -> (0 until n.length()).firstNotNullOfOrNull { find(n.opt(it)) }
+            else -> null
+        }
+        val arr = find(json) ?: return null
+        return (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }.mapNotNull { l ->
+            val ms = l.optJSONObject("cueRange")?.optString("startTimeMilliseconds")?.toLongOrNull() ?: return@mapNotNull null
+            ms to l.optString("lyricLine")
+        }.takeIf { it.size >= 4 }
+    }
+
     suspend fun lyrics(videoId: String): String? = withContext(Dispatchers.IO) {
         val next = call("next", JSONObject().put("videoId", videoId).put("isAudioOnly", true))
         val id = collect(next, "browseEndpoint").map { it.optString("browseId") }.firstOrNull { it.startsWith("MPLYt") }

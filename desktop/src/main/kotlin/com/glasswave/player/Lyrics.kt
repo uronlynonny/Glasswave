@@ -35,7 +35,8 @@ data class Lyrics(val lines: List<LyricLine>, val synced: Boolean, val source: S
  * Finds lyrics for a song, trying in order:
  * 1. LRCLIB, a free open lyrics library with time-synced lyrics,
  * 2. KuGou, a big lyrics catalogue (synced) that many open-source players use as a backup,
- * 3. NetEase Cloud Music, another big catalogue (synced).
+ * 3. YouTube Music's own lyrics, timed (for the exact song playing, so never a wrong match),
+ * 4. NetEase Cloud Music, another big catalogue (synced).
  * Lyrics without timing are never used: they'd sit still instead of scrolling with the song.
  * KuGou often times every word, not just every line. When LRCLIB only times lines, KuGou's
  * word-by-word version is used instead if it's clearly the same song with the same timing.
@@ -92,6 +93,7 @@ object LyricsRepo {
         val failedBefore = failedCalls.get()
         val fromKugou = async { runCatching { kugou(t, a, seconds) }.getOrNull() }
         val fromNetease = async { runCatching { netease(t, a, seconds) }.getOrNull() }
+        val fromYoutube = async { runCatching { youtubeTimed(url) }.getOrNull() }
         val fromLrclib = runCatching { lrclib(t, a, seconds) }.getOrNull()
         fun fits(k: Lyrics) = seconds <= 0 || (k.lines.lastOrNull()?.ms ?: 0) / 1000 <= seconds + 3
         val lrclibSynced = fromLrclib?.takeIf { it.synced }
@@ -99,12 +101,18 @@ object LyricsRepo {
             // LRCLIB usually times whole lines; KuGou often times every word. Use KuGou's only when
             // it's clearly the same song with the same timing, otherwise keep LRCLIB's.
             fromNetease.cancel()
+            fromYoutube.cancel()
             if (lrclibSynced.wordTimed) lrclibSynced.also { fromKugou.cancel() }
             else fromKugou.await()
                 ?.takeIf { k -> k.wordTimed && fits(k) && sameSong(lrclibSynced, k) }
                 ?: lrclibSynced
         } else {
-            fromKugou.await()?.takeIf { fits(it) && it.synced }
+            // KuGou when it times every word; otherwise YouTube Music's (made for this exact song),
+            // then KuGou's line timing, then NetEase.
+            val k = fromKugou.await()?.takeIf { fits(it) && it.synced }
+            k?.takeIf { it.wordTimed }
+                ?: fromYoutube.await()?.takeIf { fits(it) }
+                ?: k
                 ?: fromNetease.await()?.takeIf { fits(it) }
         }
         // Filling in starred words keeps the same number of letters, so word timings still line up.
@@ -502,6 +510,13 @@ object LyricsRepo {
     }
 
     /* ---------------- YouTube Music ---------------- */
+
+    /** YouTube Music's timed lyrics for the song (its explicit version when it's a clean one). */
+    private fun youtubeTimed(url: String): Lyrics? {
+        val id = YtRepo.videoIdFor(runCatching { YtRepo.uncensored(url) }.getOrDefault(url)) ?: return null
+        val lines = YtMusicApi.timedLyrics(id) ?: return null
+        return Lyrics(lines.map { (ms, text) -> LyricLine(ms, text.trim()) }, true, "YouTube Music")
+    }
 
     private suspend fun youtube(url: String): Lyrics? {
         val id = YtRepo.videoIdFor(url) ?: return null
