@@ -1,5 +1,5 @@
 {
-  "lastTime": 1793403107,
+  "lastTime": 1793407985,
   "totals": {
     "visits": 106,
     "siteDownloads": 34,
@@ -1086,9 +1086,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1793411564,
+      "v": 0,
+      "d": 0,
+      "a": 0
     }
   ],
-  "updated": 1793407984,
+  "updated": 1793411564,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -1171,7 +1177,7 @@
       "m": "\"Mutlu Ol Yeter\" by Müslüm Gürses wouldn't play (tried 4 times).\nERROR_CODE_IO_UNSPECIFIED\nIOException: YouTube lookup failed\nParsingException: URL not accepted: https://music.youtube.com/watch?v=cdkco-e250A\n\nXiaomi M2101K7BG, Android 13, Glasswave 0.18.12\nhttps://music.youtube.com/watch?v=cdkco-e250A"
     }
   ],
-  "lastActiveTime": 1793407983,
+  "lastActiveTime": 1793409151,
   "activeIds": {
     "2026-10-24": {
       "w": [
