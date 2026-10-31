@@ -154,6 +154,31 @@ object MemScript {
                             javax.imageio.ImageIO.write(img, "png", File(arg))
                             onUi { (main as java.awt.Frame).isAlwaysOnTop = false }
                         }
+                        // miniresize n: resizes the mini player n times, like a fast drag, and says how smooth it was.
+                        "miniresize" -> {
+                            val m = java.awt.Window.getWindows().first { (it as? java.awt.Frame)?.title == "Glasswave mini player" && it.isDisplayable }
+                            val n = arg.split(" ")[0].toInt()
+                            MiniFrames.reset()
+                            var worst = 0L
+                            var total = 0L
+                            val t0 = System.nanoTime()
+                            val direct = "direct" in arg
+                            val start = m.bounds
+                            if (!direct) onUi { MiniDrag.start(m, 1, 1, java.awt.Point(0, 0)) }
+                            for (i in 0 until n) {
+                                val f = (1 - Math.cos(i * Math.PI * 2 / n)) / 2
+                                val a = System.nanoTime()
+                                if (direct) onUi { m.bounds = java.awt.Rectangle(start.x, start.y, (start.width + 300 * f).toInt(), (start.height + 280 * f).toInt()) }
+                                else onUi { MiniDrag.move(java.awt.Point((300 * f).toInt(), (280 * f).toInt())) }
+                                val took = (System.nanoTime() - a) / 1_000_000
+                                worst = maxOf(worst, took); total += took
+                                Thread.sleep(8)
+                            }
+                            if (!direct) onUi { MiniDrag.end() }
+                            Thread.sleep(300)
+                            val secs = (System.nanoTime() - t0) / 1e9
+                            System.err.println("GW miniresize [" + (m as? androidx.compose.ui.awt.ComposeWindow)?.renderApi + "]: $n steps in %.1f s, app busy %d ms per step (worst %d ms), mini drew %d frames (%.0f a second), longest gap %d ms".format(secs, total / n, worst, MiniFrames.count, MiniFrames.count / secs, MiniFrames.maxGapMs))
+                        }
                         "minisize" -> onUi {
                             val (w, h) = arg.split(" ").map { it.toInt() }
                             java.awt.Window.getWindows().firstOrNull { (it as? java.awt.Frame)?.title == "Glasswave mini player" && it.isDisplayable }?.setSize(w, h)
