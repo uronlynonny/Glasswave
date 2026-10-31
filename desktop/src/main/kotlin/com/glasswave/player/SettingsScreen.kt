@@ -34,6 +34,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PictureInPictureAlt
+import androidx.compose.material.icons.rounded.Opacity
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.RoundedCorner
+import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.rounded.LinearScale
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -150,6 +156,12 @@ private fun iconFor(title: String): ImageVector {
     val t = title.lowercase()
     fun has(vararg w: String) = w.any { it in t }
     return when {
+        has("mini player") -> Icons.Rounded.PictureInPictureAlt
+        has("transparency") -> Icons.Rounded.Opacity
+        has("depth") -> Icons.Rounded.Layers
+        has("corners") -> Icons.Rounded.RoundedCorner
+        has("keep on top") -> Icons.Rounded.PushPin
+        has("progress bar") -> Icons.Rounded.LinearScale
         has("frosted glass") -> Icons.Rounded.Contrast
         has("colour", "color", "theme") -> Icons.Rounded.Palette
         has("glass", "blur") -> Icons.Rounded.BlurOn
@@ -403,14 +415,14 @@ private fun Look() {
         Choices(
             listOf(false, true), Settings.homeCovers,
             { if (it) "Covers" else "List" },
-            { if (it) "Home's song shelves show big covers." else "Home's song shelves show a list of songs." },
+            { if (it) "Home's song shelves show big covers. (Also the button at the top of Home.)" else "Home's song shelves show a list of songs. (Also the button at the top of Home.)" },
         ) { Settings.updateHomeCovers(it) }
         Divider()
         GText("Library", 15, Color.White, FontWeight.SemiBold, modifier = Modifier.padding(start = 18.dp, top = 12.dp))
         Choices(
             listOf(false, true), Settings.libraryList,
             { if (it) "List" else "Grid" },
-            { if (it) "Your playlists in a list. (Also the button at the top of the Library.)" else "Your playlists as big covers. (Also the button at the top of the Library.)" },
+            { if (it) "Your playlists in a list." else "Your playlists as big covers." },
         ) { Settings.updateLibraryList(it) }
     }
     Group("App colours") {
@@ -458,6 +470,19 @@ private fun Look() {
     Group("Player style") {
         Choices(listOf(PlayerStyle.CARD, PlayerStyle.PANEL), Settings.playerStyle, { it.label }, { it.detail }) { Settings.updatePlayerStyle(it) }
     }
+    Group("Mini player") {
+        SwitchRow("Mini player", "A small player that floats over your other apps. Drag it anywhere, and drag its bottom-right corner to make it bigger or smaller.", Mini.open) { Mini.open = it }
+        Divider()
+        Choices(MiniStyle.entries, Settings.miniStyle, { it.label }, { it.detail }) { Settings.updateMiniStyle(it) }
+        Divider()
+        SliderRow("Transparency", "${((1f - Settings.miniOpacity) * 100).toInt()}%", 1f - Settings.miniOpacity, 0f..0.8f) { Settings.updateMiniOpacity(1f - it) }
+        SliderRow("Depth", depthWord(Settings.miniDepth), Settings.miniDepth, 0f..1f) { Settings.updateMiniDepth(it) }
+        SliderRow("Corners", cornerWord(Settings.miniCorners), Settings.miniCorners, 0f..1f) { Settings.updateMiniCorners(it) }
+        Divider()
+        SwitchRow("Keep on top", "Stays above your other windows.", Settings.miniOnTop) { Settings.updateMiniOnTop(it) }
+        SwitchRow("Progress bar", "Shows how far into the song you are. Click or drag it to jump.", Settings.miniProgress) { Settings.updateMiniProgress(it) }
+    }
+    Note("Also opens from the mini player button in the player bar, next to full screen. While it's in front, Space plays and pauses and Esc closes it.")
     Group("Play button") {
         Choices(ButtonStyle.entries, Settings.buttonStyle, { it.label }, { it.detail }) { Settings.updateButtonStyle(it) }
     }
@@ -776,6 +801,7 @@ private fun About(c: ScreenCtx) {
         Column(Modifier.padding(18.dp)) {
             GText("Glasswave " + Updater.currentVersion(), 18, weight = FontWeight.Bold)
             GText("Made by " + Credits.AUTHOR, 14, CoverTint.accent, FontWeight.SemiBold)
+            GText(Credits.COPYRIGHT, 12, Faint)
             Spacer(Modifier.height(6.dp))
             GText(
                 "A light YouTube Music player with liquid glass. Songs stream from YouTube Music; Spotify playlists are matched to YouTube Music.",
@@ -900,6 +926,8 @@ private fun balanceWord(v: Float) = when {
     else -> "${(v * 100).toInt()}% right"
 }
 private fun glassWord(v: Float) = when { v < 0.7f -> "Clear"; v < 1.25f -> "Normal"; else -> "Frosted" }
+private fun depthWord(v: Float) = when { v < 0.1f -> "Flat"; v < 0.4f -> "Light"; v < 0.75f -> "Medium"; else -> "Deep" }
+private fun cornerWord(v: Float) = when { v < 0.15f -> "Square"; v < 0.5f -> "Soft"; v < 0.85f -> "Round"; else -> "Very round" }
 
 /** A title, the value on the right, and a slider underneath. [center] fills from that point (for things like balance). */
 @Composable

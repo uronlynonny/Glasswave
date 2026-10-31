@@ -16,3 +16,7 @@ Every source file starts with this line:
 
 and the app itself carries the credit in Settings (bottom of the main page and in About), in its
 string resources (`app_author`) and in its manifest (`glasswave.author`).
+
+Glasswave is © 2026 nonny dev and is licensed under GPL-3.0 with additional terms that require
+keeping this credit, renaming changed versions, and not using the Glasswave name or logo. See
+[NOTICE.md](NOTICE.md) and [LICENSE](LICENSE).
