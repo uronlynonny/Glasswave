@@ -88,7 +88,7 @@ fun openInBrowser(url: String) {
 }
 
 /** The app icon (the wave), drawn in code so the window and taskbar get it at any size. */
-private val AppIcon: ImageVector = ImageVector.Builder("Glasswave", 108.dp, 108.dp, 108f, 108f)
+internal val AppIcon: ImageVector = ImageVector.Builder("Glasswave", 108.dp, 108.dp, 108f, 108f)
     .addPath(PathParser().parsePathString("M18,0h72a18,18 0 0 1 18,18v72a18,18 0 0 1 -18,18h-72a18,18 0 0 1 -18,-18v-72a18,18 0 0 1 18,-18z").toNodes(), fill = SolidColor(Color(0xFF0E0E0E)))
     .addPath(
         PathParser().parsePathString("M30,60C38,38 48,38 54,54S70,70 78,48").toNodes(),
@@ -439,5 +439,7 @@ fun main() {
                 TitleBar.Bar(window, Modifier.align(androidx.compose.ui.Alignment.TopStart))
             }
         }
+        // The mini player: its own small window over your other apps.
+        MiniPlayerWindow(ps, rememberVectorPainter(AppIcon))
     }
 }

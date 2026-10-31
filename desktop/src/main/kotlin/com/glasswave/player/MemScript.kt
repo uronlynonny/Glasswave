@@ -138,6 +138,26 @@ object MemScript {
                             System.err.println("GW animcover ${song?.title} / ${song?.artist}: " + (song?.let { kotlinx.coroutines.runBlocking { AnimatedCovers.videoFor(it) } }))
                         }
                         "toggle" -> onUi { ps.toggle() }
+                        // mini on|off: the mini player window. miniinfo: how that window is set up. minisize w h: resizes it.
+                        "mini" -> onUi { Mini.open = arg == "on" }
+                        "miniinfo" -> onUi {
+                            val m = java.awt.Window.getWindows().firstOrNull { (it as? java.awt.Frame)?.title == "Glasswave mini player" && it.isDisplayable } as? java.awt.Frame
+                            System.err.println(if (m == null) "GW miniinfo: no mini window" else "GW miniinfo: at ${m.x},${m.y} size ${m.width}x${m.height} onTop=${m.isAlwaysOnTop} undecorated=${m.isUndecorated} seeThrough=${(m as? androidx.compose.ui.awt.ComposeWindow)?.isTransparent} bg=${m.background} opaque=${m.isOpaque} saved=${Settings.miniBounds}")
+                        }
+                        // minishot file: puts the mini player over this test copy's own window and saves a picture of just that spot.
+                        "minishot" -> {
+                            val main = java.awt.Window.getWindows().first { (it as? java.awt.Frame)?.title == "Glasswave" && it.isDisplayable }
+                            val m = java.awt.Window.getWindows().first { (it as? java.awt.Frame)?.title == "Glasswave mini player" && it.isDisplayable }
+                            onUi { (main as java.awt.Frame).isAlwaysOnTop = true; main.toFront(); m.setLocation(main.x + main.width / 2 - m.width / 2, main.y + main.height / 3); m.toFront() }
+                            Thread.sleep(1200)
+                            val img = java.awt.Robot().createScreenCapture(m.bounds)
+                            javax.imageio.ImageIO.write(img, "png", File(arg))
+                            onUi { (main as java.awt.Frame).isAlwaysOnTop = false }
+                        }
+                        "minisize" -> onUi {
+                            val (w, h) = arg.split(" ").map { it.toInt() }
+                            java.awt.Window.getWindows().firstOrNull { (it as? java.awt.Frame)?.title == "Glasswave mini player" && it.isDisplayable }?.setSize(w, h)
+                        }
                         // fillpl N: adds the N most recent songs to the open playlist.
                         "fillpl" -> onUi { (vm.stack.lastOrNull() as? Route.Saved)?.info?.let { p -> History.tracks.take(arg.toInt()).forEach { Library.add(p.id, it) } } }
                         // fps N: how smoothly the window draws over the next N seconds.

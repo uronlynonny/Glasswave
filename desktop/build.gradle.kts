@@ -13,7 +13,7 @@ plugins {
 val appBuild = file("../app/build.gradle.kts").readText()
 // Glasswave for Windows has its own version number, separate from the phone app.
 // Raise it for every Windows release: installed copies update themselves to a higher number.
-val appVersion = "1.2.30"
+val appVersion = "1.2.31"
 // Which computer this build is for: the one building it (a Mac build has to be made on a Mac).
 val hostOs = System.getProperty("os.name").lowercase()
 val isMac = hostOs.startsWith("mac")
@@ -287,6 +287,8 @@ tasks.register<JavaExec>("memCheck") {
     systemProperty("gw.noCheckIn", "1")
     (project.findProperty("renderApi") as String?)?.let { systemProperty("skiko.renderApi", it) }
     (project.findProperty("extraJvm") as String?)?.let { jvmArgs(it.split(" ")) }
+    // -PdataDir=<folder>: its own data folder, so it can run next to another check.
+    (project.findProperty("dataDir") as String?)?.let { environment("APPDATA", "$it/roaming"); environment("LOCALAPPDATA", "$it/local") }
 }
 
 // Remakes the website's link preview picture, docs/og.png (see OgImage.kt).
@@ -312,6 +314,13 @@ tasks.register<JavaExec>("instanceCheck") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("com.glasswave.player.InstanceCheckKt")
     (project.findProperty("dir") as String?)?.let { environment("APPDATA", it) }
+}
+
+// Draws the mini player in each style and size (-Pout=<folder> for the pictures).
+tasks.register<JavaExec>("miniCheck") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.MiniCheckKt")
+    (project.findProperty("out") as String?)?.let { args(it) }
 }
 
 tasks.register<JavaExec>("titleCheck") {

@@ -20,6 +20,13 @@ enum class Quality(val label: String, val detail: String, val itags: List<Int>) 
     HIGH("High", "Best YouTube offers, about 160 kbps Opus.", listOf(251, 141, 140, 250, 249, 139)),
 }
 
+/** How the mini player looks (Settings > Look > Mini player). */
+enum class MiniStyle(val label: String, val detail: String) {
+    COLOUR("Song colour", "Takes its colour from the song's cover and changes with every song."),
+    BLUR("Blurred cover", "The song's cover, softly blurred, fills the back."),
+    DARK("Dark glass", "Plain dark glass, whatever is playing."),
+}
+
 enum class PlayerStyle(val label: String, val detail: String) {
     IMMERSIVE("Immersive", "Cover fills the top of the screen, edge to edge."),
     CANVAS("Full screen", "Cover or video fills the whole screen behind the controls."),
@@ -210,6 +217,13 @@ object Settings {
         libraryList = prefs.getBoolean("library_list", false)
         homeCovers = prefs.getBoolean("home_covers", false) || System.getProperty("gw.homeCovers") == "1"
         if (System.getProperty("gw.libraryList") == "1") libraryList = true
+        miniStyle = enumPref("mini_style", MiniStyle.COLOUR)
+        miniOpacity = prefs.getFloat("mini_opacity", 0.85f)
+        miniDepth = prefs.getFloat("mini_depth", 0.5f)
+        miniCorners = prefs.getFloat("mini_corners", 0.6f)
+        miniOnTop = prefs.getBoolean("mini_on_top", true)
+        miniProgress = prefs.getBoolean("mini_progress", true)
+        miniBounds = prefs.getString("mini_bounds", null)?.split(",")?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 4 }
     }
 
     fun updateFrameRate(f: FrameRate) { frameRate = f; prefs.edit { putString("frame_rate", f.name) } }
@@ -250,6 +264,29 @@ object Settings {
     fun updateCleanLook(on: Boolean) { cleanLook = on; prefs.edit { putBoolean("clean_look", on) } }
     fun updateLibraryList(on: Boolean) { libraryList = on; prefs.edit { putBoolean("library_list", on) } }
     fun updateHomeCovers(on: Boolean) { homeCovers = on; prefs.edit { putBoolean("home_covers", on) } }
+
+    /* ---- Mini player (a small window that stays on top) ---- */
+    var miniStyle by mutableStateOf(MiniStyle.COLOUR); private set
+    /** 0.2..1: how see-through (low) or solid (high) the mini player is. */
+    var miniOpacity by mutableFloatStateOf(0.85f); private set
+    /** 0..1: flat (0) to deep glass with a strong shadow, rim and shine (1). */
+    var miniDepth by mutableFloatStateOf(0.5f); private set
+    /** 0..1: square (0) to very round (1) corners. */
+    var miniCorners by mutableFloatStateOf(0.6f); private set
+    var miniOnTop by mutableStateOf(true); private set
+    var miniProgress by mutableStateOf(true); private set
+    /** Where the mini player was and how big (x, y, width, height), or null for the default. */
+    var miniBounds: List<Int>? = null; private set
+    fun updateMiniStyle(s: MiniStyle) { miniStyle = s; prefs.edit { putString("mini_style", s.name) } }
+    fun updateMiniOpacity(v: Float) { miniOpacity = v.coerceIn(0.2f, 1f); prefs.edit { putFloat("mini_opacity", miniOpacity) } }
+    fun updateMiniDepth(v: Float) { miniDepth = v.coerceIn(0f, 1f); prefs.edit { putFloat("mini_depth", miniDepth) } }
+    fun updateMiniCorners(v: Float) { miniCorners = v.coerceIn(0f, 1f); prefs.edit { putFloat("mini_corners", miniCorners) } }
+    fun updateMiniOnTop(on: Boolean) { miniOnTop = on; prefs.edit { putBoolean("mini_on_top", on) } }
+    fun updateMiniProgress(on: Boolean) { miniProgress = on; prefs.edit { putBoolean("mini_progress", on) } }
+    fun updateMiniBounds(x: Int, y: Int, w: Int, h: Int) {
+        miniBounds = listOf(x, y, w, h)
+        prefs.edit { putString("mini_bounds", "$x,$y,$w,$h") }
+    }
     fun updateDarkFrost(on: Boolean) { darkFrost = on; prefs.edit { putBoolean("dark_frost", on) } }
     fun updatePlayerStyle(s: PlayerStyle) { playerStyle = s; prefs.edit { putString("player_style", s.name) } }
     fun updateButtonStyle(s: ButtonStyle) { buttonStyle = s; prefs.edit { putString("button_style", s.name) } }

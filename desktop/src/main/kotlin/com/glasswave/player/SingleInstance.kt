@@ -26,6 +26,9 @@ object SingleInstance {
     var showRequests by mutableIntStateOf(0)
         private set
 
+    /** Brings Glasswave's main window to the front (from the mini player). */
+    fun showMain() { showRequests++ }
+
     /** True if this is the only copy running. If one is already open, asks it to come forward. */
     fun claim(): Boolean {
         val lockFile = File(AppDirs.data, "running.lock")
