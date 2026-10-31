@@ -1,11 +1,11 @@
 {
-  "lastTime": 1793442784,
+  "lastTime": 1793446297,
   "totals": {
     "visits": 108,
     "siteDownloads": 34,
-    "apk": 207
+    "apk": 208
   },
-  "apkTotal": 170,
+  "apkTotal": 171,
   "hours": [
     {
       "t": 1792763089,
@@ -1158,9 +1158,15 @@
       "v": 0,
       "d": 0,
       "a": 3
+    },
+    {
+      "t": 1793450532,
+      "v": 0,
+      "d": 0,
+      "a": 1
     }
   ],
-  "updated": 1793446296,
+  "updated": 1793450532,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -1247,7 +1253,7 @@
       "m": "\"Arabella\" by Arctic Monkeys wouldn't play (tried 4 times).\nIOException: No playable audio found\n\nWindows 11 (10.0), Glasswave for Windows 1.2.1\ngwmatch://t?q=Arabella%20Arctic%20Monkeys&d=207"
     }
   ],
-  "lastActiveTime": 1793441186,
+  "lastActiveTime": 1793450102,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -1393,7 +1399,8 @@
         "97b14727-911d-4245-9d38-1ef73d84dcf8",
         "a664a45f-fb32-4f31-b410-1755a0fc851f",
         "b40577e8-17f8-4460-839e-0cef28e7acc4",
-        "dd6e71af-8c19-47d5-b446-82598c3cd952"
+        "dd6e71af-8c19-47d5-b446-82598c3cd952",
+        "f26e3a11-ef03-4fea-a5bd-bda93da47da3"
       ],
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
@@ -1406,7 +1413,7 @@
   },
   "active": {
     "today": {
-      "a": 7,
+      "a": 8,
       "w": 5
     },
     "week": {
@@ -1455,7 +1462,7 @@
       },
       {
         "d": "2026-10-31",
-        "a": 7,
+        "a": 8,
         "w": 5
       }
     ]
