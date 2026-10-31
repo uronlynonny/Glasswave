@@ -361,6 +361,25 @@ object MemScript {
                             }
                         }
                         "offline" -> onUi { vm.homeOfflineForCheck() }
+                        // lyricsfor query: the first song a search finds, and where its lyrics come from.
+                        "lyricsfor" -> {
+                            val s = kotlinx.coroutines.runBlocking { YtMusicApi.search(arg, YtMusicApi.Filter.SONGS) }.sections.flatMap { it.items }.filterIsInstance<SongItem>().firstOrNull()
+                            val t = s?.track
+                            val ly = t?.let { kotlinx.coroutines.runBlocking { LyricsRepo.get(it.url, it.title, it.artist, it.seconds) } }
+                            System.err.println("GW lyricsfor [$arg] ${t?.title} - ${t?.artist} (${t?.seconds}s): source=${ly?.source} synced=${ly?.synced} lines=${ly?.lines?.size} first: " + ly?.lines?.filter { it.text.isNotBlank() }?.take(3)?.joinToString(" | ") { "${it.ms}: ${it.text}" })
+                        }
+                        // explicitcheck query: every song a search finds, whether it's explicit, and what plays.
+                        "explicitcheck" -> {
+                            val seen = HashSet<String>()
+                            for (f in listOf(YtMusicApi.Filter.SONGS, null)) {
+                                val page = kotlinx.coroutines.runBlocking { if (f == null) YtMusicApi.searchAll(arg, emptySet()) else YtMusicApi.search(arg, f) }
+                                for (i in page.sections.flatMap { it.items }.filterIsInstance<SongItem>()) {
+                                    if (!seen.add(i.track.url)) continue
+                                    val plays = if (i.explicit) "same" else YtRepo.uncensored(i.track.url).let { if (it == i.track.url) "CLEAN STAYS" else "-> $it" }
+                                    System.err.println("GW explicit [${if (i.explicit) "E" else " "}] ${i.title} - ${i.track.artist} ${i.track.seconds}s ${i.track.url.substringAfter("v=")} $plays")
+                                }
+                            }
+                        }
                         // uncensor id: which version plays for that song (the explicit one when it's clean).
                         "uncensor" -> System.err.println("GW uncensor $arg -> " + YtRepo.uncensored(ytWatchUrl(arg)))
                         // artistpage name: what an artist's page holds (and opens it).

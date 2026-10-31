@@ -35,7 +35,8 @@ data class Lyrics(val lines: List<LyricLine>, val synced: Boolean, val source: S
  * Finds lyrics for a song, trying in order:
  * 1. LRCLIB, a free open lyrics library with time-synced lyrics,
  * 2. KuGou, a big lyrics catalogue (synced) that many open-source players use as a backup,
- * 3. YouTube Music's own lyrics (not timed).
+ * 3. NetEase Cloud Music, another big catalogue (synced).
+ * Lyrics without timing are never used: they'd sit still instead of scrolling with the song.
  * KuGou often times every word, not just every line. When LRCLIB only times lines, KuGou's
  * word-by-word version is used instead if it's clearly the same song with the same timing.
  * Results are remembered for the session, and kept on the phone for downloaded songs so their
@@ -44,6 +45,8 @@ data class Lyrics(val lines: List<LyricLine>, val synced: Boolean, val source: S
 object LyricsRepo {
     private val cache = ConcurrentHashMap<String, Lyrics>()
     private val none = ConcurrentHashMap.newKeySet<String>()
+    // Lookups that failed because a site was busy or down; those songs get asked about again later.
+    private val failedCalls = java.util.concurrent.atomic.AtomicInteger()
     private const val UA = "Glasswave/0.9 (Android music player)"
 
     private val junk = Regex(
@@ -84,23 +87,25 @@ object LyricsRepo {
         if (url in none) return@withContext null
         val t = cleanTitle(title)
         val a = mainArtist(artist)
-        // Synced lyrics from anywhere beat unsynced ones; unsynced are the last resort.
-        // LRCLIB and KuGou are asked at the same time, not one after the other.
+        // Only lyrics that scroll with the song: LRCLIB, KuGou and NetEase all time their lines, and
+        // are asked at the same time, not one after the other.
+        val failedBefore = failedCalls.get()
         val fromKugou = async { runCatching { kugou(t, a, seconds) }.getOrNull() }
+        val fromNetease = async { runCatching { netease(t, a, seconds) }.getOrNull() }
         val fromLrclib = runCatching { lrclib(t, a, seconds) }.getOrNull()
         fun fits(k: Lyrics) = seconds <= 0 || (k.lines.lastOrNull()?.ms ?: 0) / 1000 <= seconds + 3
         val lrclibSynced = fromLrclib?.takeIf { it.synced }
         val found = if (lrclibSynced != null) {
             // LRCLIB usually times whole lines; KuGou often times every word. Use KuGou's only when
             // it's clearly the same song with the same timing, otherwise keep LRCLIB's.
+            fromNetease.cancel()
             if (lrclibSynced.wordTimed) lrclibSynced.also { fromKugou.cancel() }
             else fromKugou.await()
                 ?.takeIf { k -> k.wordTimed && fits(k) && sameSong(lrclibSynced, k) }
                 ?: lrclibSynced
         } else {
-            fromKugou.await()?.takeIf { fits(it) }
-                ?: fromLrclib
-                ?: runCatching { youtube(url) }.getOrNull()
+            fromKugou.await()?.takeIf { fits(it) && it.synced }
+                ?: fromNetease.await()?.takeIf { fits(it) }
         }
         // Filling in starred words keeps the same number of letters, so word timings still line up.
         val clean = found?.let { ly ->
@@ -113,7 +118,7 @@ object LyricsRepo {
             cache[url] = clean
             if (Downloads.isDownloaded(url)) writeSaved(url, clean)
         } else {
-            none += url
+            if (failedCalls.get() == failedBefore) none += url
         }
         clean
     }
@@ -145,7 +150,7 @@ object LyricsRepo {
             }
         }
         Lyrics(lines, o.optBoolean("s"), o.optString("src"), o.optInt("d"))
-    }.getOrNull()?.takeIf { it.lines.isNotEmpty() }
+    }.getOrNull()?.takeIf { it.lines.isNotEmpty() && it.synced } // older saves can be untimed
 
     private fun writeSaved(url: String, ly: Lyrics) {
         runCatching {
@@ -211,13 +216,15 @@ object LyricsRepo {
         val req = Request.Builder().url(u).header("User-Agent", UA).build()
         // LRCLIB answers "busy" now and then; wait a moment and ask again rather than giving up.
         repeat(3) { attempt ->
-            val busy = YtRepo.http.newCall(req).execute().use { r ->
+            val reply = try { YtRepo.http.newCall(req).execute() } catch (e: java.io.IOException) { failedCalls.incrementAndGet(); throw e }
+            val busy = reply.use { r ->
                 if (r.isSuccessful) return r.body?.string()
                 r.code == 503 || r.code == 429
             }
             if (!busy) return null
             Thread.sleep(600L * (attempt + 1))
         }
+        failedCalls.incrementAndGet()
         return null
     }
 
@@ -244,8 +251,8 @@ object LyricsRepo {
         }
         pickSynced(hits.filter { hasSynced(it) && gap(it) <= 12 && believable(it, seconds) }.distinctBy { it.optLong("id") }, ::gap)
             ?.let { fromLrclib(it) }?.let { return it }
-        val plain = hits.filter { it.optString("plainLyrics").let { s -> s.isNotBlank() && s != "null" } }.minByOrNull { gap(it) }
-        return plain?.let { fromLrclib(it) }
+        // Lyrics without timing aren't used: they can't scroll with the song.
+        return null
     }
 
     /**
@@ -312,6 +319,38 @@ object LyricsRepo {
     /** How many milliseconds earlier (+) or later (−) this song's lyrics should show. Saved per song. */
     fun offset(url: String): Long = prefs?.getLong(url, 0L) ?: 0L
     fun setOffset(url: String, ms: Long) { prefs?.edit()?.putLong(url, ms.coerceIn(-10_000, 10_000))?.apply() }
+
+    /* ---------------- NetEase ---------------- */
+
+    /**
+     * NetEase Cloud Music: a big catalogue with timed lyrics for many songs the others miss
+     * (afrobeats, UK rap). Only a song with the same name, artist and about the same length counts.
+     */
+    private fun netease(title: String, artist: String, seconds: Long): Lyrics? {
+        val res = fetch("https://music.163.com/api/search/get?s=${enc("$title $artist")}&type=1&limit=10")
+            ?.let { runCatching { JSONObject(it) }.getOrNull() }?.optJSONObject("result")?.optJSONArray("songs") ?: return null
+        fun base(s: String) = s.substringBefore(" (").substringBefore(" [").substringBefore(" - ").trim().lowercase()
+        val name = base(title)
+        val lead = artist.lowercase().trim()
+        val songs = (0 until res.length()).mapNotNull { res.optJSONObject(it) }.filter { s ->
+            val artists = s.optJSONArray("artists")?.let { a -> (0 until a.length()).map { a.optJSONObject(it)?.optString("name").orEmpty().lowercase() } }.orEmpty()
+            val sec = s.optLong("duration") / 1000
+            base(s.optString("name")) == name &&
+                (lead.isEmpty() || artists.any { it == lead || it.contains(lead) || (lead.contains(it) && it.length > 2) }) &&
+                (seconds <= 0 || abs(sec - seconds) <= 8)
+        }.sortedBy { if (seconds <= 0) 0L else abs(it.optLong("duration") / 1000 - seconds) }
+        for (s in songs.take(2)) {
+            val lrc = fetch("https://music.163.com/api/song/lyric?id=${s.optLong("id")}&lv=1&kv=1&tv=-1")
+                ?.let { runCatching { JSONObject(it) }.getOrNull() }?.optJSONObject("lrc")?.optString("lyric").orEmpty()
+            // It starts with credit lines ("作词 : ..."); leave those out.
+            val lines = parseLrc(lrc).filterNot { l ->
+                l.text.contains("：") || l.text.contains(" : ") ||
+                    Regex("作词|作曲|编曲|制作|Lyricist|Composer|Producer", RegexOption.IGNORE_CASE).containsMatchIn(l.text)
+            }
+            if (lines.count { it.text.isNotBlank() } >= 4) return Lyrics(lines, true, "NetEase", (s.optLong("duration") / 1000).toInt())
+        }
+        return null
+    }
 
     /* ---------------- KuGou ---------------- */
 

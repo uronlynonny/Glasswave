@@ -670,7 +670,7 @@ object YtMusicApi {
         }?.let { YtRepo.videoIdFor(it.track.url) }?.takeIf { it != videoId }
     }
 
-    private val versionWord = Regex("""\b(remix|mix|live|acoustic|version|edit|instrumental|sped|slowed|demo|remaster(ed)?|extended|cover|reprise|unplugged|acapella|a cappella|clean)\b""", RegexOption.IGNORE_CASE)
+    private val versionWord = Regex("""\b(remix|mix|live|acoustic|version|edit|instrumental|sped|slowed|demo|remaster(ed)?|extended|cover|reprise|unplugged|acapella|a cappella|freestyle|session|nightcore|reverb|8d|clean)\b""", RegexOption.IGNORE_CASE)
 
     /** Same version of a song: a remix only matches a remix, a live one a live one, and so on. */
     private fun sameVersion(a: String, b: String): Boolean {

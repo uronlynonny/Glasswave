@@ -132,13 +132,29 @@ object YtRepo {
      */
     fun uncensored(videoUrl: String): String {
         val id = android.net.Uri.parse(videoUrl).getQueryParameter("v") ?: return videoUrl
-        val known = explicitNow[id] ?: explicit?.getString(id, null)
-        val swap = known ?: (runCatching { YtMusicApi.explicitFor(id) ?: "" }.getOrNull() ?: return videoUrl).also {
-            explicitNow[id] = it
-            explicit?.edit { putString(id, it) }
+        // "none:<time>" means no explicit version was found then; that's asked again after a week
+        // (YouTube Music adds explicit versions later, and a bad moment can give a wrong "none").
+        // Older saves wrote "" for none; those get asked again once.
+        val known = (explicitNow[id] ?: explicit?.getString(id, null))?.takeUnless { v ->
+            v.isEmpty() || (v.startsWith(NONE) && System.currentTimeMillis() - (v.removePrefix(NONE).toLongOrNull() ?: 0L) > RECHECK_MS)
         }
-        return if (swap.isEmpty()) videoUrl else ytWatchUrl(swap)
+        val swap = known ?: (runCatching { YtMusicApi.explicitFor(id) ?: "" }.getOrNull() ?: return videoUrl)
+            .ifEmpty { NONE + System.currentTimeMillis() }
+            .also {
+                explicitNow[id] = it
+                explicit?.edit { putString(id, it) }
+            }
+        return if (swap.startsWith(NONE)) videoUrl else ytWatchUrl(swap)
     }
+
+    /** Has [uncensored] got an answer for this song (so it didn't fail for lack of internet)? */
+    fun explicitChecked(videoUrl: String): Boolean {
+        val id = android.net.Uri.parse(videoUrl).getQueryParameter("v") ?: return true
+        return (explicitNow[id] ?: explicit?.getString(id, null)).let { it != null && it.isNotEmpty() }
+    }
+
+    private const val NONE = "none:"
+    private const val RECHECK_MS = 7L * 24 * 3600 * 1000
 
     private fun searchBlocking(query: String): List<Track> {
         init()

@@ -72,6 +72,7 @@ object Downloads {
         }
         // Leftover pieces from downloads the app was closed during.
         dir.listFiles { f -> f.name.endsWith(".part") }?.forEach { it.delete() }
+        uncensorOld()
     }
 
     fun fileFor(url: String): File? = files[url]?.takeIf { it.exists() }
@@ -117,6 +118,36 @@ object Downloads {
     }
 
     fun downloadAll(list: List<Track>) = list.forEach(::download)
+
+    /**
+     * No censored songs among downloads either: songs downloaded before Glasswave swapped clean
+     * versions for explicit ones are fetched again, once, as the explicit version (on the phone
+     * only on Wi-Fi). Each song is checked once; the old file goes when the new one is in.
+     */
+    private fun uncensorOld() {
+        scope.launch {
+            kotlinx.coroutines.delay(30_000)
+            val done = app.getSharedPreferences("explicit_downloads", Context.MODE_PRIVATE)
+            for (t in tracks.toList()) {
+                if (done.getBoolean(t.url, false) || !files.containsKey(t.url)) continue
+                if (!onWifi()) return@launch
+                val yt = t.url.contains("youtube.com/watch")
+                val swap = if (yt) runCatching { YtRepo.uncensored(t.url) }.getOrNull() ?: continue else t.url
+                if (yt && !YtRepo.explicitChecked(t.url)) continue // no answer (offline?): another time
+                if (swap != t.url) {
+                    val old = files[t.url] ?: continue
+                    val f = runCatching { slots.withPermit { fetch(t) } }
+                        .onFailure { android.util.Log.w("Glasswave", "Explicit re-download failed: ${t.title}", it) }
+                        .getOrNull() ?: continue
+                    withContext(Dispatchers.Main) { files[t.url] = f; save() }
+                    if (f != old && !old.delete()) old.deleteOnExit()
+                    android.util.Log.i("Glasswave", "Downloaded the explicit version of ${t.title}")
+                }
+                done.edit().putBoolean(t.url, true).apply()
+                kotlinx.coroutines.delay(1_000)
+            }
+        }
+    }
 
     fun remove(url: String) {
         files.remove(url)?.delete()

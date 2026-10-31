@@ -352,6 +352,12 @@ fun main() {
         // Open centred, and small enough to sit above the taskbar on any screen.
         val state = rememberWindowState(size = startSize(), position = WindowPosition(androidx.compose.ui.Alignment.Center))
         remember { if (bootTimes) System.err.println("GW boot opening the window at ${(System.nanoTime() - bootStart) / 1_000_000} ms") }
+        // Test runs print a crash to the log instead of a hidden error box.
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.ui.window.LocalWindowExceptionHandlerFactory provides
+                if (System.getProperty("gw.memScript") == null) androidx.compose.ui.window.DefaultWindowExceptionHandlerFactory
+                else androidx.compose.ui.window.WindowExceptionHandlerFactory { androidx.compose.ui.window.WindowExceptionHandler { e -> System.err.println("GW CRASH"); e.printStackTrace(); kotlin.system.exitProcess(3) } },
+        ) {
         Window(
             onCloseRequest = { if (Os.isMac) shown = false else quitAll() },
             visible = shown,
@@ -437,6 +443,7 @@ fun main() {
                 // Over everything, see-through: the app's colours show behind it.
                 TitleBar.Bar(window, Modifier.align(androidx.compose.ui.Alignment.TopStart))
             }
+        }
         }
     }
 }
