@@ -8,6 +8,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.material.icons.rounded.RepeatOne
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -78,6 +82,13 @@ object Mini {
     fun toggle() { open = !open }
 }
 
+/** For checks: frames the mini player drew, and the longest wait between two. */
+internal object MiniFrames {
+    @Volatile var count = 0
+    @Volatile var maxGapMs = 0L
+    fun reset() { count = 0; maxGapMs = 0 }
+}
+
 /** Space around the glass inside the window, so its shadow has room (the window itself is see-through). */
 private val Margin = 14.dp
 
@@ -117,7 +128,7 @@ fun MiniPlayerWindow(ps: PlayerState, icon: Painter) {
         LaunchedEffect(state.position, state.size) {
             kotlinx.coroutines.delay(500)
             val p = state.position
-            if (p is WindowPosition.Absolute) {
+            if (p is WindowPosition.Absolute && MiniDrag.card == null) {
                 Settings.updateMiniBounds(p.x.value.toInt(), p.y.value.toInt(), state.size.width.value.toInt(), state.size.height.value.toInt())
             }
         }
@@ -136,8 +147,10 @@ private fun MiniArt(url: String?, modifier: Modifier, corner: Dp) {
     Box(modifier.clip(RoundedCornerShape(corner)).background(Color.White.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
         Ico(Icons.Rounded.MusicNote, Color.White.copy(alpha = 0.4f), 22.dp)
         if (url != null) {
+            val ctx = coil3.compose.LocalPlatformContext.current
+            val request = remember(url) { coil3.request.ImageRequest.Builder(ctx).data(url).size(720).build() }
             AsyncImage(
-                model = url,
+                model = request,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize().graphicsLayer { if (barred) { scaleX = 1.34f; scaleY = 1.34f } },
@@ -148,6 +161,16 @@ private fun MiniArt(url: String?, modifier: Modifier, corner: Dp) {
 
 @Composable
 internal fun MiniCard(ps: PlayerState, window: java.awt.Window) {
+    if (System.getProperty("gw.memScript") != null) LaunchedEffect(Unit) {
+        var last = 0L
+        while (true) {
+            androidx.compose.runtime.withFrameNanos { now ->
+                if (last > 0) MiniFrames.maxGapMs = maxOf(MiniFrames.maxGapMs, (now - last) / 1_000_000)
+                last = now
+                MiniFrames.count++
+            }
+        }
+    }
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
     val depth = Settings.miniDepth
@@ -155,30 +178,37 @@ internal fun MiniCard(ps: PlayerState, window: java.awt.Window) {
     val shape = RoundedCornerShape(radius)
     val art = hiRes(ps.art)
     val colors = rememberCoverColors(art)
-    Box(Modifier.fillMaxSize().padding(Margin)) {
+    // While you drag an edge, the window is already full size and only the card changes (smooth);
+    // otherwise the card fills the window.
+    val live = MiniDrag.card
+    val place = if (live != null) {
+        Modifier.offset(live.x.dp, live.y.dp).size(live.width.dp, live.height.dp)
+    } else Modifier.fillMaxSize()
+    Box(place.padding(Margin)) {
         Box(
             Modifier
                 .fillMaxSize()
                 .hoverable(hover)
-                .shadow((1f + 13f * depth).dp, shape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
+                .shadow(if (live != null) 0.dp else (1f + 13f * depth).dp, shape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
                 .clip(shape)
+                // Double-click: back to the full app.
+                .pointerInput(Unit) { detectTapGestures(onDoubleTap = { Mini.open = false; SingleInstance.showMain() }) }
                 .moveWindow(window),
         ) {
             // The back: the song's colour, its blurred cover, or dark glass, as see-through as you set it.
-            Box(Modifier.fillMaxSize().graphicsLayer { alpha = Settings.miniOpacity }) {
-                when (Settings.miniStyle) {
-                    MiniStyle.COLOUR -> Box(
-                        Modifier.fillMaxSize().background(
-                            Brush.linearGradient(listOf(lerp(colors.a, Color.Black, 0.12f), lerp(colors.b, Color.Black, 0.05f))),
-                        ),
-                    )
-
-                    MiniStyle.BLUR -> {
-                        Box(Modifier.fillMaxSize().background(colors.base))
-                        MiniArt(art, Modifier.fillMaxSize().graphicsLayer { scaleX = 1.2f; scaleY = 1.2f }.blur(28.dp), 0.dp)
-                        Box(Modifier.fillMaxSize().background(Color(0x73000000)))
-                    }
-                    MiniStyle.DARK -> Box(Modifier.fillMaxSize().background(Color(0xFF101114)))
+            val op = Settings.miniOpacity
+            when (Settings.miniStyle) {
+                // Plain colour: see-through by drawing the colour itself fainter (no extra layer, so resizing stays quick).
+                MiniStyle.COLOUR -> Box(
+                    Modifier.fillMaxSize().background(
+                        Brush.linearGradient(listOf(lerp(colors.a, Color.Black, 0.12f).copy(alpha = op), lerp(colors.b, Color.Black, 0.05f).copy(alpha = op))),
+                    ),
+                )
+                MiniStyle.DARK -> Box(Modifier.fillMaxSize().background(Color(0xFF101114).copy(alpha = op)))
+                MiniStyle.BLUR -> Box(Modifier.fillMaxSize().graphicsLayer { alpha = op }) {
+                    Box(Modifier.fillMaxSize().background(colors.base))
+                    MiniArt(art, Modifier.fillMaxSize().graphicsLayer { scaleX = 1.2f; scaleY = 1.2f }.blur(28.dp), 0.dp)
+                    Box(Modifier.fillMaxSize().background(Color(0x73000000)))
                 }
             }
             // Depth: a shine across the top and a bright rim, stronger the deeper you set it.
@@ -217,6 +247,8 @@ private fun MiniLayout(ps: PlayerState, art: String?, radius: Dp) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val tall = maxHeight >= 220.dp && maxWidth >= 180.dp
         val skips = maxWidth >= 330.dp
+        val repeat = maxWidth >= 400.dp
+        val tallRepeat = maxWidth >= 250.dp
         val tallSkips = maxWidth >= 220.dp
         val title = ps.title.ifBlank { "Nothing playing" }
         val artist = if (ps.buffering) "Loading…" else ps.artist
@@ -233,7 +265,10 @@ private fun MiniLayout(ps: PlayerState, art: String?, radius: Dp) {
                         LikeButton(ps)
                     }
                     if (Settings.miniProgress) Progress(ps, Modifier.fillMaxWidth().padding(top = 2.dp, end = 4.dp))
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Controls(ps, size = 44.dp, skips = tallSkips) }
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Controls(ps, size = 44.dp, skips = tallSkips)
+                        if (tallRepeat) Box(Modifier.align(Alignment.CenterEnd)) { RepeatButton(ps, 20.dp) }
+                    }
                 }
             }
         } else {
@@ -252,6 +287,7 @@ private fun MiniLayout(ps: PlayerState, art: String?, radius: Dp) {
                 }
                 Spacer(Modifier.width(6.dp))
                 Controls(ps, size = play, skips = skips)
+                if (repeat) RepeatButton(ps, play * 0.42f)
             }
         }
     }
@@ -269,6 +305,17 @@ private fun Controls(ps: PlayerState, size: Dp, skips: Boolean) {
         }
         if (skips) MiniButton(Icons.Rounded.SkipNext, size * 0.55f) { ps.next() }
     }
+}
+
+/** Repeat: off, the whole queue, or this song (lit while on). */
+@Composable
+private fun RepeatButton(ps: PlayerState, size: Dp) {
+    val on = ps.repeat != androidx.media3.common.Player.REPEAT_MODE_OFF
+    MiniButton(
+        if (ps.repeat == androidx.media3.common.Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+        size,
+        if (on) Color.White else Color.White.copy(alpha = 0.55f),
+    ) { ps.cycleRepeat() }
 }
 
 @Composable
@@ -321,6 +368,60 @@ private fun Modifier.moveWindow(window: java.awt.Window): Modifier = pointerInpu
     )
 }
 
+/**
+ * Resizing without the stutter: redrawing a see-through window at a new size each step is slow on
+ * Windows, so when a drag starts the window grows once to the most it can be in that direction,
+ * then only the card changes size inside it (plain drawing, as smooth as the screen allows), and when
+ * you let go the window shrinks to fit the card.
+ */
+internal object MiniDrag {
+    /** Where the card sits inside the stretched window during a drag (window units), or null. */
+    var card by mutableStateOf<java.awt.Rectangle?>(null)
+    private val MAX = System.getProperty("gw.miniMax")?.toIntOrNull() ?: 1000
+    private var window: java.awt.Window? = null
+    private var grab = java.awt.Point()
+    private var from = java.awt.Rectangle()
+    private var big = java.awt.Rectangle()
+    private var dx = 0
+    private var dy = 0
+    private var last = java.awt.Rectangle()
+
+    fun start(w: java.awt.Window, edgeX: Int, edgeY: Int, mouse: java.awt.Point) {
+        window = w; dx = edgeX; dy = edgeY; grab = mouse
+        from = w.bounds
+        last = from
+        val bx = if (dx < 0) from.x + from.width - MAX else from.x
+        val by = if (dy < 0) from.y + from.height - MAX else from.y
+        big = java.awt.Rectangle(bx, by, if (dx != 0) MAX else from.width, if (dy != 0) MAX else from.height)
+        card = java.awt.Rectangle(from.x - big.x, from.y - big.y, from.width, from.height)
+        w.bounds = big
+    }
+
+    fun move(mouse: java.awt.Point) {
+        val w = window ?: return
+        val mx = mouse.x - grab.x
+        val my = mouse.y - grab.y
+        val min = w.minimumSize
+        var x = from.x
+        var y = from.y
+        var width = from.width
+        var height = from.height
+        if (dx > 0) width = (from.width + mx).coerceIn(min.width, MAX)
+        if (dx < 0) { width = (from.width - mx).coerceIn(min.width, MAX); x = from.x + from.width - width }
+        if (dy > 0) height = (from.height + my).coerceIn(min.height, MAX)
+        if (dy < 0) { height = (from.height - my).coerceIn(min.height, MAX); y = from.y + from.height - height }
+        last = java.awt.Rectangle(x, y, width, height)
+        card = java.awt.Rectangle(x - big.x, y - big.y, width, height)
+    }
+
+    fun end() {
+        val w = window ?: return
+        window = null
+        card = null
+        w.bounds = last
+    }
+}
+
 /** Thin strips along every edge and corner you can drag to resize, with the matching arrow cursor. */
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.ResizeEdges(window: java.awt.Window) {
@@ -343,29 +444,11 @@ private fun Edge(window: java.awt.Window, modifier: Modifier, dx: Int, dy: Int, 
         modifier
             .pointerHoverIcon(PointerIcon(Cursor(cursor)))
             .pointerInput(window) {
-                var grab = java.awt.Point()
-                var from = java.awt.Rectangle()
                 detectDragGestures(
-                    onDragStart = {
-                        grab = MouseInfo.getPointerInfo().location
-                        from = window.bounds
-                    },
-                    onDrag = { change, _ ->
-                        change.consume()
-                        val now = MouseInfo.getPointerInfo().location
-                        val mx = now.x - grab.x
-                        val my = now.y - grab.y
-                        val min = window.minimumSize
-                        var x = from.x
-                        var y = from.y
-                        var w = from.width
-                        var h = from.height
-                        if (dx > 0) w = (from.width + mx).coerceIn(min.width, 1000)
-                        if (dx < 0) { w = (from.width - mx).coerceIn(min.width, 1000); x = from.x + from.width - w }
-                        if (dy > 0) h = (from.height + my).coerceIn(min.height, 1000)
-                        if (dy < 0) { h = (from.height - my).coerceIn(min.height, 1000); y = from.y + from.height - h }
-                        window.setBounds(x, y, w, h)
-                    },
+                    onDragStart = { MiniDrag.start(window, dx, dy, MouseInfo.getPointerInfo().location) },
+                    onDrag = { change, _ -> change.consume(); MiniDrag.move(MouseInfo.getPointerInfo().location) },
+                    onDragEnd = { MiniDrag.end() },
+                    onDragCancel = { MiniDrag.end() },
                 )
             },
     )
