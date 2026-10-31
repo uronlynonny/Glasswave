@@ -20,6 +20,8 @@ jobs:
       TOPIC: glasswave-nonny-re7mnsuqhuis
       # The apps' anonymous once-a-day "in use" check-ins (a random install id, platform, version).
       ACTIVE_TOPIC: glasswave-nonny-re7mnsuqhuis-active
+      # Songs nonny dev marked fixed (the "Mark fixed" button on a "Song won't play" report).
+      FIXED_TOPIC: glasswave-nonny-re7mnsuqhuis-fixed
       REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -80,6 +82,21 @@ jobs:
               }
           ' "$F" > tmp.json && mv tmp.json "$F"
 
+          # Fixed songs: ntfy keeps messages for 12 hours, so each fix is copied into fixed.json (kept
+          # 90 days). The apps read it to tell whoever reported a song that it's fixed, even if
+          # they haven't opened Glasswave for days.
+          FX=data/fixed.json
+          [ -f "$FX" ] || echo '[]' > "$FX"
+          lastF=$(jq -r '.lastFixedTime // 0' "$F")
+          sinceF=$([ "$lastF" -gt 0 ] && echo "$lastF" || echo all)
+          curl -fsS "https://ntfy.sh/$FIXED_TOPIC/json?poll=1&since=$sinceF" > fixed.jsonl || : > fixed.jsonl
+          jq -s --argjson l "$lastF" '[.[] | select(.event=="message" and .time > $l)
+            | (.message | try fromjson catch null) as $m | select($m != null and ($m.u|type)=="string")
+            | {u: $m.u, t: ($m.t // ""), at: .time}]' fixed.jsonl > newfixed.json
+          newLastF=$(jq --argjson l "$lastF" '[.[].at] + [$l] | max' newfixed.json)
+          jq --argjson now "$now" --slurpfile n newfixed.json '(. + $n[0]) | map(select(.at > $now - 90*86400)) | unique_by(.u + "|" + (.at|tostring))' "$FX" > tmp.json && mv tmp.json "$FX"
+          jq --argjson l "$newLastF" '.lastFixedTime = $l' "$F" > tmp.json && mv tmp.json "$F"
+
           jq --argjson t "$now" --argjson last "$newLast" --argjson v "$v" --argjson d "$d" --argjson a "$a" --argjson apk "$apk" \
              --slurpfile failed failed.json '
             .updated = $t | .lastTime = $last
@@ -120,5 +137,5 @@ jobs:
           cd data
           git config user.name "glasswave-stats"
           git config user.email "glasswave-stats@users.noreply.github.com"
-          git add stats.json
+          git add stats.json fixed.json
           git commit -qm "Stats for $(date -u +'%Y-%m-%d %H:00') UTC" && git push -q

@@ -49,6 +49,7 @@ import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.RemoveCircleOutline
+import androidx.compose.material.icons.rounded.ReportProblem
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.ThumbUp
@@ -349,6 +350,14 @@ private fun SongMenuBody(target: Menus.SongTarget, ps: PlayerState, open: (Music
                         MenuRow(Icons.Rounded.Share, "Share") {
                             Menus.closeSong()
                             ShareCard.track = t
+                        }
+                        // Your own music files aren't sent anywhere, so they can't be reported.
+                        if (!phone) {
+                            val reported = SongReports.version.let { SongReports.isReported(t.url) }
+                            MenuRow(Icons.Rounded.ReportProblem, if (reported) "Reported: waiting for a fix" else "Won't play? Report it") {
+                                Menus.closeSong()
+                                Menus.say(SongReports.report(t))
+                            }
                         }
                     }
                     SongPage.PICK -> {

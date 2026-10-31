@@ -153,6 +153,15 @@ object YtRepo {
         return (explicitNow[id] ?: explicit?.getString(id, null)).let { it != null && it.isNotEmpty() }
     }
 
+    /** Forgets what's remembered about a song (its explicit version, its audio address), for a fresh start. */
+    fun forget(videoUrl: String) {
+        android.net.Uri.parse(videoUrl).getQueryParameter("v")?.let { id ->
+            explicitNow.remove(id)
+            explicit?.edit { remove(id) }
+        }
+        urlCache.keys.removeAll { it.startsWith("$videoUrl|") }
+    }
+
     private const val NONE = "none:"
     private const val RECHECK_MS = 7L * 24 * 3600 * 1000
 

@@ -406,6 +406,23 @@ object MemScript {
                             }
                         }
                         "offline" -> onUi { vm.homeOfflineForCheck() }
+                        // reportsong query: reports the first song a search finds; fixcheck looks for fixes now.
+                        "reportsong" -> {
+                            val t = kotlinx.coroutines.runBlocking { YtMusicApi.search(arg, YtMusicApi.Filter.SONGS) }.sections.flatMap { it.items }.filterIsInstance<SongItem>().first().track
+                            onUi { System.err.println("GW report ${t.title} ${t.url}: " + SongReports.report(t)) }
+                        }
+                        // markfixed id: what the "Mark fixed" button on the alert does (posts the song to the fixes topic).
+                        "markfixed" -> {
+                            val body = org.json.JSONObject().put("u", ytWatchUrl(arg)).put("t", "test").toString()
+                            val req = okhttp3.Request.Builder().url("https://ntfy.sh/glasswave-nonny-re7mnsuqhuis-fixed")
+                                .post(okhttp3.RequestBody.Companion.run { body.toRequestBody(null) }).build()
+                            System.err.println("GW markfixed " + YtRepo.http.newCall(req).execute().use { it.code })
+                        }
+                        "fixcheck" -> {
+                            kotlinx.coroutines.runBlocking { SongReports.checkNow() }
+                            Thread.sleep(1500)
+                            onUi { System.err.println("GW fixcheck toast=${Menus.toast} reported=" + SongReports.isReported(ytWatchUrl(arg))) }
+                        }
                         // lyricsfor query: the first song a search finds, and where its lyrics come from.
                         "lyricsfor" -> {
                             val s = kotlinx.coroutines.runBlocking { YtMusicApi.search(arg, YtMusicApi.Filter.SONGS) }.sections.flatMap { it.items }.filterIsInstance<SongItem>().firstOrNull()

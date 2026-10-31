@@ -255,6 +255,7 @@ internal fun startUp() {
     boot("PlaylistMix.init") { PlaylistMix.init(ctx) }
     boot("History.init") { History.init(ctx) }
     boot("Downloads.init") { Downloads.init(ctx) }
+    SongReports.start()
     boot("SongCache.init") { SongCache.init(ctx) }
     boot("NotInterested.init") { NotInterested.init(ctx) }
     boot("GenreArt.init") { GenreArt.init(ctx) }

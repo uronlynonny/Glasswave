@@ -20,6 +20,7 @@ class GlassApp : Application(), ImageLoaderFactory {
         PlaylistMix.init(this)
         History.init(this)
         Downloads.init(this)
+        SongReports.start(this)
         NotInterested.init(this)
         GenreArt.init(this)
         ArtistArt.init(this)
