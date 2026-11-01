@@ -386,7 +386,7 @@ fun PlayerBar(ps: PlayerState, page: Backdrop, onOpen: () -> Unit, modifier: Mod
             }
             SeekLine(AppVolume.level, Color.White, Modifier.width(100.dp)) { AppVolume.set(it) }
             Spacer(Modifier.width(6.dp))
-            BarButton(Icons.Rounded.PictureInPictureAlt, if (Mini.open) accent else Dim, 19.dp, "Mini player") { Mini.toggle() }
+            BarButton(Icons.Rounded.PictureInPictureAlt, if (Mini.enabled) accent else Dim, 19.dp, "Mini player") { Mini.toggle() }
             BarButton(Icons.Rounded.OpenInFull, Dim, 18.dp, onClick = onOpen)
         }
     }

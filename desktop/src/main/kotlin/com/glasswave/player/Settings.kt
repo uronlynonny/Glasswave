@@ -223,6 +223,7 @@ object Settings {
         miniCorners = prefs.getFloat("mini_corners", 0.6f)
         miniOnTop = prefs.getBoolean("mini_on_top", true)
         miniProgress = prefs.getBoolean("mini_progress", true)
+        miniEnabled = prefs.getBoolean("mini_enabled", false)
         miniBounds = prefs.getString("mini_bounds", null)?.split(",")?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 4 }
     }
 
@@ -275,6 +276,9 @@ object Settings {
     var miniCorners by mutableFloatStateOf(0.6f); private set
     var miniOnTop by mutableStateOf(true); private set
     var miniProgress by mutableStateOf(true); private set
+    /** The mini player button is on (see [Mini]). */
+    var miniEnabled by mutableStateOf(false); private set
+    fun updateMiniEnabled(on: Boolean) { miniEnabled = on; prefs.edit { putBoolean("mini_enabled", on) } }
     /** Where the mini player was and how big (x, y, width, height), or null for the default. */
     var miniBounds: List<Int>? = null; private set
     fun updateMiniStyle(s: MiniStyle) { miniStyle = s; prefs.edit { putString("mini_style", s.name) } }

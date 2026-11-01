@@ -52,13 +52,14 @@ fun main(args: Array<String>) {
         for (i in 0 until 240) {
             val f = if (resize) (1 - Math.cos(i * Math.PI * 2 / 120)) / 2 else 0.5
             SwingUtilities.invokeAndWait {
-                MiniDrag.card = java.awt.Rectangle(0, 0, (330 + 400 * f).toInt().coerceAtMost(sceneSize), (118 + 420 * f).toInt().coerceAtMost(sceneSize))
+                MiniGeom.dragging = resize
+                MiniGeom.card = java.awt.Rectangle(0, 0, (330 + 400 * f).toInt().coerceAtMost(sceneSize), (118 + 420 * f).toInt().coerceAtMost(sceneSize))
                 val a = System.nanoTime()
                 scene!!.render(System.nanoTime())
                 times += (System.nanoTime() - a) / 1000
             }
         }
-        SwingUtilities.invokeAndWait { MiniDrag.card = null; scene!!.close() }
+        SwingUtilities.invokeAndWait { MiniGeom.dragging = false; scene!!.close() }
         val warm = times.drop(30).sorted()
         println("GW mini drawing [$label]: median %.1f ms, slowest 5%% %.1f ms".format(warm[warm.size / 2] / 1000.0, warm[warm.size * 95 / 100] / 1000.0))
     }
@@ -73,6 +74,7 @@ fun main(args: Array<String>) {
             Settings.updateMiniOpacity(c.opacity)
             Settings.updateMiniDepth(c.depth)
             Settings.updateMiniCorners(c.corners)
+            MiniGeom.card = java.awt.Rectangle(0, 0, c.w, c.h)
         }
         var scene: ImageComposeScene? = null
         SwingUtilities.invokeAndWait {
@@ -99,6 +101,7 @@ fun main(args: Array<String>) {
     }
     Thread.sleep(1500)
     SwingUtilities.invokeAndWait { if (ps.playing) ps.toggle() }
+    SwingUtilities.invokeAndWait { MiniGeom.card = java.awt.Rectangle(0, 0, 330, 118) }
     var scene2: ImageComposeScene? = null
     SwingUtilities.invokeAndWait {
         scene2 = ImageComposeScene(330, 118, Density(1f)) {
