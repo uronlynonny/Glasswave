@@ -31,7 +31,7 @@ internal object SettingsIndex {
         SettingEntry("Glass panels", "LOOK", "Wallpaper", "glass opacity clear frosted panels"),
         SettingEntry("Visualizer", "LOOK", "Visualizer", "bars mirror wave line dots glow peaks spectrum visualiser"),
         SettingEntry("Visualizer size", "LOOK", "Visualizer look", "small medium large big tall visualiser"),
-        SettingEntry("Visualizer colour", "LOOK", "Visualizer look", "rainbow white song color visualiser"),
+        SettingEntry("Visualizer colour", "LOOK", "Visualizer look", "white song color visualiser"),
         SettingEntry("Visualizer feel", "LOOK", "Visualizer look", "smooth snappy speed visualiser"),
         SettingEntry("Font", "LOOK", "Font", "text typeface letters"),
         SettingEntry("Player style", "LOOK", "Player style", "now playing player screen layout"),

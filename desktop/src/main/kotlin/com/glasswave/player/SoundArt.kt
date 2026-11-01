@@ -64,13 +64,13 @@ import kotlin.math.sin
 /** How tall the pictures are unless the modifier you pass sets a height. */
 val SoundArtHeight = 136.dp
 
-private val ArtShape = RoundedCornerShape(18.dp)
+internal val ArtShape = RoundedCornerShape(18.dp)
 
 /** How fast the pictures drift when nothing is playing (1 = while playing). */
-private const val IDLE_RATE = 0.22f
+internal const val IDLE_RATE = 0.22f
 
 /** The picture time used for the still frame when animations are off. */
-private const val STILL_T = 2.3f
+internal const val STILL_T = 2.3f
 
 /** A picture's clock and the music's beat. Read them while drawing, so only the drawing repeats. */
 @Stable
@@ -137,7 +137,7 @@ fun rememberArtMotion(playing: Boolean): ArtMotion {
  * Something that moves at a speed that can change. (A plain `t * speed` would leap when the speed
  * changes.) Kept outside of Compose state: it's only stepped while drawing.
  */
-private class Phase(var value: Float) {
+internal class Phase(var value: Float) {
     private var lastT = Float.NaN
 
     fun at(t: Float, speed: Float): Float {
@@ -152,18 +152,18 @@ private class Phase(var value: Float) {
 
 /** Setting changes glide into the picture (or jump, with animations off). */
 @Composable
-private fun artSpec(): AnimationSpec<Float> =
+internal fun artSpec(): AnimationSpec<Float> =
     if (Settings.animations) tween(700, easing = FastOutSlowInEasing) else snap()
 
-private fun mix(a: Float, b: Float, f: Float) = a + (b - a) * f
+internal fun mix(a: Float, b: Float, f: Float) = a + (b - a) * f
 
-private fun smoothstep(a: Float, b: Float, x: Float): Float {
+internal fun smoothstep(a: Float, b: Float, x: Float): Float {
     val u = ((x - a) / (b - a)).coerceIn(0f, 1f)
     return u * u * (3f - 2f * u)
 }
 
 /** A steady 0..1 "random" number for each whole number. */
-private fun hash(k: Int): Float {
+internal fun hash(k: Int): Float {
     var x = k * 0x27d4eb2d
     x = x xor (x ushr 15)
     x *= 0x2c1b3c6d
@@ -172,12 +172,15 @@ private fun hash(k: Int): Float {
 }
 
 @Composable
-private fun ArtCanvas(modifier: Modifier, onDraw: DrawScope.() -> Unit) {
-    Canvas(modifier.fillMaxWidth().height(SoundArtHeight).clip(ArtShape), onDraw = onDraw)
+internal fun ArtCanvas(modifier: Modifier, height: androidx.compose.ui.unit.Dp = SoundArtHeight, onDraw: DrawScope.() -> Unit) {
+    Canvas(modifier.fillMaxWidth().height(height).clip(ArtShape), onDraw = onDraw)
 }
 
+/** How tall the pictures on the other settings pages are (a little shorter than the sound ones). */
+val SettingArtHeight = 112.dp
+
 /** The faint glass tint and a soft glow of the accent behind each picture. */
-private fun DrawScope.backdrop(accent: Color, glowX: Float = 0.5f, glow: Float = 1f) {
+internal fun DrawScope.backdrop(accent: Color, glowX: Float = 0.5f, glow: Float = 1f) {
     drawRect(Color.White.copy(alpha = 0.035f))
     val r = max(size.width * 0.55f, size.height)
     drawRect(
@@ -190,7 +193,7 @@ private fun DrawScope.backdrop(accent: Color, glowX: Float = 0.5f, glow: Float =
 }
 
 /** A soft glow with a bright centre. */
-private fun DrawScope.glow(c: Color, at: Offset, r: Float, alpha: Float) {
+internal fun DrawScope.glow(c: Color, at: Offset, r: Float, alpha: Float) {
     drawCircle(
         Brush.radialGradient(listOf(c.copy(alpha = (0.4f * alpha).coerceIn(0f, 1f)), Color.Transparent), center = at, radius = r * 3.2f),
         radius = r * 3.2f, center = at,

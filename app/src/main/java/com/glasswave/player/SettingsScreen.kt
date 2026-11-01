@@ -394,7 +394,7 @@ fun SettingsScreen(c: ScreenCtx) {
                 Header(p.title)
                 when (p) {
                     SettingsPage.GENERAL -> General(c)
-                    SettingsPage.LOOK -> Look()
+                    SettingsPage.LOOK -> Look(c)
                     SettingsPage.AUDIO -> Audio(c)
                     SettingsPage.SOUND -> SoundPage(c)
                     SettingsPage.ACCOUNTS -> AccountsPage(c)
@@ -483,6 +483,7 @@ private fun Main(c: ScreenCtx, query: String, onQuery: (String) -> Unit, open: (
 private fun General(c: ScreenCtx) {
     val ctx = LocalContext.current
     Group("Updates") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { UpdatesArt(c.ps.playing) }
         Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
             val r = Updater.available
             val p = Updater.progress
@@ -519,18 +520,20 @@ private fun General(c: ScreenCtx) {
     }
     Note("Updates come straight from the Glasswave releases page on GitHub. Android asks you to confirm each install; your songs and settings stay.")
     Group("Help make Glasswave better") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { HelpArt(c.ps.playing, Settings.reportProblems, Settings.countMe) }
         SwitchRow("Report songs that won't play", "Sends nonny dev the song, the error, your phone model and the app version so it gets fixed. Nothing about you.", Settings.reportProblems) { Settings.updateReportProblems(it) }
         SwitchRow("Count me in usage numbers", "Tells nonny dev this copy of Glasswave is being used (a random number, nothing about you): once a day, and every few minutes while it's open or playing, so we know how many people listen.", Settings.countMe) { Settings.updateCountMe(it) }
     }
     Note("Nothing about you is ever included: no name, no account.")
-    Performance()
+    Performance(c)
 }
 
 @Composable
-private fun Look() {
+private fun Look(c: ScreenCtx) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     Group("Style") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { GlassStyleArt(c.ps.playing, Settings.cleanLook, Settings.darkFrost) }
         SwitchRow("Frosted glass", "Calm frosted panels, like a classic music app. Turn off for liquid glass.", Settings.cleanLook) { Settings.updateCleanLook(it) }
         if (Settings.cleanLook) {
             Divider()
@@ -542,6 +545,7 @@ private fun Look() {
         }
     }
     Group("Layout") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { LayoutArt(c.ps.playing, Settings.homeCovers, Settings.libraryList) }
         GText("Home songs", 15, Color.White, FontWeight.SemiBold, modifier = Modifier.padding(start = 18.dp, top = 12.dp))
         Choices(
             listOf(false, true), Settings.homeCovers,
@@ -566,6 +570,7 @@ private fun Look() {
     }
     Note("On: the background, buttons, lyrics and visualizer change with each song's cover. Off: the whole app stays one plain colour you pick (lime is Glasswave's own look).")
     Group("Wallpaper") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { WallpaperArt(c.ps.playing, Settings.wallpaper != null, Settings.wallpaperBlur, Settings.wallpaperDim, Settings.colorStrength, Settings.glassOpacity) }
         val pick = androidx.activity.compose.rememberLauncherForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
         ) { uri ->
@@ -640,16 +645,20 @@ private fun Look() {
     }
     Note("Import any font file (.ttf or .otf) from your phone, for example one you downloaded from Google Fonts.")
     Group("Player style") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { PlayerStyleArt(c.ps.playing, Settings.playerStyle) }
         Choices(PlayerStyle.entries, Settings.playerStyle, { it.label }, { it.detail }) { Settings.updatePlayerStyle(it) }
     }
     Group("Play button") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { PlayButtonArt(c.ps.playing, Settings.buttonStyle) }
         Choices(ButtonStyle.entries, Settings.buttonStyle, { it.label }, { it.detail }) { Settings.updateButtonStyle(it) }
     }
     Group("Music videos behind the cover") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { MusicVideoArt(c.ps.playing, Settings.coverMotion) }
         Choices(CoverMotion.entries, Settings.coverMotion, { it.label }, { it.detail }) { Settings.updateCoverMotion(it) }
     }
     Note("When a song has an official music video, it plays silently in place of the cover, in time with the song. On a weak connection the cover is shown instead. You can also change this from the player's ••• menu.")
     Group("Animated covers") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { AnimatedCoverArt(c.ps.playing, AnimatedCovers.enabled) }
         SwitchRow(
             "Animated covers",
             "Plays the looping cover video some albums have (from Apple Music) in place of the still cover. Downloaded once per album.",
@@ -661,6 +670,7 @@ private fun Look() {
         }
     }
     Group("Living cover") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { LivingCoverArt(c.ps.playing, Settings.livingCover) }
         SwitchRow(
             "Bring still covers to life",
             "While a song plays, covers without a video slowly ripple and drift with a soft passing light. Uses no data.",
@@ -668,6 +678,7 @@ private fun Look() {
         ) { Settings.updateLivingCover(it) }
     }
     Group("Effects") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { AnimationsArt(c.ps.playing, Settings.animations) }
         SwitchRow("Animations", "Short, smooth transitions. Turn off for none at all.", Settings.animations) { Settings.updateAnimations(it) }
         Divider()
         SwitchRow(
@@ -682,18 +693,22 @@ private fun Look() {
 @Composable
 private fun Audio(c: ScreenCtx) {
     Group("Audio quality") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { AudioQualityArt(c.ps.playing, Settings.quality) }
         Choices(Quality.entries, Settings.quality, { it.label }, { it.detail }) { Settings.updateQuality(it) }
     }
     Note("Streaming quality. Applies from the next song; higher quality uses more data. Download quality is under Storage.")
     Group("Data saver") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { DataSaverArt(c.ps.playing, Settings.dataSaver != DataSaver.OFF) }
         Choices(DataSaver.entries, Settings.dataSaver, { it.label }, { it.detail }) { Settings.updateDataSaver(it) }
     }
     Note("While saving data, songs stream at Low quality, music videos behind the cover are skipped and pictures load smaller. Songs you've downloaded play as they are.")
     Group("Automix") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { AutomixArt(c.ps.playing, Settings.automix) }
         SwitchRow("Automix", "Mixes each song into the next like a DJ: on the beat, tempos matched. Also in the player's ••• menu.", Settings.automix) { Settings.updateAutomix(it) }
     }
     Note("Automix listens to each song first to find its tempo, beats and key. Songs with a similar tempo are matched and lined up beat for beat, and their bass is handed over halfway, so it sounds like one continuous mix. Songs that are too far apart in tempo are handed over on the beat instead. How long each blend lasts depends on the songs: faster songs get longer, DJ-style blends, slower ones shorter. Flow always mixes this way.")
     Group("Playback") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { PlaybackArt(c.ps.playing, Settings.autoplay) }
         SwitchRow("Autoplay", "When the queue ends, keep playing similar songs.", Settings.autoplay) { Settings.updateAutoplay(it) }
         SwitchRow("Remember what was playing", "When you open Glasswave again, the last song is waiting where you left off. Just tap play.", Settings.rememberPlaying) {
             Settings.updateRememberPlaying(it)
@@ -709,8 +724,9 @@ private fun Audio(c: ScreenCtx) {
 }
 
 @Composable
-private fun Performance() {
+private fun Performance(c: ScreenCtx) {
     Group("Frame rate") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { FrameRateArt(c.ps.playing, Settings.frameRate.hz.toInt()) }
         Choices(FrameRate.entries, Settings.frameRate, { it.label }, { it.detail }) { Settings.updateFrameRate(it) }
     }
     Note("Your screen may not offer every rate; Glasswave picks the closest one it has, never above your choice.")
@@ -728,6 +744,7 @@ private fun Performance() {
 private fun AccountsPage(c: ScreenCtx) {
     val vm = c.vm
     Group("YouTube Music") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { YouTubeAccountArt(c.ps.playing, vm.ytSignedIn) }
         Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
             GText(
                 if (vm.ytSignedIn) "Signed in. Your playlists and Liked Music sync to your library, and Home is made for you."
@@ -741,6 +758,7 @@ private fun AccountsPage(c: ScreenCtx) {
     }
     if (vm.ytSignedIn) {
         Group("Your devices") {
+            Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { DevicesArt(c.ps.playing, if (Settings.syncDevices) Sync.devices.size else 0) }
             SwitchRow(
                 "Sync with your phone and PC",
                 "Glasswave on your other devices, signed in to this YouTube Music account, shares listening stats and can play, pause and move music between them.",
@@ -750,6 +768,7 @@ private fun AccountsPage(c: ScreenCtx) {
     }
     // Way 1: no account, no key. Paste a link from any music app, get the playlist.
     Group("Import from a link") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { ImportLinkArt(c.ps.playing) }
         Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
             GText("Paste a playlist or album link from ${LinkImport.servicesText}. No sign-in needed: in the other app, tap Share → Copy link, then paste it here.", 14, Dim)
             Spacer(Modifier.height(12.dp))
@@ -798,6 +817,7 @@ private fun AccountsPage(c: ScreenCtx) {
 
     // Way 2: sync everything, with a one-time key. Each step has a button that does it for you.
     Group("Spotify · sync your whole library") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { SpotifyArt(c.ps.playing, vm.spSignedIn) }
         Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
             if (vm.spSignedIn) {
                 GText("Signed in. Your playlists and Liked Songs sync to your library. Songs play from YouTube Music.", 14, Dim)
@@ -860,6 +880,7 @@ private fun SpotifyStep(n: Int, text: String, action: @Composable () -> Unit) {
 private fun SyncPage(c: ScreenCtx) {
     val vm = c.vm
     Group("Sync") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { SyncArt(c.ps.playing) }
         Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
             val last = Accounts.lastSync
             GText(
@@ -884,6 +905,7 @@ private fun StoragePage(c: ScreenCtx) {
     var dlBytes by remember { mutableLongStateOf(-1L) }
     LaunchedEffect(Downloads.tracks.size) { dlBytes = withContext(Dispatchers.IO) { Downloads.totalBytes() } }
     Group("Downloads") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { DownloadsArt(c.ps.playing, 0.4f) }
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 GText("Downloaded songs", 16, weight = FontWeight.Medium)
@@ -894,13 +916,16 @@ private fun StoragePage(c: ScreenCtx) {
     }
     Note("Find them in Library → Downloads. They play without internet.")
     Group("Download quality on Wi-Fi") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { DownloadQualityArt(c.ps.playing, Settings.downloadWifi.ordinal / 2f, wifi = true) }
         Choices(Quality.entries, Settings.downloadWifi, { it.label }, { it.detail }) { Settings.updateDownloadWifi(it) }
     }
     Group("Download quality on mobile data") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { DownloadQualityArt(c.ps.playing, Settings.downloadData.ordinal / 2f, wifi = false) }
         Choices(Quality.entries, Settings.downloadData, { it.label }, { it.detail }) { Settings.updateDownloadData(it) }
     }
     Note("Each download uses the quality for the connection you're on when it starts. Songs already downloaded keep their quality.")
     Group("Played songs (temporary)") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { PlayedSongsArt(c.ps.playing) }
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 GText("In use", 16, weight = FontWeight.Medium)
@@ -915,10 +940,12 @@ private fun StoragePage(c: ScreenCtx) {
         }
     }
     Group("Space for played songs") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { CacheSpaceArt(c.ps.playing, (Settings.cacheSize.ordinal + 1) / 5f) }
         Choices(CacheSize.entries, Settings.cacheSize, { it.label }, { "" }) { Settings.updateCacheSize(it) }
     }
     Note("A new size takes effect the next time Glasswave starts.")
     Group("Privacy") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { PrivacyArt(c.ps.playing, Settings.keepHistory) }
         SwitchRow("Remember what I play", "Powers \"Recently played\" on Home. Stays on this phone.", Settings.keepHistory) { Settings.updateKeepHistory(it) }
         Divider()
         NavRow("Clear listening history", "${History.tracks.size} songs", Icons.Rounded.Storage, Color(0xFFFF9F0A)) { History.clear() }

@@ -105,12 +105,10 @@ private fun VisualizerDrawing(
     val line = remember { Path() }
     val area = remember { Path() }
     val feelNow by rememberUpdatedState(feel)
-    val rainbow = remember { Array(n) { Color.hsv((350f + 280f * it / (n - 1)) % 360f, 0.6f, 1f) } }
-    val rainbowList = remember { rainbow.toList() }
-    // Glow's soft lights, made once (one per band for Rainbow) and stretched to size when drawn.
+    // Glow's soft light, made once and stretched to size when drawn.
     val glows = remember(color, tint) {
-        Array(if (tint == VisualizerColor.RAINBOW) n else 1) {
-            val c = when (tint) { VisualizerColor.SONG -> color; VisualizerColor.WHITE -> Color.White; VisualizerColor.RAINBOW -> rainbow[it] }
+        Array(1) {
+            val c = when (tint) { VisualizerColor.SONG -> color; VisualizerColor.WHITE -> Color.White }
             Brush.radialGradient(
                 0f to c.copy(alpha = 0.9f), 0.35f to c.copy(alpha = 0.4f), 1f to c.copy(alpha = 0f),
                 center = Offset.Zero, radius = GLOW_R,
@@ -187,14 +185,13 @@ private fun VisualizerDrawing(
             val h = size.height
             val gain = big.gain
             val sw = swell.floatValue
-            val solid = when (tint) { VisualizerColor.SONG -> color; VisualizerColor.WHITE -> Color.White; VisualizerColor.RAINBOW -> Color.Unspecified }
-            val rainbowBrush = if (tint == VisualizerColor.RAINBOW) Brush.horizontalGradient(rainbowList, 0f, w) else null
+            val solid = when (tint) { VisualizerColor.SONG -> color; VisualizerColor.WHITE -> Color.White }
             // Top to bottom: full colour fading a little, like the bars always had.
-            val brush = rainbowBrush ?: Brush.verticalGradient(
+            val brush = Brush.verticalGradient(
                 listOf(solid, solid.copy(alpha = 0.45f + sw * 0.15f)),
                 startY = 0f, endY = h,
             )
-            val paint: Brush = rainbowBrush ?: SolidColor(solid)
+            val paint: Brush = SolidColor(solid)
             val pitch = w / n
             when (style) {
                 VisualizerStyle.BARS, VisualizerStyle.MIRROR -> {
@@ -221,8 +218,7 @@ private fun VisualizerDrawing(
                     line.reset(); line.smooth(xs, ys, n, start = true)
                     area.reset(); area.smooth(xs, ys, n, start = true)
                     area.lineTo(w, h); area.lineTo(0f, h); area.close()
-                    if (rainbowBrush != null) drawPath(area, rainbowBrush, alpha = 0.28f)
-                    else drawPath(area, Brush.verticalGradient(listOf(solid.copy(alpha = 0.42f + sw * 0.12f), solid.copy(alpha = 0.03f)), startY = top, endY = h))
+                    drawPath(area, Brush.verticalGradient(listOf(solid.copy(alpha = 0.42f + sw * 0.12f), solid.copy(alpha = 0.03f)), startY = top, endY = h))
                     drawPath(line, paint, style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
                 }
                 VisualizerStyle.LINE -> {
@@ -245,7 +241,7 @@ private fun VisualizerDrawing(
                     val step = h / rows
                     val r = minOf(pitch * 0.55f, step * 0.78f) / 2
                     for (i in 0 until n) {
-                        val c = if (tint == VisualizerColor.RAINBOW) rainbow[i] else solid
+                        val c = solid
                         val lit = reach(0.08f + pos[i] * 0.92f, gain) * rows
                         val x = i * pitch + pitch / 2
                         for (k in 0 until rows) {
@@ -270,7 +266,7 @@ private fun VisualizerDrawing(
                     // A bright little light at the heart of each glow.
                     for (i in 0 until n) {
                         val v = reach(pos[i], gain)
-                        val c = if (tint == VisualizerColor.RAINBOW) rainbow[i] else solid
+                        val c = solid
                         val x = i * pitch + pitch / 2
                         val y = h * (0.68f - 0.4f * v)
                         drawCircle(lerpWhite(c, 0.35f), 1.2.dp.toPx() + v * 2.dp.toPx(), Offset(x, y), alpha = 0.35f + 0.65f * v)
@@ -286,7 +282,7 @@ private fun VisualizerDrawing(
                         val bh = maxOf(1.dp.toPx(), reach(pos[i], gain) * room)
                         drawRoundRect(brush, Offset(x, h - bh), Size(bw, bh), CornerRadius(bw / 2), alpha = 0.75f)
                         val cy = (h - reach(peak[i], gain) * room - air - capH).coerceAtLeast(0f)
-                        val c = if (tint == VisualizerColor.RAINBOW) rainbow[i] else solid
+                        val c = solid
                         drawRoundRect(lerpWhite(c, 0.25f), Offset(x - pitch * 0.06f, cy), Size(bw + pitch * 0.12f, capH), CornerRadius(capH / 2))
                     }
                 }

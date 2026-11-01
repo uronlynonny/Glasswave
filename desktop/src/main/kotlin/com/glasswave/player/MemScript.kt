@@ -579,7 +579,7 @@ object MemScript {
                             }
                         }
                         "quit" -> { onUi { ps.release() }; System.exit(0) }
-                        // The visualizer's size, colour and feel (vissize LARGE, viscolor RAINBOW, visfeel SNAPPY).
+                        // The visualizer's size, colour and feel (vissize LARGE, viscolor WHITE, visfeel SNAPPY).
                         "vissize" -> onUi { Settings.updateVisualizerSize(VisualizerSize.valueOf(arg)) }
                         "viscolor" -> onUi { Settings.updateVisualizerColor(VisualizerColor.valueOf(arg)) }
                         "visfeel" -> onUi { Settings.updateVisualizerFeel(VisualizerFeel.valueOf(arg)) }

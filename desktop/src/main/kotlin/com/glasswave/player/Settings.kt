@@ -79,7 +79,6 @@ enum class VisualizerSize(val label: String, val detail: String, val scale: Floa
 /** The visualizer's colour. */
 enum class VisualizerColor(val label: String, val detail: String) {
     SONG("Song colour", "The colour of the song's cover."),
-    RAINBOW("Rainbow", "Every colour, from the bass on the left to the high notes on the right."),
     WHITE("White", "Plain white."),
 }
 
