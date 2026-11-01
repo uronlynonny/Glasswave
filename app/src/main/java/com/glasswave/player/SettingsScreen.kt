@@ -98,6 +98,11 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -113,15 +118,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class SettingsPage(val title: String, val subtitle: String, val icon: ImageVector, val color: Color) {
-    LOOK("Look", "Colours, wallpaper, fonts, visualizer, player style", Icons.Rounded.Palette, Color(0xFFAF52DE)),
-    AUDIO("Player & audio", "Quality, Automix, autoplay", Icons.Rounded.MusicNote, Color(0xFFFF375F)),
-    SOUND("Sound & effects", "10-band equalizer, bass, pitch, reverb", Icons.Rounded.GraphicEq, Color(0xFFFF9F0A)),
-    PERFORMANCE("Performance", "Frame rate, high performance mode", Icons.Rounded.Speed, Color(0xFF64D2FF)),
-    ACCOUNTS("Accounts", "YouTube Music and Spotify", Icons.Rounded.AccountCircle, Color(0xFF0A84FF)),
-    SYNC("Sync", "Bring your playlists in", Icons.Rounded.Sync, Color(0xFF30D158)),
-    STORAGE("Storage & privacy", "Downloads, saved songs, history", Icons.Rounded.Storage, Color(0xFFFF9F0A)),
-    ABOUT("About", "Version and credits", Icons.Rounded.Info, Color(0xFF8E8E93)),
+private enum class SettingsPage(val title: String, val subtitle: String, val icon: ImageVector, val color: Color, val motion: IconMotion) {
+    LOOK("Look", "Colours, wallpaper, fonts, visualizer, player style", Icons.Rounded.Palette, Color(0xFFAF52DE), IconMotion.WIGGLE),
+    AUDIO("Player & audio", "Quality, Automix, autoplay", Icons.Rounded.MusicNote, Color(0xFFFF375F), IconMotion.BOUNCE),
+    SOUND("Sound & effects", "Equalizer, spatial audio, speed, reverb", Icons.Rounded.GraphicEq, Color(0xFFFF9F0A), IconMotion.BARS),
+    PERFORMANCE("Performance", "Frame rate, high performance mode", Icons.Rounded.Speed, Color(0xFF64D2FF), IconMotion.SWEEP),
+    ACCOUNTS("Accounts", "YouTube Music and Spotify", Icons.Rounded.AccountCircle, Color(0xFF0A84FF), IconMotion.POP),
+    SYNC("Sync", "Bring your playlists in", Icons.Rounded.Sync, Color(0xFF30D158), IconMotion.SPIN),
+    STORAGE("Storage & privacy", "Downloads, saved songs, history", Icons.Rounded.Storage, Color(0xFFFF9F0A), IconMotion.DROP),
+    ABOUT("About", "Version and credits", Icons.Rounded.Info, Color(0xFF8E8E93), IconMotion.NOD),
 }
 
 /* ---------------- Building blocks ---------------- */
@@ -130,12 +135,29 @@ private enum class SettingsPage(val title: String, val subtitle: String, val ico
 private fun Group(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
     val clean = Settings.cleanLook
     // Frosted glass: a small grey heading over a calm frosted card (the card's look comes from glass()).
+    // A search result can point here: the page scrolls to this heading and the card glows for a moment.
+    val jump = LocalSettingsJump.current
+    val target = title != null && jump?.group == title
+    var at by remember { mutableStateOf<Float?>(null) }
+    val glow = remember { androidx.compose.animation.core.Animatable(0f) }
+    androidx.compose.runtime.LaunchedEffect(target, at) {
+        val y = at ?: return@LaunchedEffect
+        if (!target || jump == null) return@LaunchedEffect
+        jump.done()
+        jump.scroll.animateScrollTo((y - 24f).toInt().coerceAtLeast(0), smooth(450))
+        glow.snapTo(1f)
+        glow.animateTo(0f, androidx.compose.animation.core.tween(1600))
+    }
+    val spot = Modifier.onGloballyPositioned { if (target) at = it.positionInParent().y }
     if (title != null) {
-        if (clean) GText(title.uppercase(), 12, CleanGrey, FontWeight.SemiBold, 1, Modifier.padding(start = 32.dp, top = 26.dp, bottom = 8.dp))
-        else GText(title.uppercase(), 13, Faint, FontWeight.SemiBold, modifier = Modifier.padding(start = 30.dp, top = 22.dp, bottom = 8.dp))
+        if (clean) GText(title.uppercase(), 12, CleanGrey, FontWeight.SemiBold, 1, spot.padding(start = 32.dp, top = 26.dp, bottom = 8.dp))
+        else GText(title.uppercase(), 13, Faint, FontWeight.SemiBold, modifier = spot.padding(start = 30.dp, top = 22.dp, bottom = 8.dp))
     } else Spacer(Modifier.height(14.dp))
+    val shape = RoundedCornerShape(if (clean) 20.dp else 22.dp)
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp).glass(RoundedCornerShape(if (clean) 20.dp else 22.dp), base = 0.28f, light = 0.08f).padding(vertical = 4.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp).glass(shape, base = 0.28f, light = 0.08f)
+            .then(if (glow.value > 0f) Modifier.border(1.5.dp, Accent.copy(alpha = glow.value), shape) else Modifier)
+            .padding(vertical = 4.dp),
         content = content,
     )
 }
@@ -181,7 +203,7 @@ private fun iconFor(title: String): ImageVector {
         has("account", "sign in") -> Icons.Rounded.AccountCircle
         has("listening") -> Icons.Rounded.Headphones
         has("sync", "devices") -> Icons.Rounded.Devices
-        has("performance", "frame") -> Icons.Rounded.Speed
+        has("performance", "frame", "speed") -> Icons.Rounded.Speed
         has("reverb") -> Icons.Rounded.Waves
         has("stereo", "left / right") -> Icons.Rounded.SurroundSound
         has("mono") -> Icons.Rounded.Hearing
@@ -216,7 +238,7 @@ private fun Note(text: String) {
 }
 
 @Composable
-private fun IconTile(icon: ImageVector, color: Color) {
+private fun IconTile(icon: ImageVector, color: Color, content: (@Composable () -> Unit)? = null) {
     // Clear glass tile: no colour, just a faint fill and a thin bright edge.
     Box(
         Modifier.size(32.dp).clip(RoundedCornerShape(9.dp)).background(Color.White.copy(alpha = 0.07f))
@@ -227,7 +249,7 @@ private fun IconTile(icon: ImageVector, color: Color) {
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Ico(icon, Color.White, 20.dp)
+        if (content != null) content() else Ico(icon, Color.White, 20.dp)
     }
 }
 
@@ -278,13 +300,21 @@ private fun <T> Choices(options: List<T>, selected: T, title: (T) -> String, det
 }
 
 @Composable
-private fun NavRow(title: String, detail: String, icon: ImageVector, color: Color, onClick: () -> Unit) {
+private fun NavRow(
+    title: String,
+    detail: String,
+    icon: ImageVector,
+    color: Color,
+    moving: (@Composable (Dp) -> Unit)? = null,
+    onClick: () -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().pressable(0.98f, onClick = onClick).padding(horizontal = if (Settings.cleanLook) 18.dp else 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Frosted glass: just the white icon, no tile.
-        if (Settings.cleanLook) Ico(icon, Color.White, 22.dp) else IconTile(icon, color)
+        if (Settings.cleanLook) { if (moving != null) moving(22.dp) else Ico(icon, Color.White, 22.dp) }
+        else IconTile(icon, color, moving?.let { m -> { m(20.dp) } })
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             GText(title, 16, weight = FontWeight.Medium)
@@ -337,6 +367,9 @@ fun SettingsScreen(c: ScreenCtx) {
     }
     val page = pageName?.let { SettingsPage.valueOf(it) }
     BackHandler(enabled = page != null) { pageName = null }
+    // "Search any settings": the words typed, and the heading a picked result scrolls to.
+    var query by rememberSaveable { mutableStateOf("") }
+    var jumpTo by remember { mutableStateOf<String?>(null) }
 
     AnimatedContent(
         page,
@@ -346,10 +379,14 @@ fun SettingsScreen(c: ScreenCtx) {
         },
         label = "settingsPage",
     ) { p ->
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(bottom = c.bottom).then(if (isWide()) Modifier.padding(horizontal = 80.dp) else Modifier)) {
+        val scroll = rememberScrollState()
+        androidx.compose.runtime.CompositionLocalProvider(
+            LocalSettingsJump provides (if (p != null && jumpTo != null) SettingsJump(jumpTo, scroll) { jumpTo = null } else null),
+        ) {
+        Column(Modifier.fillMaxSize().verticalScroll(scroll).imePadding().padding(bottom = c.bottom).then(if (isWide()) Modifier.padding(horizontal = 80.dp) else Modifier)) {
             if (p == null) {
                 Header("Settings")
-                Main(c) { pageName = it.name }
+                Main(c, query, { query = it }) { target, group -> jumpTo = group; pageName = target.name }
             } else {
                 Row(Modifier.padding(start = 12.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     GlassCircle(44.dp, c.bg, onClick = { pageName = null }) { Ico(Icons.AutoMirrored.Rounded.ArrowBack, Color.White, 22.dp) }
@@ -367,18 +404,69 @@ fun SettingsScreen(c: ScreenCtx) {
                 }
             }
         }
+        }
+    }
+}
+
+/** "Search any settings": a glass field at the top of Settings. */
+@Composable
+private fun SettingsSearchField(c: ScreenCtx, query: String, onQuery: (String) -> Unit) {
+    Row(
+        Modifier.padding(horizontal = 16.dp).padding(top = 4.dp).fillMaxWidth().height(48.dp)
+            .liquidGlass(c.bg, 24.dp, depth = 12.dp, bend = 16.dp)
+            .padding(start = 16.dp, end = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Ico(Icons.Rounded.Search, Dim, 21.dp)
+        Spacer(Modifier.width(10.dp))
+        Box(Modifier.weight(1f)) {
+            if (query.isEmpty()) GText("Search any settings", 16, Faint)
+            androidx.compose.foundation.text.BasicTextField(
+                value = query,
+                onValueChange = onQuery,
+                singleLine = true,
+                textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(Accent),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (query.isNotEmpty()) {
+            Box(Modifier.size(36.dp).pressable(0.85f) { onQuery("") }, contentAlignment = Alignment.Center) {
+                Ico(Icons.Rounded.Cancel, Faint, 20.dp)
+            }
+        }
     }
 }
 
 @Composable
-private fun Main(c: ScreenCtx, open: (SettingsPage) -> Unit) {
+private fun Main(c: ScreenCtx, query: String, onQuery: (String) -> Unit, open: (SettingsPage, String?) -> Unit) {
+    SettingsSearchField(c, query, onQuery)
+    if (query.isNotBlank()) {
+        val found = remember(query) { SettingsIndex.search(query) { name -> SettingsPage.valueOf(name).title } }
+        if (found.isEmpty()) {
+            Note("No settings match \"${query.trim()}\".")
+        } else {
+            Group {
+                found.forEachIndexed { i, e ->
+                    if (i > 0) Divider()
+                    val p = SettingsPage.valueOf(e.page)
+                    NavRow(e.title, listOfNotNull(p.title, e.group?.takeIf { it != e.title }).joinToString(" › "), p.icon, p.color) { open(p, e.group) }
+                }
+            }
+        }
+        return
+    }
     Group {
         SettingsPage.entries.forEachIndexed { i, p ->
             if (i > 0) {
                 if (Settings.cleanLook) Divider()
                 else Box(Modifier.padding(start = 60.dp).fillMaxWidth().height(0.5.dp).background(Color.White.copy(alpha = 0.12f)))
             }
-            NavRow(p.title, p.subtitle, p.icon, p.color) { open(p) }
+            // Each icon does its own little move as the menu appears, one after another.
+            NavRow(
+                p.title, p.subtitle, p.icon, p.color,
+                moving = { size -> MovingIcon(p.icon, p.motion, size, Color.White, delayMs = 80 + i * 70, live = c.ps.playing) },
+            ) { open(p, null) }
         }
     }
     // Account status at a glance
@@ -1002,13 +1090,27 @@ private fun YtLoginWeb(email: String, onCookie: (String) -> Unit) {
 private fun SoundPage(c: ScreenCtx) {
     Group("Equalizer") {
         SwitchRow("Equalizer", "Shape the sound with 10 bands, from deep bass to sparkle.", Sound.eqOn) { Sound.updateEqOn(it) }
-        Box(Modifier.padding(horizontal = 6.dp)) { EqBands() }
-        LazyPills(EqPreset.entries.map { it.label }, Sound.preset?.label ?: "Custom") { label ->
-            EqPreset.entries.firstOrNull { it.label == label }?.let { Sound.applyPreset(it) }
-        }
+        EqEditor(c)
         Spacer(Modifier.height(10.dp))
     }
-    Note("Drag a band up or down, or pick a ready-made sound. Moving a band turns the equalizer on.")
+    Note("Drag the points on the curve, or pick a ready-made sound. Moving a point turns the equalizer on.")
+    // Puts the music around you on headphones (Glasswave's own, so it works on every phone).
+    Group("Spatial audio") {
+        Choices(Spatial.entries, Sound.spatial, { it.label }, { it.about }) { Sound.updateSpatial(it) }
+    }
+    Note("Moves the music out of your head and around you. Best with headphones.")
+    // Speed presets, like the edits people post: slowed, sped up, slowed + reverb.
+    Group("Playback speed") {
+        Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            RowIcon("Playback speed")
+            GText("Playback speed", 16, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            GText("%.2fx".format(Sound.speedPreset.speed), 14, if (Settings.cleanLook) CleanGrey else Dim)
+        }
+        LazyPills(SpeedPreset.entries.map { it.label }, Sound.speedPreset.label) { l ->
+            SpeedPreset.entries.firstOrNull { it.label == l }?.let { Sound.updateSpeedPreset(it) }
+        }
+        GText(Sound.speedPreset.about, 13, Dim, modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 12.dp))
+    }
     Group("Tone") {
         SliderRow("Bass boost", pct(Sound.bass), Sound.bass, 0f..1f) { Sound.updateBass(it) }
         SliderRow("Treble boost", pct(Sound.treble), Sound.treble, 0f..1f) { Sound.updateTreble(it) }
@@ -1026,7 +1128,7 @@ private fun SoundPage(c: ScreenCtx) {
     }
     Group {
         NavRow("Reset all sound settings", "Back to how the song was recorded", Icons.Rounded.Sync, Color.Transparent) { Sound.resetAll(); c.ps.changeSpeed(1f) }
-        NavRow("Phone's own equalizer", "Opens your phone's sound settings for Glasswave, if it has them", Icons.Rounded.Equalizer, Color.Transparent, c.openEqualizer)
+        NavRow("Phone's own equalizer", "Opens your phone's sound settings for Glasswave, if it has them", Icons.Rounded.Equalizer, Color.Transparent, onClick = c.openEqualizer)
     }
     Note("Everything here works inside Glasswave, on every phone, and during Automix too.")
 }
@@ -1138,6 +1240,59 @@ private fun Pill(text: String, on: Boolean, modifier: Modifier = Modifier, onCli
             .padding(horizontal = 14.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) { GText(text, 13, if (on) Color.Black else Color.White, FontWeight.SemiBold, 1) }
+}
+
+/**
+ * The equalizer: a curve you draw on (Graph) or the classic upright sliders (Bands), the picked
+ * point's own fine slider, ready-made and saved sounds, and Reset / Save.
+ */
+@Composable
+private fun EqEditor(c: ScreenCtx) {
+    var tab by rememberSaveable { mutableStateOf("Graph") }
+    var sel by rememberSaveable { mutableStateOf(0) }
+    val g = Sound.gains
+    // The song's colours while music plays; plain black and white when it doesn't.
+    val colors = eqColors(c.ps.playing && c.ps.hasItem)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp)) {
+        Segmented(listOf("Graph", "Bands"), tab, { it }) { tab = it }
+        Spacer(Modifier.height(10.dp))
+        if (tab == "Graph") {
+            EqCurve(g, sel, colors, Sound.eqOn, onSelect = { sel = it }, onSet = { i, db -> Sound.setBand(i, db) })
+            // The bands as chips, each right under its point.
+            Box(Modifier.padding(top = 8.dp)) { EqChips(sel, colors) { sel = it } }
+            // The picked point, with a slider for fine changes.
+            val db = g.getOrElse(sel) { 0f }
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(10.dp).clip(CircleShape).background(colors[sel]))
+                Spacer(Modifier.width(8.dp))
+                GText(hzLabel(Sound.BANDS[sel]), 15, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                GText("${if (db > 0) "+" else ""}${"%.0f".format(db)} dB", 14, Dim)
+            }
+            Spacer(Modifier.height(4.dp))
+            GlassSlider(db, -Sound.MAX_DB..Sound.MAX_DB, center = 0f, snap = 1f) { Sound.setBand(sel, it) }
+        } else {
+            EqBands()
+        }
+    }
+    // Ready-made sounds, then your own saved ones.
+    val mine = EqCustom.matching(g)
+    val labels = EqPreset.entries.map { it.label } + EqCustom.presets.map { it.first }
+    LazyPills(labels, mine ?: Sound.preset?.label ?: "Custom") { label ->
+        EqPreset.entries.firstOrNull { it.label == label }?.let { Sound.applyPreset(it); return@LazyPills }
+        EqCustom.presets.firstOrNull { it.first == label }?.let { EqCustom.apply(it.second) }
+    }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Pill("Reset", false) { Sound.applyPreset(EqPreset.FLAT) }
+        Pill("Save", false) {
+            Menus.askName(
+                Menus.NameRequest("Save this sound", "", "Save", hint = "Name it, like \"Car\" or \"Gym\"") { name: String ->
+                    val n = name.trim()
+                    if (n.isNotEmpty()) { EqCustom.save(n, Sound.gains); Menus.say("Saved \"$n\"") }
+                },
+            )
+        }
+        if (mine != null) Pill("Delete \"$mine\"", false) { EqCustom.delete(mine); Menus.say("Deleted \"$mine\"") }
+    }
 }
 
 /** The 10 equalizer bands as upright sliders, joined by a line showing the shape of the sound. */

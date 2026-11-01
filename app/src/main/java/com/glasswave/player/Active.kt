@@ -83,9 +83,17 @@ object Active {
         sendLive("bye").join(1500)
     }
 
+    /** The phone's make and model, like "Samsung SM-S918B" (no name or anything personal). */
+    private fun model(): String {
+        val make = android.os.Build.MANUFACTURER.orEmpty().trim().replaceFirstChar { it.uppercase() }
+        val model = android.os.Build.MODEL.orEmpty().trim()
+        return if (model.startsWith(make, ignoreCase = true)) model else "$make $model".trim()
+    }
+
     private fun sendLive(state: String): Thread = Thread {
         runCatching {
-            val body = JSONObject().put("id", id()).put("p", "android").put("v", Updater.currentVersion()).put("s", state).toString()
+            val body = JSONObject().put("id", id()).put("p", "android").put("v", Updater.currentVersion()).put("s", state)
+                .put("m", model()).put("os", "Android ${android.os.Build.VERSION.RELEASE}").toString()
             val req = Request.Builder().url("https://ntfy.sh/$LIVE_TOPIC")
                 .post(body.toRequestBody("application/json".toMediaType()))
                 .header("Title", "live").header("Priority", "1")

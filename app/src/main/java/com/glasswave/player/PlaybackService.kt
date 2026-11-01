@@ -323,7 +323,7 @@ class PlaybackService : MediaSessionService() {
         p.seekTo(at)
     }
     private val mixListener: (String) -> Unit = { url -> main.post { session?.player?.let { onMixKnown(it, url) } } }
-    private val soundListener: () -> Unit = { session?.player?.let { applyPitch(it) } }
+    private val soundListener: () -> Unit = { session?.player?.let { applyTempo(it); applySpatial(it) } }
 
     /** A player whose sound goes through Glasswave's own effects (equalizer, bass, reverb...) and Automix's mix EQ. */
     private fun withEffects(measure: Boolean, mix: MixFilter) = object : DefaultRenderersFactory(this) {
@@ -335,10 +335,39 @@ class PlaybackService : MediaSessionService() {
                 .build()
     }
 
-    /** Pitch from Sound settings, keeping whatever speed is set. */
-    private fun applyPitch(p: Player) {
-        val want = Sound.pitchFactor()
-        if (p.playbackParameters.pitch != want) p.playbackParameters = PlaybackParameters(p.playbackParameters.speed, want)
+    /**
+     * Speed and pitch from Sound settings: the speed preset (Normal, Slowed, Sped up...) and your
+     * pitch. While Automix is matching beats at normal speed, its tempo is kept; any other preset
+     * takes over from it straight away.
+     */
+    private fun applyTempo(p: Player) {
+        val rest = Sound.tempo()
+        val keep = MixTempo.busy && rest == 1f
+        if (!keep) { glideMs = 0; MixTempo.busy = false; setSpeedTo = rest }
+        val want = PlaybackParameters(if (keep) p.playbackParameters.speed else rest, Sound.playPitch())
+        if (p.playbackParameters != want) p.playbackParameters = want
+        // The second player carrying a song's ending through a mix plays the same way.
+        if (!keep) mixer?.let { m -> if (mixPreparedFor != null && m.playbackParameters != want) m.playbackParameters = want }
+    }
+
+    /** The speed the speed preset asks for: what Automix eases back to after matching beats. */
+    private fun restSpeed() = Sound.tempo()
+
+    /**
+     * Music sound attributes. While Glasswave's own spatial sound is on, the phone's spatializer
+     * (Android 13+) is asked to leave our sound alone, so it isn't made spatial twice.
+     */
+    private fun musicAttributes(): AudioAttributes = AudioAttributes.Builder()
+        .setUsage(C.USAGE_MEDIA)
+        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+        .setSpatializationBehavior(if (Sound.spatial != Spatial.OFF) C.SPATIALIZATION_BEHAVIOR_NEVER else C.SPATIALIZATION_BEHAVIOR_AUTO)
+        .build()
+
+    /** Spatial sound was switched on or off: update the sound attributes (only then, as it restarts the sound output). */
+    private fun applySpatial(p: Player) {
+        val want = musicAttributes()
+        if (p.audioAttributes != want) (p as? ExoPlayer)?.setAudioAttributes(want, true)
+        mixer?.let { m -> if (m.audioAttributes != want) m.setAudioAttributes(want, false) }
     }
 
     /* ---- Volume leveling: every song at the same loudness ---- */
@@ -442,20 +471,14 @@ class PlaybackService : MediaSessionService() {
         val player = ExoPlayer.Builder(this, withEffects(measure = true, mix = mainFilter))
             .setMediaSourceFactory(DefaultMediaSourceFactory(sources))
             .setLoadControl(load)
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(C.USAGE_MEDIA)
-                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                    .build(),
-                true,
-            )
+            .setAudioAttributes(musicAttributes(), true)
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
             .build()
         applySettings(player)
-        applyPitch(player)
+        applyTempo(player)
         Settings.listeners += settingsListener
         loadedQuality = Settings.streamQuality()
         Library.likeListeners += likeListener
@@ -469,7 +492,7 @@ class PlaybackService : MediaSessionService() {
                 mixOwnTransition = false
                 if (!mixing) mixPreparedFor = null
                 // A song you picked plays at its own tempo straight away.
-                if (!own && setSpeedTo != 1f) { glideMs = 0; setSpeed(player, 1f) }
+                if (!own && setSpeedTo != restSpeed()) { glideMs = 0; setSpeed(player, restSpeed()) }
                 mediaItem?.mediaId?.let { Queued.ids.remove(it) }
                 if (mixOn(player)) pickNextForMix(player)
                 listenAhead(player)
@@ -960,7 +983,7 @@ class PlaybackService : MediaSessionService() {
         return ExoPlayer.Builder(this, withEffects(measure = false, mix = mixerFilter))
             .setMediaSourceFactory(DefaultMediaSourceFactory(src))
             // Same sound settings as the main player, but it never takes audio focus of its own.
-            .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), false)
+            .setAudioAttributes(musicAttributes(), false)
             .build()
             .also { mixer = it }
     }
@@ -1052,7 +1075,8 @@ class PlaybackService : MediaSessionService() {
         p.volume = 0f
         mainFilter.sweepHz = 0f
         mainFilter.bass = pl.levels(0f).newBass
-        if (pl.locksBeat) setSpeed(p, pl.speed)
+        // Beats are only matched at normal speed (a speed preset stays as it is).
+        if (pl.locksBeat && restSpeed() == 1f) setSpeed(p, pl.speed)
         val idx = mixNext.takeIf { it in 0 until p.mediaItemCount } ?: p.nextMediaItemIndex
         if (idx == C.INDEX_UNSET) return endMix(p)
         p.seekTo(idx, pl.inStartMs + if (pl.locksBeat) startLag else 0L)
@@ -1077,7 +1101,7 @@ class PlaybackService : MediaSessionService() {
         mixerFilter.sweepHz = lv.oldSweepHz
         p.volume = lv.newGain * levelGain
         mainFilter.bass = lv.newBass
-        if (pl.locksBeat && m != null && p.isPlaying && heard > pl.inDelayMs + 400) {
+        if (pl.locksBeat && restSpeed() == 1f && m != null && p.isPlaying && heard > pl.inDelayMs + 400) {
             // Phase lock: nudge the new song a touch faster or slower until its beats sit on the old song's.
             val e = pl.phaseError(m.currentPosition.toDouble(), p.currentPosition.toDouble())
             if (!lagChecked && heard > pl.inDelayMs + 900) {
@@ -1096,7 +1120,7 @@ class PlaybackService : MediaSessionService() {
 
     private fun setSpeed(p: Player, s: Float) {
         if (kotlin.math.abs(s - setSpeedTo) < 0.0005f && p.playbackParameters.speed == setSpeedTo) return
-        MixTempo.busy = s != 1f
+        MixTempo.busy = kotlin.math.abs(s - restSpeed()) > 0.0005f
         setSpeedTo = s
         // Only the tempo: the pitch stays wherever Sound settings put it.
         p.playbackParameters = PlaybackParameters(s, p.playbackParameters.pitch)
@@ -1111,7 +1135,8 @@ class PlaybackService : MediaSessionService() {
         if (now - lastSpeedAt < 400) return
         lastSpeedAt = now
         val t = ((now - glideAt).toFloat() / glideMs).coerceIn(0f, 1f)
-        setSpeed(p, if (t >= 1f) 1f else glideFrom + (1f - glideFrom) * t)
+        val rest = restSpeed()
+        setSpeed(p, if (t >= 1f) rest else glideFrom + (rest - glideFrom) * t)
         if (t >= 1f) { glideMs = 0; MixTempo.busy = false }
     }
 
@@ -1172,7 +1197,7 @@ class PlaybackService : MediaSessionService() {
         mainFilter.sweepHz = 0f
         p.volume = levelGain
         // Ease back to the song's own tempo over a few bars.
-        if (setSpeedTo != 1f) {
+        if (setSpeedTo != restSpeed()) {
             glideFrom = setSpeedTo
             glideAt = android.os.SystemClock.elapsedRealtime()
             glideMs = pl?.glideMs?.coerceAtLeast(2_000) ?: 4_000

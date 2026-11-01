@@ -252,6 +252,8 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
 
         // Opening intro, once per launch (not again on rotation).
         var intro by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(true) }
+        // The very first time: a short welcome, after the intro.
+        if (Welcome.show) WelcomeScreen { Welcome.done() }
         if (intro) Intro { intro = false }
     }
 }

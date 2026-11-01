@@ -392,6 +392,7 @@ object MemScript {
                         "wallpaper" -> onUi { Settings.updateWallpaper(arg.takeIf { it != "none" }) }
                         "tab" -> onUi { vm.selectTab(Tab.valueOf(arg)) }
                         "settings" -> onUi { vm.openSettings(arg) }
+                        "eqpreset" -> onUi { Sound.updateEqOn(true); Sound.applyPreset(EqPreset.valueOf(arg)) }
                         "accent" -> onUi { Settings.updateAccentColor(if (arg == "song") null else arg.toLong(16).toInt()) }
                         "search" -> onUi { vm.selectTab(Tab.SEARCH); vm.onQuery(arg); vm.submitSearch() }
                         // rank query: what the All search shows, in order, with play counts.

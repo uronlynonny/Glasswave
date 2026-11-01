@@ -5,6 +5,9 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -14,6 +17,9 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.gestures.FlingBehavior
+import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -40,8 +46,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.VolumeMute
@@ -64,10 +72,12 @@ import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,15 +96,20 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Velocity
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineStart
 
 /* ---------------- Mini player ---------------- */
 
@@ -137,7 +152,7 @@ fun MiniPlayer(ps: PlayerState, page: Backdrop, onOpen: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 GText(ps.title, 15, Color.White, FontWeight.SemiBold, 1)
-                GText(if (ps.buffering) "Loading..." else ps.artist, 13, Dim, maxLines = 1)
+                MiniSubtitle(ps)
             }
             Box(Modifier.size(46.dp).pressable(0.85f) { ps.toggle() }, contentAlignment = Alignment.Center) {
                 Ico(if (ps.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, Color.White, 30.dp)
@@ -146,6 +161,28 @@ fun MiniPlayer(ps: PlayerState, page: Backdrop, onOpen: () -> Unit) {
                 Ico(Icons.Rounded.FastForward, Color.White, 30.dp)
             }
         }
+    }
+}
+
+/**
+ * Under the title: the line being sung right now when the song has synced lyrics (fading softly
+ * from line to line), otherwise the artist.
+ */
+@Composable
+private fun MiniSubtitle(ps: PlayerState) {
+    // Only looked up once something plays (not for a song left paused from last time).
+    val state = rememberLyrics(ps, fetch = ps.playing)
+    val lines = (state as? Load.Done)?.value?.takeIf { it.synced }?.lines
+    val active by rememberActiveLine(ps, lines)
+    val line = lines?.getOrNull(active)?.text?.takeIf { it.isNotBlank() }
+    val text = if (ps.buffering) "Loading..." else line ?: ps.artist
+    AnimatedContent(
+        text to (line != null && !ps.buffering),
+        Modifier.fillMaxWidth(),
+        transitionSpec = { fadeIn(smooth(250)) togetherWith fadeOut(smooth(200)) },
+        label = "miniLine",
+    ) { (t, sung) ->
+        GText(t, 13, if (sung) Color.White.copy(alpha = 0.82f) else Dim, maxLines = 1)
     }
 }
 
@@ -189,12 +226,28 @@ fun FullPlayer(ps: PlayerState, colors: CoverColors, onClose: () -> Unit, openEq
         GlassBackground(colors, hiRes(ps.art), Modifier.backdropSource(fp), artAlpha = 0.55f)
 
         val ui = PlayerUi(ps, fp, colors, onClose, onQueue = { sheet = Sheet.QUEUE }, onMore = { sheet = Sheet.MORE }, onLyrics = { lyrics = true })
-        if (isWide()) WideStyle(ui) else when (Settings.playerStyle) {
-            PlayerStyle.IMMERSIVE -> Immersive(ui)
-            PlayerStyle.CANVAS -> CanvasStyle(ui)
-            PlayerStyle.CARD -> CardStyle(ui)
-            PlayerStyle.PANEL -> PanelStyle(ui)
-            PlayerStyle.MINIMAL -> MinimalStyle(ui)
+        // The player fills the screen as before; scroll down for the lyrics card under it (like Spotify).
+        val page = rememberScrollState()
+        val scrolled by remember { derivedStateOf { page.value > 0 } }
+        androidx.activity.compose.BackHandler(enabled = scrolled && !lyrics && sheet == Sheet.NONE) { scope.launch { page.animateScrollTo(0) } }
+        val peek by rememberUpdatedState(onPeek)
+        val close by rememberUpdatedState(onClose)
+        val pull = remember(page, closeAt) { PullToClose(page, dragY, closeAt, scope, { peek(it) }, { close() }) }
+        val snap = rememberPageSnap(page)
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val pageH = maxHeight
+            Column(Modifier.fillMaxSize().nestedScroll(pull).verticalScroll(page, flingBehavior = snap)) {
+                Box(Modifier.fillMaxWidth().height(pageH)) {
+                    if (isWide()) WideStyle(ui) else when (Settings.playerStyle) {
+                        PlayerStyle.IMMERSIVE -> Immersive(ui)
+                        PlayerStyle.CANVAS -> CanvasStyle(ui)
+                        PlayerStyle.CARD -> CardStyle(ui)
+                        PlayerStyle.PANEL -> PanelStyle(ui)
+                        PlayerStyle.MINIMAL -> MinimalStyle(ui)
+                    }
+                }
+                LyricsCard(ps, colors, minOf(pageH * 0.62f, 420.dp), onExpand = { lyrics = true })
+            }
         }
 
         // Lyrics over the player: slides up and fades in with glass, a plain fade without.
@@ -220,6 +273,84 @@ fun FullPlayer(ps: PlayerState, colors: CoverColors, onClose: () -> Unit, openEq
             var shown by remember { mutableStateOf(Sheet.MORE) }
             if (sheet != Sheet.NONE) shown = sheet
             if (shown == Sheet.QUEUE) QueueSheet(ps, fp, colors) else MoreSheet(ps, fp, colors, openEqualizer)
+        }
+    }
+}
+
+/**
+ * Swipe down to close, on the scrolling player page: a pull down that starts at the top of the page
+ * moves the whole player down, and letting go far enough closes it (otherwise it springs back).
+ * Scrolling back up from the lyrics card stops at the player instead of closing it.
+ */
+private class PullToClose(
+    val page: ScrollState,
+    val dragY: Animatable<Float, *>,
+    val closeAt: Float,
+    val scope: kotlinx.coroutines.CoroutineScope,
+    val onPeek: (Boolean) -> Unit,
+    val onClose: () -> Unit,
+) : NestedScrollConnection {
+    // Whether this swipe started at the top of the page (null until the swipe's first move).
+    private var fromTop: Boolean? = null
+
+    // Moved right away (not dispatched later), so quick moves add up correctly.
+    private fun moveTo(y: Float) {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) { dragY.snapTo(y.coerceAtLeast(0f)) }
+    }
+
+    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+        if (source != NestedScrollSource.UserInput) return Offset.Zero
+        if (fromTop == null) fromTop = page.value == 0
+        // Pulled down and now going back up: undo the pull before scrolling.
+        if (dragY.value > 0f && available.y < 0f) {
+            val used = maxOf(available.y, -dragY.value)
+            moveTo(dragY.value + used)
+            return Offset(0f, used)
+        }
+        return Offset.Zero
+    }
+
+    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+        // At the top of the page: what's left of a pull down moves the player.
+        if (source == NestedScrollSource.UserInput && available.y > 0f && fromTop == true) {
+            if (dragY.value <= 0f) onPeek(true)
+            moveTo(dragY.value + available.y)
+            return Offset(0f, available.y)
+        }
+        return Offset.Zero
+    }
+
+    override suspend fun onPreFling(available: Velocity): Velocity {
+        fromTop = null
+        if (dragY.value <= 0f) return Velocity.Zero
+        if (dragY.value > closeAt) onClose()
+        else { dragY.animateTo(0f, smooth(180)); onPeek(false) }
+        return available
+    }
+}
+
+/** Letting go of the player page settles on the player or on the lyrics card, never in between. */
+@Composable
+private fun rememberPageSnap(page: ScrollState): FlingBehavior {
+    val fast = with(LocalDensity.current) { 400.dp.toPx() }
+    return remember(page, fast) {
+        object : FlingBehavior {
+            override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
+                val max = page.maxValue
+                if (max <= 0) return initialVelocity
+                val at = page.value
+                val target = when {
+                    initialVelocity > fast -> max
+                    initialVelocity < -fast -> 0
+                    else -> if (at > max / 2) max else 0
+                }
+                var last = at.toFloat()
+                animate(last, target.toFloat(), initialVelocity, spring(stiffness = Spring.StiffnessMediumLow)) { v, _ ->
+                    scrollBy(v - last)
+                    last = v
+                }
+                return 0f
+            }
         }
     }
 }

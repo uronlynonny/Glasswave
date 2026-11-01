@@ -74,15 +74,21 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     var repeat by mutableStateOf(Player.REPEAT_MODE_OFF)
     var speed by mutableStateOf(1f)
 
-    /** Playing speed, 0.5x to 2x. Pitch comes from Settings > Sound & effects. */
+    /** Playing speed, 0.5x to 2x. Normally it comes from the speed preset and pitch from Settings > Sound & effects. */
     fun changeSpeed(s: Float) {
         speed = s.coerceIn(0.5f, 2f)
         AudioDeck.speed = speed
     }
 
+    /** The speed preset (Normal, Slowed, Sped up...) and your pitch, for every song. */
+    private fun applyTempo() {
+        AudioDeck.pitch = Sound.playPitch()
+        if (speed != Sound.tempo()) changeSpeed(Sound.tempo())
+    }
+
     init {
-        AudioDeck.pitch = Sound.pitchFactor()
-        Sound.listeners += { AudioDeck.pitch = Sound.pitchFactor() }
+        applyTempo()
+        Sound.listeners += { applyTempo() }
     }
 
     /** Goes up whenever the queue changes, so the queue list knows to refresh. */

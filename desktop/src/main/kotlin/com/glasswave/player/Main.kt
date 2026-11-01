@@ -256,6 +256,7 @@ internal fun startUp() {
     boot("History.init") { History.init(ctx) }
     boot("Downloads.init") { Downloads.init(ctx) }
     SongReports.start()
+    EqCustom.init()
     boot("SongCache.init") { SongCache.init(ctx) }
     boot("NotInterested.init") { NotInterested.init(ctx) }
     boot("GenreArt.init") { GenreArt.init(ctx) }

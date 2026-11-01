@@ -4,6 +4,7 @@ package com.glasswave.player
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.sin
@@ -16,7 +17,7 @@ import kotlin.math.tanh
  */
 
 /**
- * The equalizer, bass and treble, distortion, stereo width, reverb, balance and mono from [Sound],
+ * The equalizer, bass and treble, distortion, stereo width, spatial sound, reverb, balance and mono from [Sound],
  * for one stream of stereo sound at [rate] samples a second. Call [process] for each pair of
  * samples (-1..1); the result is in [outL] and [outR].
  */
@@ -52,11 +53,16 @@ class SoundFx(private val rate: Int) {
         private set
 
     private var reverb: Reverb? = null
+    private var space: Binaural? = null
+    private var spatialOn = false
+    /** Whether anything other than spatial sound is on. */
+    private var others = false
 
     /** Forget the sound so far (after a jump in the song). */
     fun clear() {
         for (c in 0..1) { z1[c].fill(0f); z2[c].fill(0f) }
         reverb?.clear()
+        space?.clear()
     }
 
     /** Picks up changed settings. Cheap to call often: it only does work after a change. */
@@ -85,18 +91,25 @@ class SoundFx(private val rate: Int) {
         drive = Sound.drive
         driveNorm = 1f / tanh(1f + drive * 14f)
         width = Sound.width
-        val r = Sound.reverb
+        // A speed preset's reverb goes on top of your own, in the bigger of the two rooms.
+        val sp = Sound.speedPreset
+        val r = (Sound.reverb + sp.reverb).coerceAtMost(1f)
+        val room = if (sp.reverb > 0f && (Sound.reverb == 0f || sp.room.size > Sound.room.size)) sp.room else Sound.room
         wet = r * 1.6f
         dry = 1f - r * 0.35f
         if (r > 0f) {
             val rv = reverb ?: Reverb(rate).also { reverb = it }
-            rv.set(Sound.room.size, Sound.room.damp)
+            rv.set(room.size, room.damp)
         }
+        val spatial = Sound.spatial
+        spatialOn = spatial != Spatial.OFF
+        if (spatialOn) (space ?: Binaural(rate).also { space = it }).set(spatial) else space?.set(spatial)
         val bal = Sound.balance
         gainL = if (bal > 0) 1f - bal else 1f
         gainR = if (bal < 0) 1f + bal else 1f
         mono = Sound.mono
-        active = on.any { it } || drive > 0f || width > 0f || r > 0f || bal != 0f || mono
+        others = on.any { it } || drive > 0f || width > 0f || r > 0f || bal != 0f || mono
+        active = others || spatialOn || space?.idle == false
     }
 
     private fun peaking(i: Int, f: Float, q: Float, db: Float, fs: Float) {
@@ -167,6 +180,17 @@ class SoundFx(private val rate: Int) {
             l = m + s
             r = m - s
         }
+        val sp = space
+        if (sp != null) {
+            if (!spatialOn && sp.idle) {
+                // Spatial sound has finished fading out.
+                if (!others) active = false
+            } else {
+                sp.process(l, r)
+                l = sp.outL
+                r = sp.outR
+            }
+        }
         val rv = if (wet > 0f) reverb else null
         if (rv != null) {
             rv.process(l, r)
@@ -187,6 +211,137 @@ class SoundFx(private val rate: Int) {
         if (a <= 0.92f) return x
         val y = 0.92f + 0.08f * tanh((a - 0.92f) / 0.08f)
         return if (x < 0) -y else y
+    }
+}
+
+/**
+ * Spatial sound for headphones (see [Spatial]). From speakers, each ear also hears the other
+ * speaker, a moment later and duller (the head is in the way), and then the room. Headphones leave
+ * all that out, so the music sits inside your head. This puts it back: the difference between the
+ * sides reaches the far ear late and muffled, and a few early echoes and a short soft tail, different
+ * for each ear, place the music out in front of you. The centre (vocals, kick) isn't crossfed at all
+ * and the echoes leave out the deep bass, so it stays solid and tight; summed to mono the crossfeed
+ * cancels out.
+ */
+private class Binaural(private val rate: Int) {
+    // Where each setting is heading, and where it is now: they glide, so changes don't click.
+    private var target = Spatial.OFF
+    private var toCross = 0f; private var toSide = 1f; private var toEarly = 0f; private var toTail = 0f; private var toTrim = 1f
+    private var cross = 0f; private var side = 1f; private var early = 0f; private var tail = 0f; private var trim = 1f
+    private val glide = 1f - exp(-1f / (0.03f * rate))
+
+    // The far ear: the side difference, delayed (up to 63 samples) and muffled by the head.
+    private val sideBuf = FloatArray(64)
+    private var sidePos = 0
+    private var itd = 1
+    private val shadowK = 1f - exp(-2f * PI.toFloat() * 750f / rate)
+    private var shadow = 0f
+
+    // What the echoes are made from: without the deep bass and the very top.
+    private val hpK = 1f - exp(-2f * PI.toFloat() * 180f / rate)
+    private val lpK = 1f - exp(-2f * PI.toFloat() * 5500f / rate)
+    private var lowL = 0f; private var lowR = 0f; private var topL = 0f; private var topR = 0f
+
+    // Early echoes off the walls, at different times for each ear.
+    private val size = (rate * 0.025f).toInt().coerceAtLeast(64).takeHighestOneBit() * 2
+    private val mask = size - 1
+    private val echoL = FloatArray(size)
+    private val echoR = FloatArray(size)
+    private var pos = 0
+    private val dl = IntArray(TAPS) { (EARLY_L_MS[it] * rate / 1000f).toInt() }
+    private val dr = IntArray(TAPS) { (EARLY_R_MS[it] * rate / 1000f).toInt() }
+
+    // The tail: four delay lines that feed into each other (a small feedback delay network).
+    private val lines = Array(4) { FloatArray((TAIL_MS[it] * rate / 1000f).toInt().coerceAtLeast(8)) }
+    private val linePos = IntArray(4)
+    private val fb = FloatArray(4) { 10f.pow(-3f * lines[it].size / (TAIL_SECONDS * rate)) }
+    private val damp = FloatArray(4)
+    private val dampK = 1f - exp(-2f * PI.toFloat() * 4000f / rate)
+
+    var outL = 0f; private set
+    var outR = 0f; private set
+
+    /** True when it's off and has finished fading out. */
+    val idle: Boolean
+        get() = target == Spatial.OFF && cross < 1e-4f && abs(side - 1f) < 1e-4f && early < 1e-4f &&
+            tail < 1e-4f && abs(trim - 1f) < 1e-4f
+
+    fun set(s: Spatial) {
+        // Coming back on: forget whatever was left from last time.
+        if (s != Spatial.OFF && idle) clear()
+        target = s
+        toCross = s.cross; toSide = s.side; toEarly = s.early; toTail = s.tail; toTrim = s.trim
+        if (s != Spatial.OFF) itd = (s.itdMs * rate / 1000f + 0.5f).toInt().coerceIn(1, 63)
+    }
+
+    fun clear() {
+        sideBuf.fill(0f); shadow = 0f
+        lowL = 0f; lowR = 0f; topL = 0f; topR = 0f
+        echoL.fill(0f); echoR.fill(0f)
+        lines.forEach { it.fill(0f) }
+        damp.fill(0f)
+    }
+
+    fun process(l: Float, r: Float) {
+        cross += (toCross - cross) * glide
+        side += (toSide - side) * glide
+        early += (toEarly - early) * glide
+        tail += (toTail - tail) * glide
+        trim += (toTrim - trim) * glide
+
+        // Crossfeed, on the side difference only.
+        val m = (l + r) * 0.5f
+        val s = (l - r) * 0.5f
+        sideBuf[sidePos] = s
+        val late = sideBuf[(sidePos - itd) and 63]
+        sidePos = (sidePos + 1) and 63
+        shadow += (late - shadow) * shadowK
+        val s2 = (s - cross * shadow) * side
+
+        // Early echoes. Even ones come from the same side's speaker, odd ones from the other side's.
+        lowL += (l - lowL) * hpK; topL += (l - lowL - topL) * lpK
+        lowR += (r - lowR) * hpK; topR += (r - lowR - topR) * lpK
+        echoL[pos] = topL
+        echoR[pos] = topR
+        var el = 0f
+        var er = 0f
+        for (i in 0 until TAPS) {
+            val g = EARLY_GAIN[i]
+            if (i and 1 == 0) {
+                el += g * echoL[(pos - dl[i]) and mask]
+                er += g * echoR[(pos - dr[i]) and mask]
+            } else {
+                el += g * echoR[(pos - dl[i]) and mask]
+                er += g * echoL[(pos - dr[i]) and mask]
+            }
+        }
+        pos = (pos + 1) and mask
+
+        // The tail, fed by the echoes.
+        for (i in 0..3) damp[i] += (lines[i][linePos[i]] - damp[i]) * dampK
+        val d0 = damp[0]; val d1 = damp[1]; val d2 = damp[2]; val d3 = damp[3]
+        feed(0, el + (d0 + d1 + d2 + d3) * 0.5f * fb[0])
+        feed(1, er + (d0 - d1 + d2 - d3) * 0.5f * fb[1])
+        feed(2, (d0 + d1 - d2 - d3) * 0.5f * fb[2])
+        feed(3, (d0 - d1 - d2 + d3) * 0.5f * fb[3])
+
+        outL = (m + s2 + early * el + tail * (d0 + d2)) * trim
+        outR = (m - s2 + early * er + tail * (d1 + d3)) * trim
+    }
+
+    private fun feed(i: Int, x: Float) {
+        val buf = lines[i]
+        buf[linePos[i]] = x
+        if (++linePos[i] >= buf.size) linePos[i] = 0
+    }
+
+    private companion object {
+        const val TAPS = 6
+        val EARLY_L_MS = floatArrayOf(4.3f, 6.9f, 9.8f, 13.1f, 17.6f, 22.7f)
+        val EARLY_R_MS = floatArrayOf(4.9f, 6.1f, 10.7f, 12.4f, 18.9f, 21.5f)
+        val EARLY_GAIN = floatArrayOf(0.50f, 0.42f, 0.36f, 0.30f, 0.24f, 0.19f)
+        val TAIL_MS = floatArrayOf(31.3f, 37.9f, 43.1f, 47.7f)
+        const val TAIL_SECONDS = 0.45f
     }
 }
 

@@ -77,9 +77,21 @@ object Active {
         sendLive("bye").join(1500)
     }
 
+    /** The system and its version, like "Windows 11" or "macOS 14.5" (nothing personal). */
+    private fun osName(): String {
+        val name = System.getProperty("os.name").orEmpty()
+        val ver = System.getProperty("os.version").orEmpty()
+        return when {
+            Os.isMac -> "macOS $ver".trim()
+            name.startsWith("Windows") -> name
+            else -> "$name $ver".trim()
+        }
+    }
+
     private fun sendLive(state: String): Thread = Thread {
         runCatching {
-            val body = JSONObject().put("id", id()).put("p", if (Os.isMac) "mac" else "windows").put("v", Updater.currentVersion()).put("s", state).toString()
+            val body = JSONObject().put("id", id()).put("p", if (Os.isMac) "mac" else "windows").put("v", Updater.currentVersion()).put("s", state)
+                .put("os", osName()).toString()
             val req = Request.Builder().url("https://ntfy.sh/$LIVE_TOPIC")
                 .post(body.toRequestBody("application/json".toMediaType()))
                 .header("Title", "live").header("Priority", "1")

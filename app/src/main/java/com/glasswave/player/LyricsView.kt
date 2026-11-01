@@ -111,12 +111,16 @@ import kotlinx.coroutines.delay
  *    No wave, no blur: lighter, but just as in time.
  */
 
+/**
+ * The playing song's lyrics, loaded once per song (the lyrics screen, the card under the player and
+ * the mini player all share LyricsRepo's copy). With [fetch] false nothing new is looked up yet.
+ */
 @Composable
-fun LyricsScreen(ps: PlayerState, onClose: () -> Unit) {
+fun rememberLyrics(ps: PlayerState, fetch: Boolean = true): Load<Lyrics?> {
     val url = ps.currentId
     var state by remember(url) { mutableStateOf<Load<Lyrics?>>(Load.Loading) }
-    LaunchedEffect(url) {
-        if (url == null) return@LaunchedEffect
+    LaunchedEffect(url, fetch) {
+        if (url == null || !fetch || state is Load.Done) return@LaunchedEffect
         state = Load.Loading
         // Give the player a moment to know the song's length (it helps pick the right lyrics).
         if (ps.durationMs <= 0 && !LyricsRepo.ready(url)) delay(600)
@@ -126,6 +130,29 @@ fun LyricsScreen(ps: PlayerState, onClose: () -> Unit) {
             Load.Failed("Couldn't load lyrics. Check your internet.")
         }
     }
+    return state
+}
+
+/** The line being sung at [pos] (-1 before the first). A touch early, so it lands as the line is sung. */
+fun activeLine(lines: List<LyricLine>, pos: Long): Int = lines.indexOfLast { it.ms <= pos + 150 }
+
+/** The line being sung right now, checked a few times a second (only changes when the line does). */
+@Composable
+fun rememberActiveLine(ps: PlayerState, lines: List<LyricLine>?): androidx.compose.runtime.State<Int> {
+    val active = remember(lines) { mutableIntStateOf(-1) }
+    LaunchedEffect(lines) {
+        if (lines.isNullOrEmpty()) return@LaunchedEffect
+        while (true) {
+            active.intValue = activeLine(lines, ps.livePosition())
+            delay(120)
+        }
+    }
+    return active
+}
+
+@Composable
+fun LyricsScreen(ps: PlayerState, onClose: () -> Unit) {
+    val state = rememberLyrics(ps)
     val fancy = Settings.glass && Settings.animations
     val accent = CoverTint.accent
     val wide = isWide()
@@ -356,8 +383,7 @@ private fun SyncedLyrics(ps: PlayerState, ly: Lyrics, fancy: Boolean, accent: Co
             pos.longValue = (ps.livePosition() * stretch).toLong() + nudge
         }
     }
-    // A touch early, so the highlight lands as the line is sung rather than after.
-    val active by remember(lines) { derivedStateOf { lines.indexOfLast { it.ms <= pos.longValue + 150 } } }
+    val active by remember(lines) { derivedStateOf { activeLine(lines, pos.longValue) } }
 
     // Where each line sits in the list (measured once), and where each one is drawn right now.
     val ys = remember(lines) { FloatArray(n) }
