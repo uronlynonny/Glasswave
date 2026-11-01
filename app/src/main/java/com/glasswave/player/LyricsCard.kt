@@ -31,6 +31,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.border
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
@@ -60,7 +62,13 @@ private fun cardColor(colors: CoverColors): Color {
  * Songs without lyrics show no card at all, so the player doesn't scroll for them.
  */
 @Composable
-fun LyricsCard(ps: PlayerState, colors: CoverColors, height: Dp, onExpand: () -> Unit) {
+fun LyricsCard(
+    ps: PlayerState,
+    colors: CoverColors,
+    height: Dp,
+    onBounds: (androidx.compose.ui.geometry.Rect) -> Unit = {},
+    onExpand: () -> Unit,
+) {
     val state = rememberLyrics(ps)
     val ly = (state as? Load.Done)?.value
     val show = state is Load.Loading || (ly != null && ly.lines.any { it.text.isNotBlank() })
@@ -74,8 +82,16 @@ fun LyricsCard(ps: PlayerState, colors: CoverColors, height: Dp, onExpand: () ->
                 .navigationBarsPadding()
                 .padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 14.dp)
                 .height(height)
+                // Where it sits, so the full lyrics can grow out of it (and shrink back into it).
+                .onGloballyPositioned { onBounds(it.boundsInRoot()) }
                 .clip(RoundedCornerShape(22.dp))
-                .background(cardColor(colors)),
+                // See-through glass tinted with the cover's colour, with a thin bright edge.
+                .background(cardColor(colors).copy(alpha = 0.34f))
+                .border(
+                    0.8.dp,
+                    Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.32f), Color.White.copy(alpha = 0.06f), Color.White.copy(alpha = 0.14f))),
+                    RoundedCornerShape(22.dp),
+                ),
         ) {
             Row(
                 Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, null, onClick = onExpand)

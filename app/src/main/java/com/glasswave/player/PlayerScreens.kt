@@ -81,6 +81,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
@@ -226,6 +228,8 @@ fun FullPlayer(ps: PlayerState, colors: CoverColors, onClose: () -> Unit, openEq
         GlassBackground(colors, hiRes(ps.art), Modifier.backdropSource(fp), artAlpha = 0.55f)
 
         val ui = PlayerUi(ps, fp, colors, onClose, onQueue = { sheet = Sheet.QUEUE }, onMore = { sheet = Sheet.MORE }, onLyrics = { lyrics = true })
+        // Where the lyrics card is on screen, for the full lyrics to grow out of.
+        var cardRect by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
         // The player fills the screen as before; scroll down for the lyrics card under it (like Spotify).
         val page = rememberScrollState()
         val scrolled by remember { derivedStateOf { page.value > 0 } }
@@ -246,18 +250,12 @@ fun FullPlayer(ps: PlayerState, colors: CoverColors, onClose: () -> Unit, openEq
                         PlayerStyle.MINIMAL -> MinimalStyle(ui)
                     }
                 }
-                LyricsCard(ps, colors, minOf(pageH * 0.62f, 420.dp), onExpand = { lyrics = true })
+                LyricsCard(ps, colors, minOf(pageH * 0.62f, 420.dp), onBounds = { cardRect = it }, onExpand = { lyrics = true })
             }
         }
 
-        // Lyrics over the player: slides up and fades in with glass, a plain fade without.
-        AnimatedVisibility(
-            lyrics,
-            enter = if (Settings.glass) slideInVertically(smooth(250)) { it / 5 } + fadeIn(smooth(220)) else fadeIn(smooth(180)),
-            exit = if (Settings.glass) slideOutVertically(smooth(200)) { it / 5 } + fadeOut(smooth(180)) else fadeOut(smooth(150)),
-        ) {
-            LyricsScreen(ps) { lyrics = false }
-        }
+        // The full lyrics grow out of the lyrics card to fill the screen, and shrink back into it on close.
+        LyricsGrow(ps, lyrics, cardRect) { lyrics = false }
 
         // Sheets: "Up next" and the ••• menu.
         AnimatedVisibility(sheet != Sheet.NONE, enter = fadeIn(smooth(150)), exit = fadeOut(smooth(150))) {
@@ -326,6 +324,57 @@ private class PullToClose(
         if (dragY.value > closeAt) onClose()
         else { dragY.animateTo(0f, smooth(180)); onPeek(false) }
         return available
+    }
+}
+
+/**
+ * The full lyrics page, opening from the lyrics card: a window that grows from the card's place to
+ * the whole screen, showing the lyrics page as it goes, then shrinks back into the card when closed.
+ * The card shows through at the start and the end, so it looks like the card itself expanding.
+ */
+@Composable
+private fun LyricsGrow(ps: PlayerState, open: Boolean, card: androidx.compose.ui.geometry.Rect?, onClose: () -> Unit) {
+    val p = remember { Animatable(0f) }
+    androidx.compose.runtime.LaunchedEffect(open) {
+        p.animateTo(
+            if (open) 1f else 0f,
+            if (Settings.animations) androidx.compose.animation.core.tween(if (open) 480 else 420, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            else androidx.compose.animation.core.snap(),
+        )
+    }
+    if (p.value <= 0f && !open) return
+    var origin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val radius = with(LocalDensity.current) { 22.dp.toPx() }
+    Box(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
+        androidx.compose.ui.layout.Layout(
+            content = {
+                Box(Modifier.graphicsLayer { alpha = ((p.value - 0.08f) / 0.45f).coerceIn(0f, 1f) }) { LyricsScreen(ps, onClose) }
+            },
+            modifier = Modifier.fillMaxSize(),
+        ) { measurables, constraints ->
+            val w = constraints.maxWidth.toFloat()
+            val h = constraints.maxHeight.toFloat()
+            val full = androidx.compose.ui.geometry.Rect(0f, 0f, w, h)
+            // From the card (where it is on screen now); without one, from the lower part of the screen.
+            val from = card?.translate(-origin)?.takeIf { it.width > 0f && it.height > 0f }
+                ?: androidx.compose.ui.geometry.Rect(0f, h * 0.55f, w, h)
+            val r = androidx.compose.ui.geometry.lerp(from, full, p.value)
+            // The lyrics page stays put at full size; only the window onto it grows.
+            val page = measurables.first().measure(androidx.compose.ui.unit.Constraints.fixed(w.toInt(), h.toInt()))
+            layout(w.toInt(), h.toInt()) {
+                page.placeWithLayer(0, 0) {
+                    clip = true
+                    shape = object : androidx.compose.ui.graphics.Shape {
+                        override fun createOutline(size: androidx.compose.ui.geometry.Size, layoutDirection: androidx.compose.ui.unit.LayoutDirection, density: androidx.compose.ui.unit.Density): androidx.compose.ui.graphics.Outline {
+                            val cr = radius * (1f - p.value)
+                            return androidx.compose.ui.graphics.Outline.Rounded(
+                                androidx.compose.ui.geometry.RoundRect(r, androidx.compose.ui.geometry.CornerRadius(cr)),
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -519,8 +568,6 @@ private fun MinimalStyle(ui: PlayerUi) {
             }
             Spacer(Modifier.width(10.dp))
             LikeButton(ui.ps, CoverTint.accent)
-            Spacer(Modifier.width(4.dp))
-            LyricsButton(ui.ps.playing, ui.colors.a, ui.onLyrics)
         }
         Spacer(Modifier.weight(1f))
         Details(ui, showTitle = false)
@@ -544,7 +591,7 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
     Column(modifier.fillMaxWidth()) {
         if (Flow.active) FlowBar(ps)
         if (showTitle) {
-            // Title on the left, the lyrics button on the top right, in every player style.
+            // Title on the left, the like button on the top right, in every player style.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     GText(ps.title, if (compact) 20 else 22, Color.White, FontWeight.Bold, 1)
@@ -552,8 +599,6 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
                 }
                 Spacer(Modifier.width(10.dp))
                 LikeButton(ps, CoverTint.accent)
-                Spacer(Modifier.width(4.dp))
-                LyricsButton(ps.playing, ui.colors.a, ui.onLyrics)
             }
             Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
         }

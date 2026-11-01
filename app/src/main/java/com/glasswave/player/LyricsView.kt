@@ -166,7 +166,7 @@ fun LyricsScreen(ps: PlayerState, onClose: () -> Unit) {
                     Modifier.fillMaxHeight().width(360.dp).padding(start = 28.dp, end = 12.dp, top = 24.dp, bottom = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Box(Modifier.size(46.dp).align(Alignment.Start).pressable(0.85f, onClick = onClose), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(58.dp).align(Alignment.Start).clip(CircleShape).pressable(0.85f, onClick = onClose), contentAlignment = Alignment.Center) {
                         Ico(Icons.Rounded.Close, Color.White, 26.dp)
                     }
                     Spacer(Modifier.weight(1f))
@@ -182,15 +182,16 @@ fun LyricsScreen(ps: PlayerState, onClose: () -> Unit) {
         } else {
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
                 // Song and close
-                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Cover(ps.art, Modifier.size(46.dp), 8.dp)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         GText(ps.title, 16, weight = FontWeight.SemiBold, maxLines = 1)
                         GText(ps.artist, 13, Color.White.copy(alpha = 0.7f), maxLines = 1)
                     }
-                    Spacer(Modifier.width(46.dp)) // room for the report flag
-                    Box(Modifier.size(46.dp).pressable(0.85f, onClick = onClose), contentAlignment = Alignment.Center) {
+                    Spacer(Modifier.width(50.dp)) // room for the report flag
+                    // A big target so it's easy to hit.
+                    Box(Modifier.size(58.dp).clip(CircleShape).pressable(0.85f, onClick = onClose), contentAlignment = Alignment.Center) {
                         Ico(Icons.Rounded.Close, Color.White, 26.dp)
                     }
                 }
@@ -199,7 +200,7 @@ fun LyricsScreen(ps: PlayerState, onClose: () -> Unit) {
             }
         }
         // Report the lyrics (top right; on a phone, beside the close button).
-        ReportLyrics(ps, state, Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = if (wide) 16.dp else 10.dp, end = if (wide) 16.dp else 54.dp))
+        ReportLyrics(ps, state, Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = if (wide) 16.dp else 10.dp, end = if (wide) 16.dp else 66.dp))
     }
 }
 
