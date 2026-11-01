@@ -611,7 +611,7 @@ private fun Look() {
                 VisualizerPreview(v, Modifier.width(92.dp).height(30.dp))
                 Spacer(Modifier.width(8.dp))
                 Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-                    AnimatedVisibility(on, enter = scaleIn(bouncy()), exit = scaleOut(smooth(120))) { Ico(Icons.Rounded.Check, Accent, 24.dp) }
+                    androidx.compose.animation.AnimatedVisibility(on, enter = scaleIn(bouncy()), exit = scaleOut(smooth(120))) { Ico(Icons.Rounded.Check, Accent, 24.dp) }
                 }
             }
         }
