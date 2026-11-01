@@ -2,6 +2,13 @@
 package com.glasswave.player
 
 import androidx.activity.compose.BackDispatcher
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.dp
 import com.sun.jna.Library as JnaLibrary
 import com.sun.jna.Memory
 import com.sun.jna.Native
@@ -572,6 +579,39 @@ object MemScript {
                             }
                         }
                         "quit" -> { onUi { ps.release() }; System.exit(0) }
+                        // The visualizer's size, colour and feel (vissize LARGE, viscolor RAINBOW, visfeel SNAPPY).
+                        "vissize" -> onUi { Settings.updateVisualizerSize(VisualizerSize.valueOf(arg)) }
+                        "viscolor" -> onUi { Settings.updateVisualizerColor(VisualizerColor.valueOf(arg)) }
+                        "visfeel" -> onUi { Settings.updateVisualizerFeel(VisualizerFeel.valueOf(arg)) }
+                        // visgrid name: every style's Settings preview in every colour, drawn off screen into name_a/name_b.png.
+                        "visgrid" -> {
+                            val styles = VisualizerStyle.entries.filter { it != VisualizerStyle.OFF }
+                            val wDp = 3 * 380 + 16
+                            val hDp = styles.size * 50 + 16
+                            var scene: androidx.compose.ui.ImageComposeScene? = null
+                            onUi {
+                                scene = androidx.compose.ui.ImageComposeScene(wDp * 2, hDp * 2, androidx.compose.ui.unit.Density(2f)) {
+                                    androidx.compose.foundation.layout.Column(
+                                        androidx.compose.ui.Modifier.size(wDp.dp, hDp.dp).background(androidx.compose.ui.graphics.Color(0xFF15161A)).padding(8.dp),
+                                    ) {
+                                        for (s in styles) androidx.compose.foundation.layout.Row(androidx.compose.ui.Modifier.height(50.dp)) {
+                                            for (t in VisualizerColor.entries) androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.width(380.dp).padding(8.dp)) {
+                                                VisualizerPreview(s, androidx.compose.ui.Modifier.fillMaxWidth().height(34.dp), color = androidx.compose.ui.graphics.Color(0xFF6EC8FF), tint = t)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            val t0 = System.nanoTime()
+                            for (k in 0..112) {
+                                onUi {
+                                    val img = scene!!.render(t0 + k * 16_000_000L)
+                                    if (k == 90 || k == 112) File(file.parentFile, "${arg}_${if (k == 90) "a" else "b"}.png")
+                                        .writeBytes(img.encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)!!.bytes)
+                                }
+                            }
+                            onUi { scene!!.close() }
+                        }
                     }
                 }.onFailure { System.err.println("GW step failed: $l ($it)") }
             }

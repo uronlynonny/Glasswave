@@ -102,6 +102,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -119,12 +120,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private enum class SettingsPage(val title: String, val subtitle: String, val icon: ImageVector, val color: Color, val motion: IconMotion) {
-    LOOK("Look", "Colours, wallpaper, fonts, visualizer, player style", Icons.Rounded.Palette, Color(0xFFAF52DE), IconMotion.WIGGLE),
-    AUDIO("Player & audio", "Quality, Automix, autoplay", Icons.Rounded.MusicNote, Color(0xFFFF375F), IconMotion.BOUNCE),
-    SOUND("Sound & effects", "Equalizer, spatial audio, speed, reverb", Icons.Rounded.GraphicEq, Color(0xFFFF9F0A), IconMotion.BARS),
-    PERFORMANCE("Performance", "Frame rate, high performance mode", Icons.Rounded.Speed, Color(0xFF64D2FF), IconMotion.SWEEP),
-    ACCOUNTS("Accounts", "YouTube Music and Spotify", Icons.Rounded.AccountCircle, Color(0xFF0A84FF), IconMotion.POP),
-    SYNC("Sync", "Bring your playlists in", Icons.Rounded.Sync, Color(0xFF30D158), IconMotion.SPIN),
+    GENERAL("General", "Updates, smoothness, helping out", Icons.Rounded.Settings, Color(0xFF8E8E93), IconMotion.SPIN),
+    LOOK("Appearance", "Colours, wallpaper, layout, visualizer, fonts", Icons.Rounded.Palette, Color(0xFFAF52DE), IconMotion.WIGGLE),
+    AUDIO("Playback", "Quality, Automix, autoplay, data saver", Icons.Rounded.MusicNote, Color(0xFFFF375F), IconMotion.BOUNCE),
+    SOUND("Audio Lab", "Equalizer, spatial audio, speed, effects", Icons.Rounded.GraphicEq, Color(0xFFFF9F0A), IconMotion.BARS),
+    ACCOUNTS("Accounts & sync", "YouTube Music, Spotify, your devices", Icons.Rounded.AccountCircle, Color(0xFF0A84FF), IconMotion.POP),
     STORAGE("Storage & privacy", "Downloads, saved songs, history", Icons.Rounded.Storage, Color(0xFFFF9F0A), IconMotion.DROP),
     ABOUT("About", "Version and credits", Icons.Rounded.Info, Color(0xFF8E8E93), IconMotion.NOD),
 }
@@ -393,12 +393,11 @@ fun SettingsScreen(c: ScreenCtx) {
                 }
                 Header(p.title)
                 when (p) {
+                    SettingsPage.GENERAL -> General(c)
                     SettingsPage.LOOK -> Look()
                     SettingsPage.AUDIO -> Audio(c)
                     SettingsPage.SOUND -> SoundPage(c)
-                    SettingsPage.PERFORMANCE -> Performance()
                     SettingsPage.ACCOUNTS -> AccountsPage(c)
-                    SettingsPage.SYNC -> SyncPage(c)
                     SettingsPage.STORAGE -> StoragePage(c)
                     SettingsPage.ABOUT -> About(c)
                 }
@@ -481,6 +480,53 @@ private fun Main(c: ScreenCtx, query: String, onQuery: (String) -> Unit, open: (
 }
 
 @Composable
+private fun General(c: ScreenCtx) {
+    val ctx = LocalContext.current
+    Group("Updates") {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+            val r = Updater.available
+            val p = Updater.progress
+            when {
+                r != null -> {
+                    GText("Glasswave ${r.version} is out", 16, weight = FontWeight.SemiBold)
+                    if (r.notes.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        GText(r.notes.trim(), 13, Dim, maxLines = 8)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    if (p != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            DownloadRing(p, 26.dp, CoverTint.accent, 3.dp)
+                            Spacer(Modifier.width(12.dp))
+                            GText("Downloading… ${(p * 100).toInt()}%", 14, Dim)
+                        }
+                    } else {
+                        GlassButton("Update now", c.bg, accent = true) { Updater.install(ctx) }
+                    }
+                }
+                else -> {
+                    GText("Glasswave ${Updater.currentVersion()}", 16, weight = FontWeight.SemiBold)
+                    GText("Glasswave checks for new versions when it opens.", 13, Dim)
+                    Spacer(Modifier.height(12.dp))
+                    GlassButton(if (Updater.checking) "Checking…" else "Check for updates", c.bg) { Updater.check(tell = true) }
+                }
+            }
+            Updater.status?.let {
+                Spacer(Modifier.height(10.dp))
+                GText(it, 13, CoverTint.accent)
+            }
+        }
+    }
+    Note("Updates come straight from the Glasswave releases page on GitHub. Android asks you to confirm each install; your songs and settings stay.")
+    Group("Help make Glasswave better") {
+        SwitchRow("Report songs that won't play", "Sends nonny dev the song, the error, your phone model and the app version so it gets fixed. Nothing about you.", Settings.reportProblems) { Settings.updateReportProblems(it) }
+        SwitchRow("Count me in usage numbers", "Tells nonny dev this copy of Glasswave is being used (a random number, nothing about you): once a day, and every few minutes while it's open or playing, so we know how many people listen.", Settings.countMe) { Settings.updateCountMe(it) }
+    }
+    Note("Nothing about you is ever included: no name, no account.")
+    Performance()
+}
+
+@Composable
 private fun Look() {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -554,8 +600,39 @@ private fun Look() {
         SliderRow("Glass panels", glassWord(Settings.glassOpacity), Settings.glassOpacity, 0.3f..1.8f) { Settings.updateGlassOpacity(it) }
     }
     Note("Your own picture, moving GIF or video shows behind the app instead of the cover's colours. The full player still shows the song's cover.")
+    // Each style with a live preview beside it (it moves even with nothing playing).
     Group("Visualizer") {
-        Choices(VisualizerStyle.entries, Settings.visualizer, { it.label }, { it.detail }) { Settings.updateVisualizer(it) }
+        VisualizerStyle.entries.forEachIndexed { i, v ->
+            if (i > 0) Divider()
+            val on = v == Settings.visualizer
+            Row(
+                Modifier.fillMaxWidth().pressable(0.98f) { Settings.updateVisualizer(v) }.padding(horizontal = 18.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    GText(v.label, 16, weight = FontWeight.Medium)
+                    GText(v.detail, 13, Dim)
+                }
+                Spacer(Modifier.width(12.dp))
+                VisualizerPreview(v, Modifier.width(92.dp).height(30.dp))
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                    AnimatedVisibility(on, enter = scaleIn(bouncy()), exit = scaleOut(smooth(120))) { Ico(Icons.Rounded.Check, Accent, 24.dp) }
+                }
+            }
+        }
+    }
+    if (Settings.visualizer != VisualizerStyle.OFF) {
+        Group("Visualizer look") {
+            GText("Size", 15, Color.White, FontWeight.SemiBold, modifier = Modifier.padding(start = 18.dp, top = 12.dp))
+            Choices(VisualizerSize.entries, Settings.visualizerSize, { it.label }, { it.detail }) { Settings.updateVisualizerSize(it) }
+            Divider()
+            GText("Colour", 15, Color.White, FontWeight.SemiBold, modifier = Modifier.padding(start = 18.dp, top = 12.dp))
+            Choices(VisualizerColor.entries, Settings.visualizerColor, { it.label }, { it.detail }) { Settings.updateVisualizerColor(it) }
+            Divider()
+            GText("Feel", 15, Color.White, FontWeight.SemiBold, modifier = Modifier.padding(start = 18.dp, top = 12.dp))
+            Choices(VisualizerFeel.entries, Settings.visualizerFeel, { it.label }, { it.detail }) { Settings.updateVisualizerFeel(it) }
+        }
     }
     Note("Shown above the progress bar in the player, in your highlight colour. It only works while it's on screen, so it doesn't use battery otherwise.")
     Group("Font") {
@@ -623,15 +700,12 @@ private fun Audio(c: ScreenCtx) {
         }
         Divider()
         SwitchRow("Skip silence", "Skips quiet gaps at the start and end of songs.", Settings.skipSilence) { Settings.updateSkipSilence(it) }
-        SwitchRow("Volume leveling", "Plays every song at the same loudness, so you don't have to keep changing the volume.", Settings.volumeLeveling) { Settings.updateVolumeLeveling(it) }
-        SwitchRow("Report songs that won't play", "Sends nonny dev the song, the error, your phone model and the app version so it gets fixed. Nothing about you.", Settings.reportProblems) { Settings.updateReportProblems(it) }
-        SwitchRow("Count me in usage numbers", "Tells nonny dev this copy of Glasswave is being used (a random number, nothing about you): once a day, and every few minutes while it's open or playing, so we know how many people listen.", Settings.countMe) { Settings.updateCountMe(it) }
         Divider()
         SwitchRow("Shuffle & repeat beside controls", "They're always in the player's Up next list too.", Settings.showModeButtons) {
             Settings.updateShowModeButtons(it)
         }
     }
-    Note("Equalizer, bass, pitch and reverb are under Settings > Sound & effects. Sleep timer, speed and downloads are in the player's ••• menu.")
+    Note("Equalizer, bass, pitch and reverb are under Settings > Audio Lab. Sleep timer, speed and downloads are in the player's ••• menu.")
 }
 
 @Composable
@@ -763,6 +837,7 @@ private fun AccountsPage(c: ScreenCtx) {
             }
         }
     }
+    SyncPage(c)
 }
 
 /** One numbered step of the Spotify setup, with the button that does it. */
@@ -784,7 +859,7 @@ private fun SpotifyStep(n: Int, text: String, action: @Composable () -> Unit) {
 @Composable
 private fun SyncPage(c: ScreenCtx) {
     val vm = c.vm
-    Group {
+    Group("Sync") {
         Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
             val last = Accounts.lastSync
             GText(
@@ -857,42 +932,6 @@ private fun StoragePage(c: ScreenCtx) {
 @Composable
 private fun About(c: ScreenCtx) {
     val ctx = LocalContext.current
-    Group("Updates") {
-        Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
-            val r = Updater.available
-            val p = Updater.progress
-            when {
-                r != null -> {
-                    GText("Glasswave ${r.version} is out", 16, weight = FontWeight.SemiBold)
-                    if (r.notes.isNotBlank()) {
-                        Spacer(Modifier.height(4.dp))
-                        GText(r.notes.trim(), 13, Dim, maxLines = 8)
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    if (p != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            DownloadRing(p, 26.dp, CoverTint.accent, 3.dp)
-                            Spacer(Modifier.width(12.dp))
-                            GText("Downloading… ${(p * 100).toInt()}%", 14, Dim)
-                        }
-                    } else {
-                        GlassButton("Update now", c.bg, accent = true) { Updater.install(ctx) }
-                    }
-                }
-                else -> {
-                    GText("Glasswave ${Updater.currentVersion()}", 16, weight = FontWeight.SemiBold)
-                    GText("Glasswave checks for new versions when it opens.", 13, Dim)
-                    Spacer(Modifier.height(12.dp))
-                    GlassButton(if (Updater.checking) "Checking…" else "Check for updates", c.bg) { Updater.check(tell = true) }
-                }
-            }
-            Updater.status?.let {
-                Spacer(Modifier.height(10.dp))
-                GText(it, 13, CoverTint.accent)
-            }
-        }
-    }
-    Note("Updates come straight from the Glasswave releases page on GitHub. Android asks you to confirm each install; your songs and settings stay.")
     Group {
         Column(Modifier.padding(18.dp)) {
             GText("Glasswave " + Updater.currentVersion(), 18, weight = FontWeight.Bold)
@@ -1084,7 +1123,7 @@ private fun YtLoginWeb(email: String, onCookie: (String) -> Unit) {
     }
 }
 
-/* ---------------- Sound & effects ---------------- */
+/* ---------------- Audio Lab ---------------- */
 
 @Composable
 private fun SoundPage(c: ScreenCtx) {
@@ -1096,11 +1135,13 @@ private fun SoundPage(c: ScreenCtx) {
     Note("Drag the points on the curve, or pick a ready-made sound. Moving a point turns the equalizer on.")
     // Puts the music around you on headphones (Glasswave's own, so it works on every phone).
     Group("Spatial audio") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { SpatialArt(c.ps.playing) }
         Choices(Spatial.entries, Sound.spatial, { it.label }, { it.about }) { Sound.updateSpatial(it) }
     }
     Note("Moves the music out of your head and around you. Best with headphones.")
     // Speed presets, like the edits people post: slowed, sped up, slowed + reverb.
     Group("Playback speed") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { SpeedArt(c.ps.playing) }
         Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             RowIcon("Playback speed")
             GText("Playback speed", 16, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
@@ -1111,18 +1152,25 @@ private fun SoundPage(c: ScreenCtx) {
         }
         GText(Sound.speedPreset.about, 13, Dim, modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 12.dp))
     }
+    Group("Volume leveling") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { LevelingArt(c.ps.playing) }
+        SwitchRow("Volume leveling", "Plays every song at the same loudness, so you don't have to keep changing the volume.", Settings.volumeLeveling) { Settings.updateVolumeLeveling(it) }
+    }
     Group("Tone") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { ToneArt(c.ps.playing) }
         SliderRow("Bass boost", pct(Sound.bass), Sound.bass, 0f..1f) { Sound.updateBass(it) }
         SliderRow("Treble boost", pct(Sound.treble), Sound.treble, 0f..1f) { Sound.updateTreble(it) }
         SliderRow("Stereo width", pct(Sound.width), Sound.width, 0f..1f) { Sound.updateWidth(it) }
     }
     Group("Effects") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { ReverbArt(c.ps.playing) }
         SliderRow("Reverb", pct(Sound.reverb), Sound.reverb, 0f..1f) { Sound.updateReverb(it) }
         if (Sound.reverb > 0f) LazyPills(Room.entries.map { it.label }, Sound.room.label) { l -> Room.entries.firstOrNull { it.label == l }?.let { Sound.updateRoom(it) } }
         SliderRow("Distortion", pct(Sound.drive), Sound.drive, 0f..1f) { Sound.updateDrive(it) }
     }
     Note("Reverb makes it sound like a room, a concert hall or an arena. Distortion goes from warm to fuzzy.")
     Group("Balance") {
+        Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { BalanceArt(c.ps.playing) }
         SliderRow("Left / right", balanceWord(Sound.balance), Sound.balance, -1f..1f, center = 0f, snap = 0.05f) { Sound.updateBalance(it) }
         SwitchRow("Mono", "Both ears hear the same thing. Handy with one earbud.", Sound.mono) { Sound.updateMono(it) }
     }

@@ -29,7 +29,10 @@ internal object SettingsIndex {
         SettingEntry("Darken wallpaper", "LOOK", "Wallpaper", "darken dim background"),
         SettingEntry("Colour strength", "LOOK", "Wallpaper", "colour color strength saturation vivid"),
         SettingEntry("Glass panels", "LOOK", "Wallpaper", "glass opacity clear frosted panels"),
-        SettingEntry("Visualizer", "LOOK", "Visualizer", "bars wave spectrum visualiser"),
+        SettingEntry("Visualizer", "LOOK", "Visualizer", "bars mirror wave line dots glow peaks spectrum visualiser"),
+        SettingEntry("Visualizer size", "LOOK", "Visualizer look", "small medium large big tall visualiser"),
+        SettingEntry("Visualizer colour", "LOOK", "Visualizer look", "rainbow white song color visualiser"),
+        SettingEntry("Visualizer feel", "LOOK", "Visualizer look", "smooth snappy speed visualiser"),
         SettingEntry("Font", "LOOK", "Font", "text typeface letters"),
         SettingEntry("Player style", "LOOK", "Player style", "now playing player screen layout"),
         SettingEntry("Play button", "LOOK", "Play button", "play pause button shape"),
@@ -48,9 +51,9 @@ internal object SettingsIndex {
         SettingEntry("Automix", "AUDIO", "Automix", "crossfade dj transitions mix blend fade"),
         SettingEntry("Autoplay", "AUDIO", "Playback", "keep playing similar songs radio"),
         SettingEntry("Skip silence", "AUDIO", "Playback", "silence quiet gaps"),
-        SettingEntry("Volume leveling", "AUDIO", "Playback", "loudness normalize normalise even out volume replaygain"),
-        SettingEntry("Report songs that won't play", "AUDIO", "Playback", "problems errors report"),
-        SettingEntry("Count me in usage numbers", "AUDIO", "Playback", "stats usage anonymous count"),
+        SettingEntry("Volume leveling", "SOUND", "Volume leveling", "loudness normalize normalise even out volume replaygain"),
+        SettingEntry("Report songs that won't play", "GENERAL", "Help make Glasswave better", "problems errors report"),
+        SettingEntry("Count me in usage numbers", "GENERAL", "Help make Glasswave better", "stats usage anonymous count"),
         SettingEntry("Shuffle & repeat beside controls", "AUDIO", "Playback", "shuffle repeat buttons player"),
         // Sound & effects
         SettingEntry("Equalizer", "SOUND", "Equalizer", "eq equaliser bass treble graph curve bands presets audio lab"),
@@ -74,8 +77,7 @@ internal object SettingsIndex {
         SettingEntry("Your devices", "ACCOUNTS", "Your devices", "sync phone pc computer devices"),
         SettingEntry("Import from a link", "ACCOUNTS", "Import from a link", "playlist link paste import"),
         SettingEntry("Spotify", "ACCOUNTS", "Spotify · sync your whole library", "spotify sync import liked songs library playlists"),
-        // Sync
-        SettingEntry("Sync", "SYNC", null, "playlists bring in import"),
+        SettingEntry("Sync now", "ACCOUNTS", "Sync", "sync playlists bring in import refresh"),
         // Storage & privacy
         SettingEntry("Downloads", "STORAGE", "Downloads", "offline downloaded delete space"),
         SettingEntry("Download quality on Wi-Fi", "STORAGE", "Download quality on Wi-Fi", "wifi download quality"),
@@ -88,7 +90,7 @@ internal object SettingsIndex {
         SettingEntry("Clear search history", "STORAGE", "Privacy", "search history delete clear"),
         SettingEntry("Re-match Spotify songs", "STORAGE", "Privacy", "spotify match songs wrong"),
         // About
-        SettingEntry("Updates", "ABOUT", "Updates", "update version new check"),
+        SettingEntry("Updates", "GENERAL", "Updates", "update version new check"),
         SettingEntry("About Glasswave", "ABOUT", null, "version credits licence nonny dev"),
     )
 

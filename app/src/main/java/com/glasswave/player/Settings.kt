@@ -55,6 +55,31 @@ enum class VisualizerStyle(val label: String, val detail: String) {
     OFF("Off", "No visualizer."),
     BARS("Bars", "Bars that jump with each beat, bass on the left."),
     MIRROR("Mirror", "Bars that grow up and down from the middle."),
+    WAVE("Wave", "A smooth wave that rolls with the music, softly filled underneath."),
+    LINE("Line", "A thin line that opens up and down from the middle, like a sound wave."),
+    DOTS("Dots", "Little lights that fill up with each beat, like an old stereo."),
+    GLOW("Glow", "Soft glowing lights that rise and brighten with the music."),
+    PEAKS("Peaks", "Thin bars with little caps that float down slowly after each beat."),
+}
+
+/** How big the visualizer moves. [scale] is for the strip's height, [gain] for how far it reaches inside it. */
+enum class VisualizerSize(val label: String, val detail: String, val scale: Float, val gain: Float) {
+    SMALL("Small", "Calm and low.", 0.75f, 0.8f),
+    MEDIUM("Medium", "The usual size.", 1f, 1f),
+    LARGE("Large", "Taller, and reaches higher with each beat.", 1.35f, 1.18f),
+}
+
+/** The visualizer's colour. */
+enum class VisualizerColor(val label: String, val detail: String) {
+    SONG("Song colour", "The colour of the song's cover."),
+    RAINBOW("Rainbow", "Every colour, from the bass on the left to the high notes on the right."),
+    WHITE("White", "Plain white."),
+}
+
+/** How the visualizer moves: [stiffness] pulls it to the music, [damping] calms it down (per 16 ms). */
+enum class VisualizerFeel(val label: String, val detail: String, val stiffness: Float, val damping: Float) {
+    SMOOTH("Smooth", "Glides with the music.", 0.34f, 0.74f),
+    SNAPPY("Snappy", "Jumps right on each beat.", 0.62f, 0.6f),
 }
 
 enum class CacheSize(val label: String, val bytes: Long) {
@@ -103,6 +128,9 @@ object Settings {
     /** Your own highlight colour (ARGB), or null to take it from each song's cover. */
     var accentColor by mutableStateOf<Int?>(null); private set
     var visualizer by mutableStateOf(VisualizerStyle.BARS); private set
+    var visualizerSize by mutableStateOf(VisualizerSize.MEDIUM); private set
+    var visualizerColor by mutableStateOf(VisualizerColor.SONG); private set
+    var visualizerFeel by mutableStateOf(VisualizerFeel.SMOOTH); private set
     /** A font file you imported (kept inside the app), or null for the standard font. */
     var fontFile by mutableStateOf<String?>(null); private set
     /** Its name, for Settings. */
@@ -157,6 +185,9 @@ object Settings {
         highPerformance = prefs.getBoolean("high_perf", false)
         accentColor = if (prefs.contains("accent")) prefs.getInt("accent", 0) else null
         visualizer = enumPref("visualizer", VisualizerStyle.BARS)
+        visualizerSize = enumPref("visualizer_size", VisualizerSize.MEDIUM)
+        visualizerColor = enumPref("visualizer_color", VisualizerColor.SONG)
+        visualizerFeel = enumPref("visualizer_feel", VisualizerFeel.SMOOTH)
         fontFile = prefs.getString("font_file", null)?.takeIf { java.io.File(it).exists() }
         fontName = prefs.getString("font_name", "") ?: ""
         wallpaper = prefs.getString("wallpaper", null)?.takeIf { java.io.File(it).exists() }
@@ -182,6 +213,9 @@ object Settings {
     /** The last colour you picked yourself (even while the colours follow the song). */
     fun lastOwnAccent(): Int? = if (prefs.contains("accent_last")) prefs.getInt("accent_last", 0) else null
     fun updateVisualizer(v: VisualizerStyle) { visualizer = v; prefs.edit { putString("visualizer", v.name) } }
+    fun updateVisualizerSize(v: VisualizerSize) { visualizerSize = v; prefs.edit { putString("visualizer_size", v.name) } }
+    fun updateVisualizerColor(v: VisualizerColor) { visualizerColor = v; prefs.edit { putString("visualizer_color", v.name) } }
+    fun updateVisualizerFeel(v: VisualizerFeel) { visualizerFeel = v; prefs.edit { putString("visualizer_feel", v.name) } }
     fun updateFont(path: String?, name: String) {
         fontFile = path
         fontName = name

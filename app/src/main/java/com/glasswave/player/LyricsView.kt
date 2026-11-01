@@ -253,7 +253,7 @@ private fun MiniControls(ps: PlayerState) {
     Column(Modifier.fillMaxWidth()) {
         // Bars that dance under the lyrics (Settings > Look).
         if (Settings.visualizer != VisualizerStyle.OFF) {
-            Visualizer(ps.playing, CoverTint.accent, Modifier.fillMaxWidth().height(28.dp))
+            Visualizer(ps.playing, CoverTint.accent, Modifier.fillMaxWidth().height(visualizerHeight(28.dp)))
             Spacer(Modifier.height(6.dp))
         }
         AppleSeekBar(ps)

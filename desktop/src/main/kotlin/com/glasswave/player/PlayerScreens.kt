@@ -473,7 +473,7 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
         }
         // Bars that dance to the music (Settings > Look).
         if (Settings.visualizer != VisualizerStyle.OFF) {
-            Visualizer(ps.playing, CoverTint.accent, Modifier.fillMaxWidth().height(if (compact) 24.dp else 34.dp))
+            Visualizer(ps.playing, CoverTint.accent, Modifier.fillMaxWidth().height(visualizerHeight(if (compact) 24.dp else 34.dp)))
             Spacer(Modifier.height(6.dp))
         }
         AppleSeekBar(ps)
