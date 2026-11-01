@@ -1,5 +1,5 @@
 {
-  "lastTime": 1793547092,
+  "lastTime": 1793550846,
   "totals": {
     "visits": 112,
     "siteDownloads": 35,
@@ -1332,9 +1332,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1793554181,
+      "v": 0,
+      "d": 0,
+      "a": 0
     }
   ],
-  "updated": 1793550845,
+  "updated": 1793554181,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -1421,7 +1427,7 @@
       "m": "\"Arabella\" by Arctic Monkeys wouldn't play (tried 4 times).\nIOException: No playable audio found\n\nWindows 11 (10.0), Glasswave for Windows 1.2.1\ngwmatch://t?q=Arabella%20Arctic%20Monkeys&d=207"
     }
   ],
-  "lastActiveTime": 1793549427,
+  "lastActiveTime": 1793551658,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -1588,7 +1594,8 @@
       "w": [
         "2cde5f08-41b5-47f3-8920-6cc59cb3c0a8",
         "605bc803-fdae-4a29-a0fe-e44314568a78",
-        "dbced9a9-d5cc-4df7-b58d-284f0c2ba664"
+        "dbced9a9-d5cc-4df7-b58d-284f0c2ba664",
+        "ff5e4c03-6f4b-4aaf-9481-52797777d6ff"
       ],
       "a": [
         "1a69de76-d738-49b0-8e4e-f978d75a0131",
@@ -1605,7 +1612,7 @@
   "active": {
     "today": {
       "a": 8,
-      "w": 3
+      "w": 4
     },
     "week": {
       "a": 42,
@@ -1659,7 +1666,7 @@
       {
         "d": "2026-11-01",
         "a": 8,
-        "w": 3
+        "w": 4
       }
     ]
   },
