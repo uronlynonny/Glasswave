@@ -293,11 +293,15 @@ private fun LyricsBody(ps: PlayerState, state: Load<Lyrics?>, fancy: Boolean, ac
  * the words read. The cover is loaded tiny, which makes it soft by itself; the blur is drawn once and
  * kept, and only the slow drift moves (with liquid glass on).
  */
+/** One shared drift for the lyrics card and the full lyrics page, so their backgrounds move together. */
+internal val LocalLyricsDrift = androidx.compose.runtime.compositionLocalOf<androidx.compose.runtime.State<Float>?> { null }
+
 @Composable
-private fun LyricsBackdrop(art: String?, moving: Boolean) {
+internal fun LyricsBackdrop(art: String?, moving: Boolean) {
     val ctx = LocalContext.current
     val req = remember(art) { art?.let { ImageRequest.Builder(ctx).data(it).size(64).build() } }
-    val drift by rememberDrift(36_000)
+    val own = rememberDrift(36_000)
+    val drift by (LocalLyricsDrift.current ?: own)
     Box(Modifier.fillMaxSize().background(Color(0xFF0B0C0F))) {
         if (req != null) {
             Box(

@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -111,13 +113,24 @@ fun WelcomeScreen(onDone: () -> Unit) {
     var page by rememberSaveable { mutableIntStateOf(0) }
     BackHandler { if (page > 0) page-- else onDone() }
     val accent = readable(CoverTint.accent)
-    Box(
+    androidx.compose.foundation.layout.BoxWithConstraints(
         Modifier.fillMaxSize().background(Color(0xFF05070A))
             // Taps don't fall through to the app underneath.
             .pressable(1f) {},
     ) {
-        GlassOrb(accent, Modifier.align(Alignment.TopCenter).padding(top = 90.dp).size(260.dp))
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 26.dp)) {
+        // Wide screens (tablets, landscape): the orb on the left, the words on the right.
+        val side = maxWidth > maxHeight && maxWidth >= 600.dp
+        if (side) {
+            GlassOrb(accent, Modifier.align(Alignment.CenterStart).padding(start = maxWidth * 0.08f).size(minOf(maxHeight * 0.7f, 360.dp)))
+        } else {
+            GlassOrb(accent, Modifier.align(Alignment.TopCenter).padding(top = minOf(maxHeight * 0.1f, 90.dp)).size(minOf(maxWidth * 0.7f, maxHeight * 0.35f, 300.dp)))
+        }
+        Column(
+            Modifier.fillMaxHeight().widthIn(max = 520.dp).fillMaxWidth()
+                .align(if (side) Alignment.CenterEnd else Alignment.TopCenter)
+                .statusBarsPadding().navigationBarsPadding()
+                .padding(start = 26.dp, end = if (side) 48.dp else 26.dp),
+        ) {
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
                 if (page < pages.size - 1) {
                     Box(Modifier.clip(CircleShape).pressable(0.9f, onClick = onDone).padding(horizontal = 14.dp, vertical = 8.dp)) {

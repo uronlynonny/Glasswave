@@ -226,6 +226,9 @@ fun FullPlayer(ps: PlayerState, colors: CoverColors, onClose: () -> Unit, openEq
     ) {
         val fp = rememberBackdrop()
         GlassBackground(colors, hiRes(ps.art), Modifier.backdropSource(fp), artAlpha = 0.55f)
+        // The lyrics card and the full lyrics share one moving background.
+        val lyricsDrift = rememberDrift(36_000)
+        androidx.compose.runtime.CompositionLocalProvider(LocalLyricsDrift provides lyricsDrift) {
 
         val ui = PlayerUi(ps, fp, colors, onClose, onQueue = { sheet = Sheet.QUEUE }, onMore = { sheet = Sheet.MORE }, onLyrics = { lyrics = true })
         // Where the lyrics card is on screen, for the full lyrics to grow out of.
@@ -256,6 +259,7 @@ fun FullPlayer(ps: PlayerState, colors: CoverColors, onClose: () -> Unit, openEq
 
         // The full lyrics grow out of the lyrics card to fill the screen, and shrink back into it on close.
         LyricsGrow(ps, lyrics, cardRect) { lyrics = false }
+        }
 
         // Sheets: "Up next" and the ••• menu.
         AnimatedVisibility(sheet != Sheet.NONE, enter = fadeIn(smooth(150)), exit = fadeOut(smooth(150))) {

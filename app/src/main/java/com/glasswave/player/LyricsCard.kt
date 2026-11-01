@@ -31,8 +31,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.border
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
@@ -72,10 +74,13 @@ fun LyricsCard(
     val state = rememberLyrics(ps)
     val ly = (state as? Load.Done)?.value
     val show = state is Load.Loading || (ly != null && ly.lines.any { it.text.isNotBlank() })
+    // Where the card is on screen, so its background lines up with the full lyrics page's.
+    var at by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val root = androidx.compose.ui.platform.LocalView.current.rootView
     // Growing or shrinking smoothly also slides the page back up when a song has no lyrics.
     Box(Modifier.fillMaxWidth().animateContentSize(smooth(300)), contentAlignment = Alignment.TopCenter) {
         if (!show) return@Box
-        Column(
+        Box(
             Modifier
                 .widthIn(max = 640.dp)
                 .fillMaxWidth()
@@ -83,16 +88,26 @@ fun LyricsCard(
                 .padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 14.dp)
                 .height(height)
                 // Where it sits, so the full lyrics can grow out of it (and shrink back into it).
-                .onGloballyPositioned { onBounds(it.boundsInRoot()) }
+                .onGloballyPositioned { onBounds(it.boundsInRoot()); at = it.positionInRoot() }
                 .clip(RoundedCornerShape(22.dp))
-                // See-through glass tinted with the cover's colour, with a thin bright edge.
-                .background(cardColor(colors).copy(alpha = 0.34f))
                 .border(
                     0.8.dp,
                     Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.32f), Color.White.copy(alpha = 0.06f), Color.White.copy(alpha = 0.14f))),
                     RoundedCornerShape(22.dp),
                 ),
         ) {
+            // The same moving cover-art background as the full lyrics page, lined up with it, so the
+            // card looks like a window onto that page and opening it is one smooth blend.
+            androidx.compose.ui.layout.Layout(
+                content = { LyricsBackdrop(ps.art, Settings.glass && Settings.animations) },
+                modifier = Modifier.matchParentSize(),
+            ) { measurables, constraints ->
+                val w = root.width.takeIf { it > 0 } ?: constraints.maxWidth
+                val h = root.height.takeIf { it > 0 } ?: constraints.maxHeight
+                val page = measurables.first().measure(androidx.compose.ui.unit.Constraints.fixed(w, h))
+                layout(constraints.maxWidth, constraints.maxHeight) { page.place(-at.x.toInt(), -at.y.toInt()) }
+            }
+            Column(Modifier.fillMaxSize()) {
             Row(
                 Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, null, onClick = onExpand)
                     .padding(start = 20.dp, end = 6.dp, top = 6.dp),
@@ -120,6 +135,7 @@ fun LyricsCard(
                         }
                     }
                 }
+            }
             }
         }
     }
