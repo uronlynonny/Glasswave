@@ -106,6 +106,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Velocity
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
@@ -184,7 +185,23 @@ private fun MiniSubtitle(ps: PlayerState) {
         transitionSpec = { fadeIn(smooth(250)) togetherWith fadeOut(smooth(200)) },
         label = "miniLine",
     ) { (t, sung) ->
-        GText(t, 13, if (sung) Color.White.copy(alpha = 0.82f) else Dim, maxLines = 1)
+        if (sung) {
+            // A long line splits into two even halves, one under the other, instead of being cut off.
+            androidx.compose.foundation.text.BasicText(
+                t,
+                style = androidx.compose.ui.text.TextStyle(
+                    color = Color.White.copy(alpha = 0.82f),
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                    fontFamily = AppFontFamily,
+                    lineBreak = androidx.compose.ui.text.style.LineBreak.Heading,
+                ),
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+        } else {
+            GText(t, 13, Dim, maxLines = 1)
+        }
     }
 }
 
