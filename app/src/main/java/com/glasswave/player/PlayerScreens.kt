@@ -416,9 +416,9 @@ private fun LyricsPill(ui: PlayerUi) {
             .fillMaxWidth()
             .padding(top = 4.dp)
             .height(58.dp)
+            // See-through liquid glass: the background bends at the edges and stays clear in the middle.
+            .liquidGlass(ui.fp, 22.dp, Color.White.copy(alpha = 0.035f), blur = 3.dp, depth = 20.dp, bend = 26.dp)
             .clip(shape)
-            .background(Color.White.copy(alpha = 0.08f))
-            .border(0.5.dp, Color.White.copy(alpha = 0.12f), shape)
             .pressable(0.98f) { if (ui.lyricsOpen || hasLyrics) ui.onLyrics() else ui.onQueue() }
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.CenterStart,
