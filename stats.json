@@ -1,5 +1,5 @@
 {
-  "lastTime": 1793655535,
+  "lastTime": 1793661424,
   "totals": {
     "visits": 121,
     "siteDownloads": 37,
@@ -1500,9 +1500,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1793662486,
+      "v": 0,
+      "d": 0,
+      "a": 0
     }
   ],
-  "updated": 1793659073,
+  "updated": 1793662486,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -1587,9 +1593,13 @@
     {
       "t": 1793441038,
       "m": "\"Arabella\" by Arctic Monkeys wouldn't play (tried 4 times).\nIOException: No playable audio found\n\nWindows 11 (10.0), Glasswave for Windows 1.2.1\ngwmatch://t?q=Arabella%20Arctic%20Monkeys&d=207"
+    },
+    {
+      "t": 1793661424,
+      "m": "\"Romance in Tokyo\" by Yusei wouldn't play (tried 4 times).\nERROR_CODE_IO_UNSPECIFIED\nIOException: YouTube lookup failed\nContentNotAvailableException: Got error UNPLAYABLE: \"This video is not available\"\n\nXiaomi 25078RA3EA, Android 16, Glasswave 0.18.24\nhttps://music.youtube.com/watch?v=xIuTsuN8Ljo"
     }
   ],
-  "lastActiveTime": 1793657344,
+  "lastActiveTime": 1793662309,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -1793,6 +1803,7 @@
       ],
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
+        "65d60d6b-a971-45bc-a69e-ee9e81d656a6",
         "dbced9a9-d5cc-4df7-b58d-284f0c2ba664"
       ]
     }
@@ -1800,7 +1811,7 @@
   "active": {
     "today": {
       "a": 13,
-      "w": 2
+      "w": 3
     },
     "week": {
       "a": 47,
@@ -1859,7 +1870,7 @@
       {
         "d": "2026-11-02",
         "a": 13,
-        "w": 2
+        "w": 3
       }
     ]
   },
