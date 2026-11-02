@@ -209,7 +209,7 @@ fun LyricsScreen(ps: PlayerState, onClose: () -> Unit) {
  * It goes to their alerts with the song, the problem and where in the song it was.
  */
 @Composable
-private fun ReportLyrics(ps: PlayerState, state: Load<Lyrics?>, modifier: Modifier = Modifier) {
+internal fun ReportLyrics(ps: PlayerState, state: Load<Lyrics?>, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -268,7 +268,7 @@ private fun MiniControls(ps: PlayerState) {
 }
 
 @Composable
-private fun LyricsBody(ps: PlayerState, state: Load<Lyrics?>, fancy: Boolean, accent: Color) {
+internal fun LyricsBody(ps: PlayerState, state: Load<Lyrics?>, fancy: Boolean, accent: Color) {
     when (val s = state) {
         is Load.Loading -> Column(Modifier.padding(24.dp)) {
             repeat(6) {

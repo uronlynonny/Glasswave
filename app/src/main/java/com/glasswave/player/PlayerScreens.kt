@@ -16,6 +16,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.FlingBehavior
@@ -243,39 +244,51 @@ fun FullPlayer(ps: PlayerState, colors: CoverColors, onClose: () -> Unit, openEq
     ) {
         val fp = rememberBackdrop()
         GlassBackground(colors, hiRes(ps.art), Modifier.backdropSource(fp), artAlpha = 0.55f)
-        // The lyrics card and the full lyrics share one moving background.
-        val lyricsDrift = rememberDrift(36_000)
-        androidx.compose.runtime.CompositionLocalProvider(LocalLyricsDrift provides lyricsDrift) {
-
-        val ui = PlayerUi(ps, fp, colors, onClose, onQueue = { sheet = Sheet.QUEUE }, onMore = { sheet = Sheet.MORE }, onLyrics = { lyrics = true })
-        // Where the lyrics card is on screen, for the full lyrics to grow out of.
-        var cardRect by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
-        // The player fills the screen as before; scroll down for the lyrics card under it (like Spotify).
-        val page = rememberScrollState()
-        val scrolled by remember { derivedStateOf { page.value > 0 } }
-        androidx.activity.compose.BackHandler(enabled = scrolled && !lyrics && sheet == Sheet.NONE) { scope.launch { page.animateScrollTo(0) } }
-        val peek by rememberUpdatedState(onPeek)
-        val close by rememberUpdatedState(onClose)
-        val pull = remember(page, closeAt) { PullToClose(page, dragY, closeAt, scope, { peek(it) }, { close() }) }
-        val snap = rememberPageSnap(page)
-        BoxWithConstraints(Modifier.fillMaxSize()) {
-            val pageH = maxHeight
-            Column(Modifier.fillMaxSize().nestedScroll(pull).verticalScroll(page, flingBehavior = snap)) {
-                Box(Modifier.fillMaxWidth().height(pageH)) {
-                    if (isWide()) WideStyle(ui) else when (Settings.playerStyle) {
-                        PlayerStyle.IMMERSIVE -> Immersive(ui)
-                        PlayerStyle.CANVAS -> CanvasStyle(ui)
-                        PlayerStyle.CARD -> CardStyle(ui)
-                        PlayerStyle.PANEL -> PanelStyle(ui)
-                        PlayerStyle.MINIMAL -> MinimalStyle(ui)
-                    }
-                }
-                LyricsCard(ps, colors, minOf(pageH * 0.62f, 420.dp), onBounds = { cardRect = it }, onExpand = { lyrics = true })
-            }
+        val wide = isWide()
+        // The lyrics open right inside the player: 0 = the player as usual, 1 = lyrics showing.
+        val lp = remember { Animatable(0f) }
+        androidx.compose.runtime.LaunchedEffect(lyrics, wide) {
+            val to = if (lyrics && !wide) 1f else 0f
+            if (!Settings.animations) lp.snapTo(to)
+            else lp.animateTo(
+                to,
+                androidx.compose.animation.core.tween(
+                    if (to > 0f) 560 else 460,
+                    easing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0f, 0f, 1f),
+                ),
+            )
         }
-
-        // The full lyrics grow out of the lyrics card to fill the screen, and shrink back into it on close.
-        LyricsGrow(ps, lyrics, cardRect) { lyrics = false }
+        val lyricsShown by remember { derivedStateOf { lp.value > 0f } }
+        // Where the progress bar starts: the lyrics end just above it.
+        val anchor = remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+        val lyricsDrift = rememberDrift(36_000)
+        androidx.compose.runtime.CompositionLocalProvider(
+            LocalLyricsDrift provides lyricsDrift,
+            LocalLyricsP provides { lp.value },
+            LocalLyricsAnchor provides anchor,
+        ) {
+            // The cover melts into the blurred lyrics background.
+            if (lyricsShown) {
+                Box(Modifier.fillMaxSize().graphicsLayer { alpha = lp.value }) { LyricsBackdrop(ps.art, Settings.glass && Settings.animations) }
+            }
+            val ui = PlayerUi(
+                ps, fp, colors, onClose, onQueue = { sheet = Sheet.QUEUE }, onMore = { sheet = Sheet.MORE },
+                onLyrics = { lyrics = !lyrics }, lyricsOpen = lyrics,
+            )
+            Box(Modifier.fillMaxSize()) {
+                if (wide) WideStyle(ui) else when (Settings.playerStyle) {
+                    PlayerStyle.IMMERSIVE -> Immersive(ui)
+                    PlayerStyle.CANVAS -> CanvasStyle(ui)
+                    PlayerStyle.CARD -> CardStyle(ui)
+                    PlayerStyle.PANEL -> PanelStyle(ui)
+                    PlayerStyle.MINIMAL -> MinimalStyle(ui)
+                }
+            }
+            if (lyricsShown) LyricsInPlace(ps, { lp.value }, lyrics, anchor.floatValue) { lyrics = false }
+        }
+        // Tablets and landscape: the full lyrics page fades in over the player.
+        if (wide) {
+            AnimatedVisibility(lyrics, enter = fadeIn(smooth(260)), exit = fadeOut(smooth(220))) { LyricsScreen(ps) { lyrics = false } }
         }
 
         // Sheets: "Up next" and the ••• menu.
@@ -296,130 +309,153 @@ fun FullPlayer(ps: PlayerState, colors: CoverColors, onClose: () -> Unit, openEq
     }
 }
 
-/**
- * Swipe down to close, on the scrolling player page: a pull down that starts at the top of the page
- * moves the whole player down, and letting go far enough closes it (otherwise it springs back).
- * Scrolling back up from the lyrics card stops at the player instead of closing it.
- */
-private class PullToClose(
-    val page: ScrollState,
-    val dragY: Animatable<Float, *>,
-    val closeAt: Float,
-    val scope: kotlinx.coroutines.CoroutineScope,
-    val onPeek: (Boolean) -> Unit,
-    val onClose: () -> Unit,
-) : NestedScrollConnection {
-    // Whether this swipe started at the top of the page (null until the swipe's first move).
-    private var fromTop: Boolean? = null
+/** How far the lyrics are open inside the player (0..1). Read it while drawing. */
+private val LocalLyricsP = androidx.compose.runtime.staticCompositionLocalOf<() -> Float> { { 0f } }
 
-    // Moved right away (not dispatched later), so quick moves add up correctly.
-    private fun moveTo(y: Float) {
-        scope.launch(start = CoroutineStart.UNDISPATCHED) { dragY.snapTo(y.coerceAtLeast(0f)) }
-    }
+/** Where (in the window) the progress bar area starts, so the lyrics can end just above it. */
+private val LocalLyricsAnchor = androidx.compose.runtime.staticCompositionLocalOf<androidx.compose.runtime.MutableFloatState?> { null }
 
-    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-        if (source != NestedScrollSource.UserInput) return Offset.Zero
-        if (fromTop == null) fromTop = page.value == 0
-        // Pulled down and now going back up: undo the pull before scrolling.
-        if (dragY.value > 0f && available.y < 0f) {
-            val used = maxOf(available.y, -dragY.value)
-            moveTo(dragY.value + used)
-            return Offset(0f, used)
+/** Fades something out (drifting up a little) as the lyrics open, so the lyrics can take its place. */
+@Composable
+private fun Modifier.lyricsAway(shrink: Boolean = true): Modifier {
+    val p = LocalLyricsP.current
+    return graphicsLayer {
+        val v = p()
+        alpha = 1f - v
+        translationY = -18.dp.toPx() * v
+        if (shrink) {
+            val k = 1f - 0.06f * v
+            scaleX = k
+            scaleY = k
         }
-        return Offset.Zero
-    }
-
-    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-        // At the top of the page: what's left of a pull down moves the player.
-        if (source == NestedScrollSource.UserInput && available.y > 0f && fromTop == true) {
-            if (dragY.value <= 0f) onPeek(true)
-            moveTo(dragY.value + available.y)
-            return Offset(0f, available.y)
-        }
-        return Offset.Zero
-    }
-
-    override suspend fun onPreFling(available: Velocity): Velocity {
-        fromTop = null
-        if (dragY.value <= 0f) return Velocity.Zero
-        if (dragY.value > closeAt) onClose()
-        else { dragY.animateTo(0f, smooth(180)); onPeek(false) }
-        return available
     }
 }
 
 /**
- * The full lyrics page, opening from the lyrics card: a window that grows from the card's place to
- * the whole screen, showing the lyrics page as it goes, then shrinks back into the card when closed.
- * The card shows through at the start and the end, so it looks like the card itself expanding.
+ * The lyrics, open right inside the player: the song (small cover and name) slides in at the top,
+ * and the lyrics rise into the space the cover leaves, ending just above the progress bar. The
+ * progress bar and buttons stay where they are.
  */
 @Composable
-private fun LyricsGrow(ps: PlayerState, open: Boolean, card: androidx.compose.ui.geometry.Rect?, onClose: () -> Unit) {
-    val p = remember { Animatable(0f) }
-    androidx.compose.runtime.LaunchedEffect(open) {
-        p.animateTo(
-            if (open) 1f else 0f,
-            if (Settings.animations) androidx.compose.animation.core.tween(if (open) 480 else 420, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-            else androidx.compose.animation.core.snap(),
-        )
-    }
-    if (p.value <= 0f && !open) return
-    var origin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-    val radius = with(LocalDensity.current) { 22.dp.toPx() }
-    Box(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
-        androidx.compose.ui.layout.Layout(
-            content = {
-                Box(Modifier.graphicsLayer { alpha = ((p.value - 0.08f) / 0.45f).coerceIn(0f, 1f) }) { LyricsScreen(ps, onClose) }
-            },
-            modifier = Modifier.fillMaxSize(),
-        ) { measurables, constraints ->
-            val w = constraints.maxWidth.toFloat()
-            val h = constraints.maxHeight.toFloat()
-            val full = androidx.compose.ui.geometry.Rect(0f, 0f, w, h)
-            // From the card (where it is on screen now); without one, from the lower part of the screen.
-            val from = card?.translate(-origin)?.takeIf { it.width > 0f && it.height > 0f }
-                ?: androidx.compose.ui.geometry.Rect(0f, h * 0.55f, w, h)
-            val r = androidx.compose.ui.geometry.lerp(from, full, p.value)
-            // The lyrics page stays put at full size; only the window onto it grows.
-            val page = measurables.first().measure(androidx.compose.ui.unit.Constraints.fixed(w.toInt(), h.toInt()))
-            layout(w.toInt(), h.toInt()) {
-                page.placeWithLayer(0, 0) {
-                    clip = true
-                    shape = object : androidx.compose.ui.graphics.Shape {
-                        override fun createOutline(size: androidx.compose.ui.geometry.Size, layoutDirection: androidx.compose.ui.unit.LayoutDirection, density: androidx.compose.ui.unit.Density): androidx.compose.ui.graphics.Outline {
-                            val cr = radius * (1f - p.value)
-                            return androidx.compose.ui.graphics.Outline.Rounded(
-                                androidx.compose.ui.geometry.RoundRect(r, androidx.compose.ui.geometry.CornerRadius(cr)),
-                            )
-                        }
+private fun LyricsInPlace(ps: PlayerState, p: () -> Float, open: Boolean, bottomY: Float, onClose: () -> Unit) {
+    val state = rememberLyrics(ps)
+    val fancy = Settings.glass && Settings.animations
+    val accent = CoverTint.accent
+    val density = LocalDensity.current
+    var top by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 64.dp, top = 22.dp)
+                    .graphicsLayer {
+                        val v = p()
+                        alpha = v
+                        translationY = (1f - v) * 26.dp.toPx()
                     }
+                    .then(if (open) Modifier.pressable(0.98f, onClick = onClose) else Modifier),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Cover(ps.art, Modifier.size(48.dp), 8.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    GText(ps.title, 16, Color.White, FontWeight.SemiBold, 1)
+                    GText(ps.artist, 13, Color.White.copy(alpha = 0.65f), maxLines = 1)
                 }
             }
+            Box(Modifier.fillMaxWidth().weight(1f).onGloballyPositioned { top = it.positionInRoot().y }) {
+                val h = with(density) { (bottomY - top - 4.dp.toPx()).coerceAtLeast(0f).toDp() }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(h)
+                        .graphicsLayer {
+                            val v = ((p() - 0.12f) / 0.88f).coerceIn(0f, 1f)
+                            alpha = v
+                            translationY = (1f - v) * 48.dp.toPx()
+                            compositingStrategy = CompositingStrategy.Offscreen
+                        }
+                        .drawWithContent {
+                            drawContent()
+                            // Soft top and bottom edges.
+                            drawRect(
+                                Brush.verticalGradient(0f to Color.Transparent, 0.08f to Color.Black, 0.88f to Color.Black, 1f to Color.Transparent),
+                                blendMode = BlendMode.DstIn,
+                            )
+                        }
+                        .then(if (open) Modifier.clickable(remember { MutableInteractionSource() }, null) { } else Modifier),
+                ) { LyricsBody(ps, state, fancy, accent) }
+            }
+        }
+        if (open) {
+            ReportLyrics(ps, state, Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 22.dp, end = 10.dp))
         }
     }
 }
 
-/** Letting go of the player page settles on the player or on the lyrics card, never in between. */
+/**
+ * The glass bar under the controls. It shows the line being sung; tap it and the lyrics open right
+ * here in the player. While they're open it shows the next song instead (tap it to close them).
+ */
 @Composable
-private fun rememberPageSnap(page: ScrollState): FlingBehavior {
-    val fast = with(LocalDensity.current) { 400.dp.toPx() }
-    return remember(page, fast) {
-        object : FlingBehavior {
-            override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
-                val max = page.maxValue
-                if (max <= 0) return initialVelocity
-                val at = page.value
-                val target = when {
-                    initialVelocity > fast -> max
-                    initialVelocity < -fast -> 0
-                    else -> if (at > max / 2) max else 0
+private fun LyricsPill(ui: PlayerUi) {
+    val ps = ui.ps
+    val state = rememberLyrics(ps, fetch = ps.playing)
+    val ly = (state as? Load.Done)?.value
+    val lines = ly?.takeIf { it.synced }?.lines
+    val active by rememberActiveLine(ps, lines)
+    val line = lines?.getOrNull(active)?.text?.takeIf { it.isNotBlank() }
+    val next = ps.upcoming(1).firstOrNull()?.track
+    val hasLyrics = ly != null || state is Load.Loading
+    // 0: the sung line. 1: the next song (while the lyrics are open, or when a song has none).
+    val mode = if (ui.lyricsOpen || !hasLyrics) 1 else 0
+    val shape = RoundedCornerShape(22.dp)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp)
+            .height(58.dp)
+            .clip(shape)
+            .background(Color.White.copy(alpha = 0.08f))
+            .border(0.5.dp, Color.White.copy(alpha = 0.12f), shape)
+            .pressable(0.98f) { if (ui.lyricsOpen || hasLyrics) ui.onLyrics() else ui.onQueue() }
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        AnimatedContent(
+            mode,
+            transitionSpec = {
+                (fadeIn(smooth(260)) + slideInVertically(smooth(340)) { it / 2 }) togetherWith
+                    (fadeOut(smooth(180)) + slideOutVertically(smooth(280)) { -it / 2 })
+            },
+            label = "pill",
+        ) { m ->
+            if (m == 0) {
+                AnimatedContent(line ?: "♪", transitionSpec = { fadeIn(smooth(250)) togetherWith fadeOut(smooth(200)) }, label = "pillLine") { t ->
+                    androidx.compose.foundation.text.BasicText(
+                        t,
+                        style = androidx.compose.ui.text.TextStyle(
+                            color = Color.White.copy(alpha = 0.92f),
+                            fontSize = 14.sp,
+                            lineHeight = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = AppFontFamily,
+                            lineBreak = androidx.compose.ui.text.style.LineBreak.Heading,
+                        ),
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
                 }
-                var last = at.toFloat()
-                animate(last, target.toFloat(), initialVelocity, spring(stiffness = Spring.StiffnessMediumLow)) { v, _ ->
-                    scrollBy(v - last)
-                    last = v
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Cover(next?.thumb, Modifier.size(36.dp), 7.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        GText("Next song", 11, Color.White.copy(alpha = 0.55f), FontWeight.Medium, 1)
+                        GText(next?.let { "${it.title} - ${it.artist}" } ?: "Nothing up next", 14, Color.White.copy(alpha = 0.9f), FontWeight.SemiBold, 1)
+                    }
                 }
-                return 0f
             }
         }
     }
@@ -434,6 +470,7 @@ private class PlayerUi(
     val onQueue: () -> Unit,
     val onMore: () -> Unit,
     val onLyrics: () -> Unit,
+    val lyricsOpen: Boolean = false,
 )
 
 @Composable
@@ -475,6 +512,7 @@ private fun Immersive(ui: PlayerUi) {
                 ui.ps,
                 Modifier
                     .fillMaxSize()
+                    .lyricsAway(shrink = false)
                     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                     .drawWithContent {
                         drawContent()
@@ -493,7 +531,7 @@ private fun Immersive(ui: PlayerUi) {
 @Composable
 private fun CanvasStyle(ui: PlayerUi) {
     Box(Modifier.fillMaxSize()) {
-        CoverArt(ui.ps, Modifier.fillMaxSize())
+        CoverArt(ui.ps, Modifier.fillMaxSize().lyricsAway(shrink = false))
         Box(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
@@ -517,6 +555,7 @@ private fun CardStyle(ui: PlayerUi) {
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
+                .lyricsAway()
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
@@ -539,6 +578,7 @@ private fun PanelStyle(ui: PlayerUi) {
             Modifier
                 .fillMaxWidth(0.86f)
                 .aspectRatio(1f)
+                .lyricsAway()
                 .shadow(24.dp, RoundedCornerShape(22.dp), ambientColor = Color.Black, spotColor = Color.Black)
                 .clip(RoundedCornerShape(22.dp)),
         ) { CoverArt(ui.ps, Modifier.fillMaxSize()) }
@@ -580,9 +620,9 @@ private fun MinimalStyle(ui: PlayerUi) {
     Column(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Grabber(ui.onClose)
         Spacer(Modifier.weight(1f))
-        Box(Modifier.fillMaxWidth(0.62f).aspectRatio(1f).clip(RoundedCornerShape(14.dp))) { CoverArt(ui.ps, Modifier.fillMaxSize()) }
+        Box(Modifier.fillMaxWidth(0.62f).aspectRatio(1f).lyricsAway().clip(RoundedCornerShape(14.dp))) { CoverArt(ui.ps, Modifier.fillMaxSize()) }
         Spacer(Modifier.height(28.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.lyricsAway(shrink = false), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 GText(ui.ps.title, 28, Color.White, FontWeight.Bold, 2)
                 ArtistName(ui.ps, 18, 0.6f)
@@ -614,7 +654,7 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
         if (showTitle) {
             // Title on the left, the like button on the top right, in every player style.
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f).lyricsAway(shrink = false)) {
                     GText(ps.title, if (compact) 20 else 22, Color.White, FontWeight.Bold, 1)
                     ArtistName(ps, if (compact) 16 else 18, 0.62f)
                 }
@@ -623,6 +663,8 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
             }
             Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
         }
+        val anchor = LocalLyricsAnchor.current
+        Box(Modifier.fillMaxWidth().height(0.dp).onGloballyPositioned { anchor?.floatValue = it.positionInRoot().y })
         // Bars that dance to the music (Settings > Look).
         if (Settings.visualizer != VisualizerStyle.OFF) {
             Visualizer(ps.playing, CoverTint.accent, Modifier.fillMaxWidth().height(visualizerHeight(if (compact) 24.dp else 34.dp)))
@@ -637,6 +679,7 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
         Controls(ui, compact)
         Spacer(Modifier.height(if (compact) 2.dp else 6.dp))
         VolumeBar()
+        LyricsPill(ui)
         // Bottom row: queue on the left, status in the middle, the ••• menu on the right.
         Row(Modifier.fillMaxWidth().padding(top = if (compact) 0.dp else 4.dp, bottom = if (compact) 6.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp).pressable(0.85f, onClick = ui.onQueue), contentAlignment = Alignment.Center) {
