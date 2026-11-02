@@ -11,7 +11,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 internal data class SettingEntry(val title: String, val page: String, val group: String? = null, val words: String = "")
 
 /** Where a search result wants to go: the heading to scroll to on the page that just opened. */
-internal class SettingsJump(val group: String?, val scroll: ScrollState, val done: () -> Unit)
+internal class SettingsJump(val group: String?, val scroll: ScrollState, val viewTop: () -> Float = { 0f }, val done: () -> Unit)
 
 internal val LocalSettingsJump = staticCompositionLocalOf<SettingsJump?> { null }
 

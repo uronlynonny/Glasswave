@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -108,6 +109,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.layoutId
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Cancel
@@ -145,11 +148,14 @@ private fun Group(title: String? = null, content: @Composable ColumnScope.() -> 
         val y = at ?: return@LaunchedEffect
         if (!target || jump == null) return@LaunchedEffect
         jump.done()
-        jump.scroll.animateScrollTo((y - 24f).toInt().coerceAtLeast(0), smooth(450))
+        val to = jump.scroll.value + (y - jump.viewTop()) - 24f
+        jump.scroll.animateScrollTo(to.toInt().coerceAtLeast(0), smooth(450))
         glow.snapTo(1f)
         glow.animateTo(0f, androidx.compose.animation.core.tween(1600))
     }
-    val spot = Modifier.onGloballyPositioned { if (target) at = it.positionInParent().y }
+    val spot = Modifier.onGloballyPositioned { if (target) at = it.positionInRoot().y }
+    // One block (heading and card together), so the wide two-column layout keeps them as one.
+    Column(Modifier.fillMaxWidth()) {
     if (title != null) {
         if (clean) GText(title.uppercase(), 12, CleanGrey, FontWeight.SemiBold, 1, spot.padding(start = 32.dp, top = 26.dp, bottom = 8.dp))
         else GText(title.uppercase(), 13, Faint, FontWeight.SemiBold, modifier = spot.padding(start = 30.dp, top = 22.dp, bottom = 8.dp))
@@ -161,6 +167,7 @@ private fun Group(title: String? = null, content: @Composable ColumnScope.() -> 
             .padding(vertical = 4.dp),
         content = content,
     )
+    }
 }
 
 /** Frosted glass's grey for headings and values (see-through, so it reads over any colour). */
@@ -241,7 +248,7 @@ private fun <T> Segmented(options: List<T>, selected: T, label: (T) -> String, o
 
 @Composable
 private fun Note(text: String) {
-    GText(text, 12, Faint, modifier = Modifier.padding(horizontal = 30.dp, vertical = 6.dp))
+    GText(text, 12, Faint, modifier = Modifier.layoutId(NoteTag).padding(horizontal = 30.dp, vertical = 6.dp))
 }
 
 @Composable
@@ -378,6 +385,11 @@ fun SettingsScreen(c: ScreenCtx) {
     var query by rememberSaveable { mutableStateOf("") }
     var jumpTo by remember { mutableStateOf<String?>(null) }
 
+    if (WindowSize.widthDp >= 900f) {
+        TwoPane(c, page ?: SettingsPage.GENERAL, { pageName = it.name }, query, { query = it }, jumpTo, { jumpTo = it })
+        return
+    }
+
     AnimatedContent(
         page,
         transitionSpec = {
@@ -388,10 +400,11 @@ fun SettingsScreen(c: ScreenCtx) {
     ) { p ->
         val scroll = rememberScrollState()
         SettingsScrollTest.state = scroll
+        var viewTop by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
         androidx.compose.runtime.CompositionLocalProvider(
-            LocalSettingsJump provides (if (p != null && jumpTo != null) SettingsJump(jumpTo, scroll) { jumpTo = null } else null),
+            LocalSettingsJump provides (if (p != null && jumpTo != null) SettingsJump(jumpTo, scroll, { viewTop }) { jumpTo = null } else null),
         ) {
-        Column(Modifier.fillMaxSize().verticalScroll(scroll).imePadding().padding(bottom = c.bottom).then(if (isWide()) Modifier.padding(horizontal = 80.dp) else Modifier)) {
+        Column(Modifier.fillMaxSize().onGloballyPositioned { viewTop = it.positionInRoot().y }.verticalScroll(scroll).imePadding().padding(bottom = c.bottom).then(if (isWide()) Modifier.padding(horizontal = 80.dp) else Modifier)) {
             if (p == null) {
                 Header("Settings")
                 Main(c, query, { query = it }) { target, group -> jumpTo = group; pageName = target.name }
@@ -449,18 +462,7 @@ private fun SettingsSearchField(c: ScreenCtx, query: String, onQuery: (String) -
 private fun Main(c: ScreenCtx, query: String, onQuery: (String) -> Unit, open: (SettingsPage, String?) -> Unit) {
     SettingsSearchField(c, query, onQuery)
     if (query.isNotBlank()) {
-        val found = remember(query) { SettingsIndex.search(query) { name -> SettingsPage.valueOf(name).title } }
-        if (found.isEmpty()) {
-            Note("No settings match \"${query.trim()}\".")
-        } else {
-            Group {
-                found.forEachIndexed { i, e ->
-                    if (i > 0) Divider()
-                    val p = SettingsPage.valueOf(e.page)
-                    NavRow(e.title, listOfNotNull(p.title, e.group?.takeIf { it != e.title }).joinToString(" › "), p.icon, p.color) { open(p, e.group) }
-                }
-            }
-        }
+        SearchResults(query, open)
         return
     }
     Group {
@@ -485,6 +487,248 @@ private fun Main(c: ScreenCtx, query: String, onQuery: (String) -> Unit, open: (
     )
     // The maker's mark.
     GText(Credits.LINE, 12, Faint, FontWeight.Medium, modifier = Modifier.padding(start = 30.dp, top = 18.dp))
+}
+
+/** The settings that match what's typed in "Search any settings". */
+@Composable
+private fun SearchResults(query: String, open: (SettingsPage, String?) -> Unit) {
+    val found = remember(query) { SettingsIndex.search(query) { name -> SettingsPage.valueOf(name).title } }
+    if (found.isEmpty()) {
+        Note("No settings match \"${query.trim()}\".")
+    } else {
+        Group {
+            found.forEachIndexed { i, e ->
+                if (i > 0) Divider()
+                val p = SettingsPage.valueOf(e.page)
+                NavRow(e.title, listOfNotNull(p.title, e.group?.takeIf { it != e.title }).joinToString(" › "), p.icon, p.color) { open(p, e.group) }
+            }
+        }
+    }
+}
+
+/* ---------------- Wide windows: two panes ---------------- */
+
+/** Marks a note, so the two-column layout keeps it under the block above it. */
+private const val NoteTag = "note"
+
+/**
+ * Settings on a wide window: the pages in a column on the left (always there, so switching is one
+ * click), and the picked page on the right with a row of quick tiles on top and its cards in two
+ * columns when there's room.
+ */
+@Composable
+private fun TwoPane(
+    c: ScreenCtx,
+    page: SettingsPage,
+    pick: (SettingsPage) -> Unit,
+    query: String,
+    onQuery: (String) -> Unit,
+    jumpTo: String?,
+    setJump: (String?) -> Unit,
+) {
+    Row(Modifier.fillMaxSize().padding(bottom = c.bottom)) {
+        Column(Modifier.width(270.dp).fillMaxHeight().verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
+            Header("Settings")
+            SettingsSearchField(c, query, onQuery)
+            Spacer(Modifier.height(14.dp))
+            SettingsPage.entries.forEachIndexed { i, p ->
+                SideItem(p, i, on = query.isBlank() && p == page, live = c.ps.playing) { onQuery(""); pick(p) }
+            }
+            Spacer(Modifier.height(18.dp))
+            NowPlayingCard(c)
+            Note(
+                listOfNotNull(
+                    if (c.vm.ytSignedIn) "YouTube Music signed in" else null,
+                    if (c.vm.spSignedIn) "Spotify signed in" else null,
+                ).joinToString(" · ").ifEmpty { "Not signed in to any service" },
+            )
+            GText(Credits.LINE, 12, Faint, FontWeight.Medium, modifier = Modifier.padding(start = 30.dp, top = 8.dp))
+        }
+        Box(Modifier.padding(vertical = 28.dp).width(0.5.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.08f)))
+        AnimatedContent(
+            if (query.isNotBlank()) null else page,
+            Modifier.weight(1f).fillMaxHeight(),
+            transitionSpec = {
+                (fadeIn(smooth(220)) + androidx.compose.animation.slideInVertically(smooth(260)) { 28 }) togetherWith fadeOut(smooth(140))
+            },
+            label = "settingsPane",
+        ) { p ->
+            val scroll = rememberScrollState()
+            SettingsScrollTest.state = scroll
+            var viewTop by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalSettingsJump provides (if (p != null && jumpTo != null) SettingsJump(jumpTo, scroll, { viewTop }) { setJump(null) } else null),
+            ) {
+                androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { viewTop = it.positionInRoot().y }) {
+                    val columns = if (maxWidth >= 820.dp) 2 else 1
+                    Column(Modifier.fillMaxSize().verticalScroll(scroll).imePadding().padding(horizontal = 12.dp)) {
+                        if (p == null) {
+                            Header("Results")
+                            SearchResults(query) { target, group -> setJump(group); onQuery(""); pick(target) }
+                        } else {
+                            Column(Modifier.padding(start = 18.dp, top = 22.dp, bottom = 6.dp)) {
+                                GText(p.title, 30, weight = FontWeight.Bold)
+                                GText(p.subtitle, 14, Dim, maxLines = 1)
+                            }
+                            QuickTiles(p, c)
+                            SettingsColumns(columns) {
+                                when (p) {
+                                    SettingsPage.GENERAL -> General(c)
+                                    SettingsPage.LOOK -> Look(c)
+                                    SettingsPage.AUDIO -> Audio(c)
+                                    SettingsPage.SOUND -> SoundPage(c)
+                                    SettingsPage.ACCOUNTS -> AccountsPage(c)
+                                    SettingsPage.STORAGE -> StoragePage(c)
+                                    SettingsPage.ABOUT -> About(c)
+                                }
+                            }
+                            Spacer(Modifier.height(28.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A page in the left column: its moving icon and name, lit up when it's the open one. */
+@Composable
+private fun SideItem(p: SettingsPage, i: Int, on: Boolean, live: Boolean, onClick: () -> Unit) {
+    val bg by androidx.compose.animation.animateColorAsState(if (on) Accent.copy(alpha = 0.16f) else Color.Transparent, smooth(200), label = "side")
+    val fg by androidx.compose.animation.animateColorAsState(if (on) Accent else Color.White.copy(alpha = 0.88f), smooth(200), label = "sideText")
+    Row(
+        Modifier
+            .padding(horizontal = 12.dp, vertical = 1.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(bg)
+            .pressable(0.98f, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MovingIcon(p.icon, p.motion, 20.dp, fg, delayMs = 80 + i * 70, live = live)
+        Spacer(Modifier.width(12.dp))
+        GText(p.title, 15, fg, if (on) FontWeight.SemiBold else FontWeight.Medium, 1)
+    }
+}
+
+/** What's playing, at the bottom of the left column. */
+@Composable
+private fun NowPlayingCard(c: ScreenCtx) {
+    val ps = c.ps
+    if (ps.currentTrack() == null) return
+    Row(
+        Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.06f)).padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Cover(ps.art, Modifier.size(40.dp), 8.dp)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            GText(if (ps.playing) "Now playing" else "Paused", 11, Dim, maxLines = 1)
+            GText(ps.title, 13, Color.White, FontWeight.SemiBold, 1)
+            GText(ps.artist, 12, Dim, maxLines = 1)
+        }
+    }
+}
+
+/** One quick tile: the setting's value at a glance; a click changes it. */
+private class Quick(val icon: ImageVector, val value: String, val label: String, val on: Boolean, val onClick: () -> Unit)
+
+private fun <T> List<T>.after(x: T): T = this[(indexOf(x) + 1) % size]
+
+/** The page's main settings as tiles along the top. */
+@Composable
+private fun QuickTiles(p: SettingsPage, c: ScreenCtx) {
+    fun onOff(b: Boolean) = if (b) "On" else "Off"
+    val tiles = when (p) {
+        SettingsPage.GENERAL -> listOf(
+            Quick(Icons.Rounded.BugReport, onOff(Settings.reportProblems), "Report songs that won't play", Settings.reportProblems) { Settings.updateReportProblems(!Settings.reportProblems) },
+            Quick(Icons.Rounded.BarChart, onOff(Settings.countMe), "Count me in usage numbers", Settings.countMe) { Settings.updateCountMe(!Settings.countMe) },
+        )
+        SettingsPage.LOOK -> listOf(
+            Quick(Icons.Rounded.Contrast, if (Settings.cleanLook) "Frosted" else "Liquid", "Glass", Settings.cleanLook) { Settings.updateCleanLook(!Settings.cleanLook) },
+            Quick(Icons.Rounded.GraphicEq, Settings.visualizer.label, "Visualizer", Settings.visualizer != VisualizerStyle.OFF) { Settings.updateVisualizer(VisualizerStyle.entries.after(Settings.visualizer)) },
+            Quick(Icons.Rounded.Animation, onOff(Settings.animations), "Animations", Settings.animations) { Settings.updateAnimations(!Settings.animations) },
+            Quick(Icons.Rounded.PictureInPictureAlt, onOff(Mini.enabled), "Mini player", Mini.enabled) { Mini.setEnabled(!Mini.enabled) },
+        )
+        SettingsPage.AUDIO -> listOf(
+            Quick(Icons.Rounded.GraphicEq, Settings.quality.label, "Quality", Settings.quality == Quality.HIGH) { Settings.updateQuality(Quality.entries.after(Settings.quality)) },
+            Quick(Icons.Rounded.AutoAwesome, onOff(Settings.automix), "Automix", Settings.automix) { Settings.updateAutomix(!Settings.automix) },
+            Quick(Icons.AutoMirrored.Rounded.PlaylistPlay, onOff(Settings.autoplay), "Autoplay", Settings.autoplay) { Settings.updateAutoplay(!Settings.autoplay) },
+            Quick(Icons.AutoMirrored.Rounded.VolumeOff, onOff(Settings.skipSilence), "Skip silence", Settings.skipSilence) { Settings.updateSkipSilence(!Settings.skipSilence) },
+        )
+        SettingsPage.SOUND -> listOf(
+            Quick(Icons.Rounded.Equalizer, onOff(Sound.eqOn), "Equalizer", Sound.eqOn) { Sound.updateEqOn(!Sound.eqOn) },
+            Quick(Icons.Rounded.SurroundSound, Sound.spatial.label, "Spatial audio", Sound.spatial != Spatial.OFF) { Sound.updateSpatial(Spatial.entries.after(Sound.spatial)) },
+            Quick(Icons.Rounded.Speed, Sound.speedPreset.label, "Speed", Sound.speedPreset != SpeedPreset.NORMAL) { Sound.updateSpeedPreset(SpeedPreset.entries.after(Sound.speedPreset)) },
+            Quick(Icons.Rounded.Equalizer, onOff(Settings.volumeLeveling), "Volume leveling", Settings.volumeLeveling) { Settings.updateVolumeLeveling(!Settings.volumeLeveling) },
+        )
+        SettingsPage.ACCOUNTS -> listOf(
+            Quick(Icons.Rounded.AccountCircle, if (c.vm.ytSignedIn) "Signed in" else "Signed out", "YouTube Music", c.vm.ytSignedIn) { },
+            Quick(Icons.Rounded.MusicNote, if (c.vm.spSignedIn) "Connected" else "Not connected", "Spotify", c.vm.spSignedIn) { },
+            Quick(Icons.Rounded.Headphones, onOff(Settings.discord), "Discord status", Settings.discord) { Settings.updateDiscord(!Settings.discord) },
+            Quick(Icons.Rounded.Devices, onOff(Settings.syncDevices), "Sync devices", Settings.syncDevices) { Settings.updateSyncDevices(!Settings.syncDevices) },
+        )
+        SettingsPage.STORAGE -> listOf(
+            Quick(Icons.Rounded.Wifi, Settings.downloadWifi.label, "Downloads on Wi-Fi", Settings.downloadWifi == Quality.HIGH) { Settings.updateDownloadWifi(Quality.entries.after(Settings.downloadWifi)) },
+            Quick(Icons.Rounded.Storage, Settings.cacheSize.label, "Space for played songs", false) { Settings.updateCacheSize(CacheSize.entries.after(Settings.cacheSize)) },
+            Quick(Icons.Rounded.History, onOff(Settings.keepHistory), "Remember what I play", Settings.keepHistory) { Settings.updateKeepHistory(!Settings.keepHistory) },
+        )
+        SettingsPage.ABOUT -> emptyList()
+    }
+    if (tiles.isEmpty()) return
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        tiles.forEach { t ->
+            val shape = RoundedCornerShape(16.dp)
+            val edge by androidx.compose.animation.animateColorAsState(
+                if (t.on) Accent.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.10f), smooth(220), label = "tileEdge",
+            )
+            Column(
+                Modifier
+                    .weight(1f)
+                    .clip(shape)
+                    .background(Color.White.copy(alpha = 0.06f))
+                    .border(1.dp, edge, shape)
+                    .pressable(0.97f, onClick = t.onClick)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+            ) {
+                Ico(t.icon, if (t.on) Accent else Color.White.copy(alpha = 0.8f), 20.dp)
+                Spacer(Modifier.height(8.dp))
+                AnimatedContent(t.value, transitionSpec = { fadeIn(smooth(180)) togetherWith fadeOut(smooth(120)) }, label = "tileValue") { v ->
+                    GText(v, 16, Color.White, FontWeight.SemiBold, 1)
+                }
+                GText(t.label, 12, Dim, maxLines = 1)
+            }
+        }
+    }
+}
+
+/**
+ * A page's blocks in [columns] columns: each block goes into the shorter column, and a note stays
+ * right under the block it belongs to. One column is just the usual list.
+ */
+@Composable
+private fun SettingsColumns(columns: Int, content: @Composable () -> Unit) {
+    if (columns <= 1) {
+        Column(Modifier.fillMaxWidth()) { content() }
+        return
+    }
+    androidx.compose.ui.layout.Layout(content, Modifier.fillMaxWidth()) { measurables, constraints ->
+        val w = constraints.maxWidth
+        val colW = w / columns
+        val heights = IntArray(columns)
+        val placed = ArrayList<Triple<androidx.compose.ui.layout.Placeable, Int, Int>>()
+        var last = 0
+        for (m in measurables) {
+            val pl = m.measure(androidx.compose.ui.unit.Constraints.fixedWidth(colW))
+            val col = if (m.layoutId == NoteTag) last else heights.indices.minBy { heights[it] }
+            placed += Triple(pl, col * colW, heights[col])
+            heights[col] += pl.height
+            last = col
+        }
+        layout(w, heights.max()) { placed.forEach { (pl, x, y) -> pl.place(x, y) } }
+    }
 }
 
 @Composable
