@@ -387,6 +387,7 @@ fun SettingsScreen(c: ScreenCtx) {
         label = "settingsPage",
     ) { p ->
         val scroll = rememberScrollState()
+        SettingsScrollTest.state = scroll
         androidx.compose.runtime.CompositionLocalProvider(
             LocalSettingsJump provides (if (p != null && jumpTo != null) SettingsJump(jumpTo, scroll) { jumpTo = null } else null),
         ) {

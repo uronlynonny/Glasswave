@@ -414,6 +414,8 @@ object MemScript {
                         "wallpaper" -> onUi { Settings.updateWallpaper(arg.takeIf { it != "none" }) }
                         "tab" -> onUi { vm.selectTab(Tab.valueOf(arg)) }
                         "settings" -> onUi { vm.openSettings(arg) }
+                        // sscroll PX: scrolls the open settings page to PX pixels from the top.
+                        "sscroll" -> onUi { kotlinx.coroutines.runBlocking { SettingsScrollTest.state?.scrollTo(arg.toInt()) } }
                         "eqpreset" -> onUi { Sound.updateEqOn(true); Sound.applyPreset(EqPreset.valueOf(arg)) }
                         "accent" -> onUi { Settings.updateAccentColor(if (arg == "song") null else arg.toLong(16).toInt()) }
                         "search" -> onUi { vm.selectTab(Tab.SEARCH); vm.onQuery(arg); vm.submitSearch() }

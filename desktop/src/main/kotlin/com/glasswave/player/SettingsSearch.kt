@@ -112,3 +112,6 @@ internal object SettingsIndex {
         }.sortedBy { it.first }.map { it.second }
     }
 }
+
+/** The open settings page's scroll, for test scripts (MemScript "sscroll"). */
+internal object SettingsScrollTest { var state: ScrollState? = null }
