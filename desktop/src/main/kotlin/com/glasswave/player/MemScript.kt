@@ -129,6 +129,9 @@ object MemScript {
                             onUi { ps.playList(hits.take(10), 0) }
                         }
                         "next" -> onUi { ps.next() }
+                        // frost light|dark|off: the Frosted glass look; liquid on|off: the Liquid glass switch.
+                        "frost" -> onUi { Settings.updateCleanLook(arg != "off"); if (arg != "off") Settings.updateDarkFrost(arg == "dark") }
+                        "liquid" -> onUi { Settings.updateGlass(arg == "on") }
                         // animcover: looks up the playing song's animated cover (Apple Music) and prints its address.
                         // "animcover off" / "animcover on" turn animated covers off and on; "animcover cpu"
                         // prints how much of one core its decoding thread used over 5 s.

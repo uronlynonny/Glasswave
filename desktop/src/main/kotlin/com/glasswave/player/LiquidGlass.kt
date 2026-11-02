@@ -175,6 +175,7 @@ fun Modifier.liquidGlass(
             val clean = Settings.cleanLook
             if (light && clean) {
                 drawRoundRect(CleanSolid, cornerRadius = cr)
+                drawRoundRect(CleanSheen, cornerRadius = cr)
                 drawRoundRect(tint, cornerRadius = cr)
             } else if (light) {
                 drawRoundRect(Color(0xFF0B0F18).copy(alpha = 0.26f), cornerRadius = cr)
@@ -208,11 +209,12 @@ fun Modifier.liquidGlass(
                 }
                 if (!layer.clip) layer.clip = true
                 drawLayer(layer)
-                if (clean) drawRoundRect(CleanFill, cornerRadius = cr)
+                if (clean) { drawRoundRect(CleanFill, cornerRadius = cr); drawRoundRect(CleanSheen, cornerRadius = cr) }
                 drawRoundRect(tint, cornerRadius = cr)
             } else if (clean) {
                 // Nothing blurred behind: a more solid fill so what's underneath doesn't show through.
                 drawRoundRect(CleanSolid, cornerRadius = cr)
+                drawRoundRect(CleanSheen, cornerRadius = cr)
                 drawRoundRect(tint, cornerRadius = cr)
             } else {
                 drawRoundRect(Color(0xFF0B0F18).copy(alpha = 0.62f), cornerRadius = cr)

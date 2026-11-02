@@ -197,11 +197,12 @@ fun Modifier.liquidGlass(
                 layer.setRoundRectOutline(Offset.Zero, size, r)
                 layer.clip = true
                 drawLayer(layer)
-                if (clean) drawRoundRect(CleanFill, cornerRadius = cr)
+                if (clean) { drawRoundRect(CleanFill, cornerRadius = cr); drawRoundRect(CleanSheen, cornerRadius = cr) }
                 drawRoundRect(tint, cornerRadius = cr)
             } else if (clean) {
                 // Nothing blurred behind: a more solid fill so what's underneath doesn't show through.
                 drawRoundRect(CleanSolid, cornerRadius = cr)
+                drawRoundRect(CleanSheen, cornerRadius = cr)
                 drawRoundRect(tint, cornerRadius = cr)
             } else {
                 // Older phones: frosted look without sampling what's behind.

@@ -73,17 +73,19 @@ val Faint = Color.White.copy(alpha = 0.4f)
  * see-through dark fill.
  */
 val CleanFill: Color get() =
-    if (Settings.darkFrost) Color.Black.copy(alpha = (0.40f * Settings.glassOpacity).coerceIn(0.15f, 0.8f))
-    else Color(0xFFC4CAD4).copy(alpha = (0.15f * Settings.glassOpacity).coerceIn(0.06f, 0.4f))
+    if (Settings.darkFrost) lerp(Color.Black, Accent, 0.22f).copy(alpha = (0.26f * Settings.glassOpacity).coerceIn(0.10f, 0.7f))
+    else lerp(Color(0xFFC4CAD4), Accent, 0.30f).copy(alpha = (0.16f * Settings.glassOpacity).coerceIn(0.06f, 0.4f))
 /** Frosted glass where nothing behind is blurred (floating bars, older phones): more solid, so content doesn't show through. */
 val CleanSolid: Color get() =
-    if (Settings.darkFrost) Color.Black.copy(alpha = (0.62f * Settings.glassOpacity).coerceIn(0.3f, 0.9f))
-    else Color(0xFF5A606B).copy(alpha = (0.52f * Settings.glassOpacity).coerceIn(0.3f, 0.85f))
+    if (Settings.darkFrost) lerp(Color.Black, Accent, 0.24f).copy(alpha = (0.40f * Settings.glassOpacity).coerceIn(0.22f, 0.8f))
+    else lerp(Color(0xFF7A808B), Accent, 0.30f).copy(alpha = (0.34f * Settings.glassOpacity).coerceIn(0.2f, 0.7f))
+/** A faint sheen of the song's colour across frosted panels, so they pick up the cover instead of looking plain grey. */
+val CleanSheen: Brush get() = Brush.linearGradient(listOf(Accent.copy(alpha = if (Settings.darkFrost) 0.14f else 0.16f), Color.Transparent))
 /**
  * Bars that float over the page (player bar, tab bar): with the light frost they get a little
  * darker, so their buttons stay readable when a bright cover scrolls under them.
  */
-fun floatTint(normal: Color): Color = if (Settings.cleanLook && !Settings.darkFrost) Color.Black.copy(alpha = 0.46f) else normal
+fun floatTint(normal: Color): Color = if (Settings.cleanLook && !Settings.darkFrost) lerp(Color.Black, Accent, 0.18f).copy(alpha = 0.30f) else normal
 /** Frosted glass: the single hairline edge. */
 val CleanEdge: Color get() = Color.White.copy(alpha = if (Settings.darkFrost) 0.09f else 0.17f)
 
@@ -251,7 +253,9 @@ fun GlassBackground(colors: CoverColors, art: String?, modifier: Modifier = Modi
                     blob(colors.b.copy(alpha = (0.60f * k).coerceIn(0f, 1f)), w * (0.80f + 0.18f * sin(t)), h * (0.48f + 0.10f * cos(t)), w * 0.95f)
                     blob(colors.c.copy(alpha = (0.40f * k).coerceIn(0f, 1f)), w * (0.30f + 0.25f * sin(t + 1.7f)), h * (0.86f + 0.06f * cos(t * 2)), w * 0.85f)
                     blob(colors.a.copy(alpha = (0.25f * k).coerceIn(0f, 1f)), w * (0.70f + 0.20f * cos(t + 2.4f)), h * (0.10f + 0.05f * sin(t)), w * 0.6f)
-                    drawRect(Brush.verticalGradient(listOf(Color(0x22000000), Color(0x99000000))))
+                    // Frosted glass already softens everything, so it gets a lighter wash and the cover's colours show more.
+                    val wash = when { !Settings.cleanLook -> listOf(Color(0x22000000), Color(0x99000000)); Settings.darkFrost -> listOf(Color(0x14000000), Color(0x7A000000)); else -> listOf(Color(0x00000000), Color(0x5C000000)) }
+                    drawRect(Brush.verticalGradient(wash))
                 },
         )
     }
@@ -264,7 +268,7 @@ fun Modifier.glass(
     shape: Shape = RoundedCornerShape(24.dp),
     base: Float = 0.25f,
     light: Float = 0.12f,
-): Modifier = if (Settings.cleanLook) this.clip(shape).background(CleanFill).border(0.5.dp, CleanEdge, shape) else this
+): Modifier = if (Settings.cleanLook) this.clip(shape).background(CleanFill).background(CleanSheen).border(0.5.dp, CleanEdge, shape) else this
     .clip(shape)
     // How solid the glass is (Settings > Look).
     .background(Color(0xFF0B0F18).copy(alpha = (base * Settings.glassOpacity).coerceIn(0f, 0.95f)))
