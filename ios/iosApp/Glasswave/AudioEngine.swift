@@ -98,7 +98,6 @@ final class AudioEngine: NSObject, NativeAudio {
         guard let best = audio.filter({ $0.fileExtension == .m4a }).highestAudioBitrateStream() ?? audio.highestAudioBitrateStream() else {
             throw NoAudio()
         }
-        try await best.waitUntilAvailable()
         return best.url
     }
 

@@ -49,7 +49,7 @@ jobs:
           xcodebuild -project ios/iosApp/Glasswave.xcodeproj -scheme Glasswave -configuration Debug \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/sim" \
             ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build 2>&1 | tee "$RUNNER_TEMP/sim-build.log" | grep -E "error:|warning: unable|BUILD|e: " || true
-          test -d "$RUNNER_TEMP/sim/Build/Products/Debug-iphonesimulator/Glasswave.app"
+          grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/sim-build.log" || { grep -B2 -A3 "error:" "$RUNNER_TEMP/sim-build.log" | head -60; exit 1; }
 
       - name: Try it on a simulated iPhone
         run: |
@@ -77,6 +77,7 @@ jobs:
           xcodebuild -project ios/iosApp/Glasswave.xcodeproj -scheme Glasswave -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/dev" \
             build 2>&1 | tee "$RUNNER_TEMP/dev-build.log" | grep -E "error:|BUILD|e: " || true
+          grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/dev-build.log" || { grep -B2 -A3 "error:" "$RUNNER_TEMP/dev-build.log" | head -60; exit 1; }
           mkdir -p Payload
           cp -R "$RUNNER_TEMP/dev/Build/Products/Release-iphoneos/Glasswave.app" Payload/
           zip -qry out/Glasswave.ipa Payload
