@@ -93,7 +93,7 @@ final class AudioEngine: NSObject, NativeAudio {
 
     /// The best audio-only stream iOS can play by itself (AAC in .m4a first).
     private static func audioURL(_ videoId: String) async throws -> URL {
-        let streams = try await YouTube(videoID: videoId, methods: [.local]).streams
+        let streams = try await YouTube(videoID: videoId, methods: [.local, .remote]).streams
         let audio = streams.filterAudioOnly().filter { $0.isNativelyPlayable }
         guard let best = audio.filter({ $0.fileExtension == .m4a }).highestAudioBitrateStream() ?? audio.highestAudioBitrateStream() else {
             throw NoAudio()
