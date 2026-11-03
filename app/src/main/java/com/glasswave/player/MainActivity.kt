@@ -60,6 +60,8 @@ class MainActivity : ComponentActivity() {
     /** Opened by tapping the song in the notification or the phone's media bar: show the full player. */
     private fun handleOpen(i: Intent?) {
         if (i?.action == OPEN_PLAYER && ::ps.isInitialized) ps.openFull = true
+        // "Play this song" from another app (Cue, Google Assistant).
+        if (i != null && PlayRequest.isOne(i) && ::ps.isInitialized) PlayRequest.handle(applicationContext, i, ps)
     }
 
     companion object {

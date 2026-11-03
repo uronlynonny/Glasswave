@@ -36,6 +36,20 @@ class PlayerState(private val context: Context) {
     /** Set when the app was opened from the notification, so the full player opens. */
     var openFull by mutableStateOf(false)
 
+    /** Songs asked for before the player finished connecting (e.g. a play request from Cue). */
+    private var pending: List<Track>? = null
+    private var resumePending = false
+
+    /** Plays these now, or as soon as the player is ready. */
+    fun playSoon(tracks: List<Track>) {
+        if (controller != null) playList(tracks, 0) else pending = tracks
+    }
+
+    /** Carries on playing now, or as soon as the player is ready. */
+    fun resumeSoon() {
+        if (controller != null) play() else resumePending = true
+    }
+
     fun changeSpeed(s: Float) { controller?.setPlaybackSpeed(s) }
 
     /** Goes up whenever the queue changes, so the queue list knows to refresh. */
@@ -128,6 +142,14 @@ class PlayerState(private val context: Context) {
                 controller = c
                 c.addListener(listener)
                 sync()
+                pending?.let {
+                    pending = null
+                    playList(it, 0)
+                }
+                if (resumePending) {
+                    resumePending = false
+                    c.play()
+                }
             } catch (e: Exception) {
                 error = "Couldn't start the player."
             }

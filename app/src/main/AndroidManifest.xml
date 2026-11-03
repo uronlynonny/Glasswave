@@ -55,6 +55,11 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="glasswave" android:host="spotify-done" />
             </intent-filter>
+            <!-- "Play this song" from other apps (Cue's timed songs, Google Assistant). -->
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <provider
