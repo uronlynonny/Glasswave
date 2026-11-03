@@ -1,11 +1,11 @@
 {
-  "lastTime": 1793728007,
+  "lastTime": 1793733976,
   "totals": {
     "visits": 123,
     "siteDownloads": 38,
-    "apk": 275
+    "apk": 276
   },
-  "apkTotal": 238,
+  "apkTotal": 239,
   "hours": [
     {
       "t": 1792763089,
@@ -1608,9 +1608,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1793735379,
+      "v": 0,
+      "d": 0,
+      "a": 1
     }
   ],
-  "updated": 1793731543,
+  "updated": 1793735379,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -1707,9 +1713,13 @@
     {
       "t": 1793686278,
       "m": "\"Found a Way\" by DeLeon Rovon wouldn't play (tried 4 times).\nERROR_CODE_IO_UNSPECIFIED\nIOException: YouTube lookup failed\nContentNotAvailableException: Got error UNPLAYABLE: \"This video is not available\"\n\nXiaomi 25078RA3EA, Android 16, Glasswave 0.18.24\nhttps://music.youtube.com/watch?v=2Ve22-n7epw"
+    },
+    {
+      "t": 1793733976,
+      "m": "\"I Know\" by Polo G wouldn't play (tried 4 times).\nUnknownHostException: www.youtube.com\n\nWindows 10 (10.0), Glasswave for Windows 1.2.30\nhttps://music.youtube.com/watch?v=qnLnogeFHwE"
     }
   ],
-  "lastActiveTime": 1793729405,
+  "lastActiveTime": 1793734808,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -1933,6 +1943,8 @@
       ],
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
+        "65d60d6b-a971-45bc-a69e-ee9e81d656a6",
+        "d8dfbeea-6046-4a55-beb1-39a0e683240f",
         "ff5e4c03-6f4b-4aaf-9481-52797777d6ff"
       ]
     }
@@ -1940,7 +1952,7 @@
   "active": {
     "today": {
       "a": 11,
-      "w": 2
+      "w": 4
     },
     "week": {
       "a": 44,
@@ -2004,7 +2016,7 @@
       {
         "d": "2026-11-03",
         "a": 11,
-        "w": 2
+        "w": 4
       }
     ]
   },
