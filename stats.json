@@ -1,5 +1,5 @@
 {
-  "lastTime": 1793681401,
+  "lastTime": 1793686278,
   "totals": {
     "visits": 121,
     "siteDownloads": 37,
@@ -1542,9 +1542,15 @@
       "v": 0,
       "d": 0,
       "a": 0
+    },
+    {
+      "t": 1793689179,
+      "v": 0,
+      "d": 0,
+      "a": 0
     }
   ],
-  "updated": 1793685032,
+  "updated": 1793689179,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -1637,9 +1643,13 @@
     {
       "t": 1793662861,
       "m": "\"World's A Fuck\" by Sematary, Ghost Mountain wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nAgeRestrictedContentException: This age-restricted video cannot be watched anonymously\n\nWindows 10 (10.0), Glasswave for Windows 1.2.36\nhttps://music.youtube.com/watch?v=iep7ny8_yn8"
+    },
+    {
+      "t": 1793686278,
+      "m": "\"Found a Way\" by DeLeon Rovon wouldn't play (tried 4 times).\nERROR_CODE_IO_UNSPECIFIED\nIOException: YouTube lookup failed\nContentNotAvailableException: Got error UNPLAYABLE: \"This video is not available\"\n\nXiaomi 25078RA3EA, Android 16, Glasswave 0.18.24\nhttps://music.youtube.com/watch?v=2Ve22-n7epw"
     }
   ],
-  "lastActiveTime": 1793683151,
+  "lastActiveTime": 1793686411,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -1855,6 +1865,7 @@
         "f4b08070-e73e-4251-8a6c-30075cf72197"
       ],
       "w": [
+        "1acf6e0b-6faa-44ef-aab2-085f9b135094",
         "ff5e4c03-6f4b-4aaf-9481-52797777d6ff"
       ]
     }
@@ -1862,7 +1873,7 @@
   "active": {
     "today": {
       "a": 4,
-      "w": 1
+      "w": 2
     },
     "week": {
       "a": 40,
@@ -1926,7 +1937,7 @@
       {
         "d": "2026-11-03",
         "a": 4,
-        "w": 1
+        "w": 2
       }
     ]
   },
