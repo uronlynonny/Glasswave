@@ -433,3 +433,15 @@ tasks.register("packageMsix") {
         if (storePublisher == "CN=TODO") println("Note: Store identity not filled in yet (see storeIdentityName in build.gradle.kts), so this one can't be uploaded.")
     }
 }
+
+// Writes what memCheck would run (class path and JVM flags), so a check can be started straight from Java
+// when Gradle can't stay up (another build stopping its daemons).
+tasks.register("memCheckCommand") {
+    dependsOn("classes")
+    doLast {
+        val out = layout.buildDirectory.get().asFile
+        File(out, "memcheck-cp.txt").writeText(sourceSets.main.get().runtimeClasspath.asPath)
+        File(out, "memcheck-jvm.txt").writeText(compose.desktop.application.jvmArgs.joinToString("\n"))
+        println("memcheck command written to $out")
+    }
+}

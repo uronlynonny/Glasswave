@@ -151,6 +151,8 @@ object MemScript {
                         // mini on|off: the mini player window. miniinfo: how that window is set up. minisize w h: resizes it.
                         "mini" -> onUi { Mini.setEnabled(arg == "on") }
                         "miniop" -> onUi { Settings.updateMiniOpacity(arg.toFloat()) }
+                        "minidepth" -> onUi { Settings.updateMiniDepth(arg.toFloat()) }
+                        "minicorners" -> onUi { Settings.updateMiniCorners(arg.toFloat()) }
                         "ministyle" -> onUi { Settings.updateMiniStyle(MiniStyle.valueOf(arg)) }
                         "miniinfo" -> onUi {
                             val m = java.awt.Window.getWindows().firstOrNull { (it as? java.awt.Frame)?.title == "Glasswave mini player" && it.isDisplayable } as? java.awt.Frame
