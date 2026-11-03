@@ -9,3 +9,6 @@ apk/
 
 # Things only for nonny dev, never pushed (e.g. the live active-users page).
 private/
+
+# Made by XcodeGen on the Mac (ios/iosApp/project.yml is the source).
+ios/iosApp/*.xcodeproj/
