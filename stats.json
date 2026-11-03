@@ -1,11 +1,11 @@
 {
-  "lastTime": 1793674003,
+  "lastTime": 1793677713,
   "totals": {
     "visits": 121,
     "siteDownloads": 37,
-    "apk": 263
+    "apk": 264
   },
-  "apkTotal": 226,
+  "apkTotal": 227,
   "hours": [
     {
       "t": 1792763089,
@@ -1530,9 +1530,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1793681400,
+      "v": 0,
+      "d": 0,
+      "a": 1
     }
   ],
-  "updated": 1793677711,
+  "updated": 1793681400,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -1627,7 +1633,7 @@
       "m": "\"World's A Fuck\" by Sematary, Ghost Mountain wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nAgeRestrictedContentException: This age-restricted video cannot be watched anonymously\n\nWindows 10 (10.0), Glasswave for Windows 1.2.36\nhttps://music.youtube.com/watch?v=iep7ny8_yn8"
     }
   ],
-  "lastActiveTime": 1793674633,
+  "lastActiveTime": 1793680101,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -1838,7 +1844,8 @@
     "2026-11-03": {
       "a": [
         "97b14727-911d-4245-9d38-1ef73d84dcf8",
-        "f26e3a11-ef03-4fea-a5bd-bda93da47da3"
+        "f26e3a11-ef03-4fea-a5bd-bda93da47da3",
+        "f4b08070-e73e-4251-8a6c-30075cf72197"
       ],
       "w": [
         "ff5e4c03-6f4b-4aaf-9481-52797777d6ff"
@@ -1847,7 +1854,7 @@
   },
   "active": {
     "today": {
-      "a": 2,
+      "a": 3,
       "w": 1
     },
     "week": {
@@ -1911,7 +1918,7 @@
       },
       {
         "d": "2026-11-03",
-        "a": 2,
+        "a": 3,
         "w": 1
       }
     ]
