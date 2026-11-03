@@ -26,14 +26,14 @@ sealed interface AudioSource {
  * Reads a song from the internet in a way FFmpeg can jump around in: every jump opens a fresh
  * request starting at that byte. Nothing is downloaded before it's needed.
  */
-internal class HttpSeekStream(private val url: String) : InputStream() {
+internal class HttpSeekStream(private val url: String) : SeekStream() {
     /** How long the last request to the server took to answer (for spotting slow connections). */
-    @Volatile var lastOpenMs = 0L
+    @Volatile override var lastOpenMs = 0L
     private var pos = 0L
     private var body: InputStream? = null
     private var response: Response? = null
     private var bodyPos = -1L
-    var length = -1L
+    override var length = -1L
         private set
 
     init { open(0) }
@@ -136,10 +136,120 @@ internal class HttpSeekStream(private val url: String) : InputStream() {
     override fun close() = closeBody()
 
     /** Moves where the next read starts (used by [AheadStream]'s download). */
-    fun seek(at: Long) { pos = at }
+    override fun seek(at: Long) { pos = at }
 }
 
 private const val PIECE = 2L * 1024 * 1024
+
+/** A song on the internet that FFmpeg can jump around in: a plain file ([HttpSeekStream]) or one cut into pieces ([HlsSeekStream]). */
+internal abstract class SeekStream : InputStream() {
+    /** The song's size in bytes (-1 until known). */
+    abstract val length: Long
+    /** How long the last request to the server took to answer. */
+    abstract val lastOpenMs: Long
+    /** Moves where the next read starts. */
+    abstract fun seek(at: Long)
+}
+
+/** The right reader for a song's address. */
+internal fun seekStream(url: String): SeekStream = if (Hls.isPlaylist(url)) HlsSeekStream(url) else HttpSeekStream(url)
+
+/**
+ * A song streamed as MP4 pieces (how SoundCloud streams), read as if it were one plain MP4 file:
+ * the pieces' sizes are asked for up front, so a jump to any byte knows which piece to open and
+ * where in it. Pieces follow one another seamlessly.
+ */
+internal class HlsSeekStream(playlistUrl: String) : SeekStream() {
+    private val parts = Hls.parts(playlistUrl)
+    private val starts: LongArray = Hls.sizes(parts).let { sizes -> LongArray(parts.size + 1).also { for (i in parts.indices) it[i + 1] = it[i] + sizes[i] } }
+    override val length: Long get() = starts.last()
+    @Volatile override var lastOpenMs = 0L
+    private var pos = 0L
+    private var body: InputStream? = null
+    private var response: Response? = null
+    private var bodyPos = -1L
+
+    override fun seek(at: Long) { pos = at }
+
+    /** Which piece holds byte [p]. */
+    private fun pieceAt(p: Long): Int {
+        var i = starts.binarySearch(p)
+        if (i < 0) i = -i - 2
+        return i.coerceIn(0, parts.size - 1)
+    }
+
+    private fun open(at: Long) {
+        closeBody()
+        val i = pieceAt(at)
+        val within = at - starts[i]
+        val req = Request.Builder().url(parts[i]).header("User-Agent", YtDownloader.USER_AGENT).header("Range", "bytes=$within-").build()
+        val asked = System.nanoTime()
+        val r = YtRepo.http.newCall(req).execute()
+        lastOpenMs = (System.nanoTime() - asked) / 1_000_000
+        if (!r.isSuccessful) {
+            r.close()
+            throw HttpStatus(r.code)
+        }
+        val stream = r.body!!.byteStream()
+        if (r.code == 200 && within > 0) {
+            var left = within
+            while (left > 0) {
+                val n = stream.skip(left)
+                if (n <= 0) break
+                left -= n
+            }
+        }
+        response = r
+        body = stream
+        bodyPos = at
+    }
+
+    private fun closeBody() {
+        runCatching { response?.close() }
+        response = null
+        body = null
+        bodyPos = -1
+    }
+
+    override fun read(): Int {
+        val one = ByteArray(1)
+        val n = read(one, 0, 1)
+        return if (n <= 0) -1 else one[0].toInt() and 0xFF
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        if (len == 0) return 0
+        while (true) {
+            if (pos >= length) return -1
+            if (body == null || bodyPos != pos) open(pos)
+            val n = try {
+                body!!.read(b, off, len)
+            } catch (e: IOException) {
+                open(pos)
+                body!!.read(b, off, len)
+            }
+            if (n > 0) {
+                pos += n
+                bodyPos += n
+                return n
+            }
+            // This piece is finished: carry on with the next one.
+            closeBody()
+        }
+    }
+
+    override fun markSupported() = true
+    override fun mark(readlimit: Int) {}
+    override fun reset() { pos = 0 }
+    override fun skip(n: Long): Long {
+        if (n <= 0) return 0
+        val moved = minOf(n, (length - pos).coerceAtLeast(0))
+        pos += moved
+        return moved
+    }
+    override fun available() = 0
+    override fun close() = closeBody()
+}
 
 class HttpStatus(val code: Int) : IOException("The server answered $code")
 

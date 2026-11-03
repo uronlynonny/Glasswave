@@ -479,7 +479,18 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         val page = if (uri.scheme == "gwmatch") {
             YtRepo.match(uri.getQueryParameter("q") ?: throw java.io.IOException("Empty song"), uri.getQueryParameter("d")?.toLongOrNull() ?: 0)
         } else t.url
-        return AudioSource.Remote(YtRepo.streamUrl(page), t)
+        Sources.hint(t.url, t.title, t.artist, t.seconds)
+        val stream = try {
+            YtRepo.streamUrl(page)
+        } catch (e: java.io.IOException) {
+            // The YouTube upload won't play (18+, taken down, not in your country) and no other upload
+            // of it did either: the same song from SoundCloud, if it's there.
+            if (!Sources.unplayable(e)) throw e
+            val other = Sources.soundCloud(t.title, t.artist, t.seconds) ?: throw e
+            main.post { Menus.say("Playing \"${t.title}\" from SoundCloud") }
+            other.url
+        }
+        return AudioSource.Remote(stream, t)
     }
 
     /** Each song change gets a number, so a slow lookup for a song you've skipped past is ignored. */
@@ -1056,6 +1067,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         repeat(2) {
             i = nextIndex(i, Player.REPEAT_MODE_OFF) ?: return
             val t = items[i]
+            Sources.hint(t.url, t.title, t.artist, t.seconds)
             if (Downloads.fileFor(t.url) == null) worker.execute { YtRepo.prefetch(android.net.Uri.parse(t.url)) }
         }
     }

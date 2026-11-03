@@ -150,6 +150,8 @@ object MemScript {
                         "toggle" -> onUi { ps.toggle() }
                         // mini on|off: the mini player window. miniinfo: how that window is set up. minisize w h: resizes it.
                         "mini" -> onUi { Mini.setEnabled(arg == "on") }
+                        "miniop" -> onUi { Settings.updateMiniOpacity(arg.toFloat()) }
+                        "ministyle" -> onUi { Settings.updateMiniStyle(MiniStyle.valueOf(arg)) }
                         "miniinfo" -> onUi {
                             val m = java.awt.Window.getWindows().firstOrNull { (it as? java.awt.Frame)?.title == "Glasswave mini player" && it.isDisplayable } as? java.awt.Frame
                             System.err.println(if (m == null) "GW miniinfo: no mini window" else "GW miniinfo: at ${m.x},${m.y} size ${m.width}x${m.height} onTop=${m.isAlwaysOnTop} undecorated=${m.isUndecorated} seeThrough=${(m as? androidx.compose.ui.awt.ComposeWindow)?.isTransparent} bg=${m.background} opaque=${m.isOpaque} api=${(m as? androidx.compose.ui.awt.ComposeWindow)?.renderApi} mainApi=${(java.awt.Window.getWindows().firstOrNull { (it as? java.awt.Frame)?.title == "Glasswave" && it.isDisplayable } as? androidx.compose.ui.awt.ComposeWindow)?.renderApi} card=${MiniGeom.card} shape=${m.shape?.bounds} saved=${Settings.miniBounds}")
@@ -502,6 +504,80 @@ object MemScript {
                             }
                         }
                         // streamtest id: can that song's audio be found (18+ songs play another upload)?
+                        // resolvesong query: the top YouTube Music results for a search, then tries to get the first one's audio, printing every cause when it fails.
+                        "resolvesong" -> {
+                            val hits = runCatching { kotlinx.coroutines.runBlocking { YtRepo.search(arg) } }.getOrElse { System.err.println("GW resolvesong search FAILED: $it"); emptyList() }
+                            hits.take(4).forEach { System.err.println("GW resolvesong hit: ${it.title} | ${it.artist} | ${it.seconds}s | ${it.url}") }
+                            hits.firstOrNull()?.let { t ->
+                                val r = runCatching { YtRepo.streamUrl(t.url) }
+                                r.onSuccess { System.err.println("GW resolvesong OK ${it.take(80)}") }
+                                r.onFailure { e -> System.err.println("GW resolvesong FAILED: " + generateSequence(e) { it.cause }.joinToString(" <- ") { "${it.javaClass.simpleName}: ${it.message?.take(160)}" }) }
+                            }
+                        }
+                        // sctest query: SoundCloud's top results for a search and the first one's audio streams.
+                        "sctest" -> {
+                            val sc = org.schabi.newpipe.extractor.ServiceList.SoundCloud
+                            val r = runCatching {
+                                val h = sc.searchQHFactory.fromQuery(arg, listOf(org.schabi.newpipe.extractor.services.soundcloud.linkHandler.SoundcloudSearchQueryHandlerFactory.TRACKS), "")
+                                val hits = org.schabi.newpipe.extractor.search.SearchInfo.getInfo(sc, h).relatedItems.filterIsInstance<org.schabi.newpipe.extractor.stream.StreamInfoItem>()
+                                hits.take(5).forEach { System.err.println("GW sctest hit: ${it.name} | ${it.uploaderName} | ${it.duration}s | ${it.url}") }
+                                val first = hits.first()
+                                val ex = sc.getStreamExtractor(first.url).also { it.fetchPage() }
+                                ex.audioStreams.forEach { System.err.println("GW sctest stream: ${it.deliveryMethod} ${it.format} ${it.averageBitrate}kbps url=${it.isUrl} ${it.content.take(90)}") }
+                            }
+                            r.onFailure { e -> System.err.println("GW sctest FAILED: " + generateSequence(e) { it.cause }.joinToString(" <- ") { "${it.javaClass.simpleName}: ${it.message?.take(160)}" }) }
+                        }
+                        // hlstest soundcloud-track-url: can FFmpeg play a SoundCloud HLS stream straight from its address (and seek in it)?
+                        "hlstest" -> {
+                            val r = runCatching {
+                                val sc = org.schabi.newpipe.extractor.ServiceList.SoundCloud
+                                val ex = sc.getStreamExtractor(arg).also { it.fetchPage() }
+                                val st = ex.audioStreams.first()
+                                System.err.println("GW hlstest stream ${st.deliveryMethod} ${st.format} ${st.averageBitrate} ${st.content}")
+                                val g = org.bytedeco.javacv.FFmpegFrameGrabber(st.content)
+                                val t0 = System.currentTimeMillis()
+                                g.start()
+                                System.err.println("GW hlstest started in ${System.currentTimeMillis() - t0} ms: ${g.sampleRate} Hz, ${g.audioChannels} ch, ${g.lengthInTime / 1_000_000} s, codec ${g.audioCodecName}")
+                                var n = 0; var samples = 0L
+                                while (n < 200) { val f = g.grabSamples() ?: break; n++; samples += (f.samples?.firstOrNull()?.limit() ?: 0) }
+                                System.err.println("GW hlstest read $n frames, $samples samples, now at ${g.timestamp / 1_000_000} s")
+                                val t1 = System.currentTimeMillis()
+                                g.setTimestamp(90_000_000L)
+                                val f = g.grabSamples()
+                                System.err.println("GW hlstest seek to 90 s took ${System.currentTimeMillis() - t1} ms, now at ${g.timestamp / 1_000_000} s, frame=${f != null}")
+                                g.stop(); g.release()
+                            }
+                            r.onFailure { e -> System.err.println("GW hlstest FAILED: " + generateSequence(e) { it.cause }.joinToString(" <- ") { "${it.javaClass.simpleName}: ${it.message?.take(200)}" }) }
+                        }
+                        // hlspl soundcloud-track-url: the first lines of the track's HLS playlist (what kind of pieces it's cut into).
+                        "hlspl" -> {
+                            val r = runCatching {
+                                val sc = org.schabi.newpipe.extractor.ServiceList.SoundCloud
+                                val ex = sc.getStreamExtractor(arg).also { it.fetchPage() }
+                                val u = ex.audioStreams.first().content
+                                val txt = YtRepo.http.newCall(okhttp3.Request.Builder().url(u).build()).execute().use { it.body!!.string() }
+                                val lines = txt.lines()
+                                System.err.println("GW hlspl ${lines.size} lines; segments=${lines.count { it.isNotBlank() && !it.startsWith("#") }}")
+                                lines.take(10).forEach { System.err.println("GW hlspl | " + it.take(200)) }
+                                lines.firstOrNull { it.isNotBlank() && !it.startsWith("#") }?.let { seg ->
+                                    val head = YtRepo.http.newCall(okhttp3.Request.Builder().url(seg).header("Range", "bytes=0-15").build()).execute().use { r -> r.code.toString() + " " + r.header("Content-Type") + " " + (r.body?.bytes()?.joinToString(" ") { b -> "%02x".format(b) }) }
+                                    System.err.println("GW hlspl first segment: $head")
+                                }
+                            }
+                            r.onFailure { e -> System.err.println("GW hlspl FAILED: $e") }
+                        }
+                        // playtrack id|title|artist|seconds: plays that YouTube upload under that name, as if from a playlist (tries the fallbacks on a dead or 18+ upload).
+                        "playtrack" -> {
+                            val (id, title, artist, secs) = arg.split("|")
+                            onUi { ps.playList(listOf(Track(ytWatchUrl(id), title, artist, secs.toLong(), null)), 0) }
+                        }
+                        // scfind title|artist|seconds: the SoundCloud copy of a song, if there is one.
+                        "scfind" -> {
+                            val (title, artist, secs) = arg.split("|")
+                            val f = runCatching { Sources.soundCloud(title, artist, secs.toLong()) }
+                            System.err.println("GW scfind " + f.fold({ it?.let { x -> "${x.name} | ${x.by} | hls=${x.hls} | ${x.page}" } ?: "none" }, { "FAILED $it" }))
+                        }
+                        "vol" -> onUi { if (arg == "mute") AppVolume.muteForChecks() else AppVolume.set(arg.toFloat()) }
                         "streamtest" -> System.err.println("GW streamtest $arg -> " + runCatching { YtRepo.streamUrl(ytWatchUrl(arg)).take(60) }.getOrElse { "FAILED: $it" })
                         "share" -> onUi { ShareCard.track = if (arg == "off") null else ps.currentTrack() }
                         "mem" -> System.err.println(line(arg))

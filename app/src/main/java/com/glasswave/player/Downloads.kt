@@ -177,14 +177,24 @@ object Downloads {
         val page = if (uri.scheme == "gwmatch") {
             YtRepo.match(uri.getQueryParameter("q") ?: throw IOException("Empty song"), uri.getQueryParameter("d")?.toLongOrNull() ?: 0)
         } else t.url
-        val stream = YtRepo.streamUrl(page, qualityNow())
+        val stream = try {
+            YtRepo.streamUrl(page, qualityNow())
+        } catch (e: IOException) {
+            // The YouTube upload won't play (18+, taken down): the same song from SoundCloud, if it's there.
+            if (!Sources.unplayable(e)) throw e
+            Sources.soundCloud(t.title, t.artist, t.seconds)?.url ?: throw e
+        }
         show(t.url, 0.02f)
         val name = "s" + Integer.toHexString(t.url.hashCode()) + "_" + System.currentTimeMillis() + ".audio"
         val out = File(dir, name)
         val part = File(dir, "$name.part")
         try {
-            val total = sizeOf(stream)
-            if (total != null && total > 0) inPieces(stream, part, total, t.url) else inOneGo(stream, part, t.url)
+            if (Hls.isPlaylist(stream)) {
+                Hls.writeTo(stream, part) { show(t.url, 0.02f + 0.98f * it) }
+            } else {
+                val total = sizeOf(stream)
+                if (total != null && total > 0) inPieces(stream, part, total, t.url) else inOneGo(stream, part, t.url)
+            }
         } catch (e: Exception) {
             part.delete()
             throw e

@@ -12,8 +12,8 @@ android {
         applicationId = "com.glasswave.player"
         minSdk = 26
         targetSdk = 35
-        versionCode = 60
-        versionName = "0.18.24"
+        versionCode = 61
+        versionName = "0.18.25"
         // Only English text from libraries; keeps the APK small.
         resourceConfigurations += "en"
     }
@@ -72,6 +72,7 @@ dependencies {
     implementation("androidx.palette:palette-ktx:1.0.0")
 
     implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
     implementation("androidx.media3:media3-session:1.4.1")
 
     implementation("io.coil-kt:coil-compose:2.7.0")

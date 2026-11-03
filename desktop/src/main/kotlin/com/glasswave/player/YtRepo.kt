@@ -59,9 +59,6 @@ object YtRepo {
     @Volatile
     private var ageAlt: SharedPreferences? = null
 
-    private fun ageRestricted(e: Throwable): Boolean =
-        generateSequence(e) { it.cause }.any { it is org.schabi.newpipe.extractor.exceptions.AgeRestrictedContentException }
-
     private val notTheSame = Regex("""\b(slowed|sped|speed|nightcore|reverb|remix|cover|instrumental|karaoke|8d|bass ?boosted|1 ?hour|loop)\b""", RegexOption.IGNORE_CASE)
 
     /**
@@ -75,7 +72,11 @@ object YtRepo {
         ageAlt?.getString(id, null)?.let { known ->
             runCatching { extractor(ytWatchUrl(known)).audioStreams }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { return it }
         }
-        val info = runCatching { YtMusicApi.trackInfo(id) }.getOrNull() ?: return null
+        // The song's real name and artist: what the queue calls it first (YouTube's own name for an
+        // upload can be anything, and a removed upload has none), else YouTube Music's name for it.
+        val hint = Sources.hintFor(videoUrl)
+        val info = hint?.let { Track(videoUrl, it.title, it.artist, it.seconds, null) }
+            ?: runCatching { YtMusicApi.trackInfo(id) }.getOrNull() ?: return null
         val lead = info.artist.substringBefore(",").substringBefore(" & ").trim()
         val leadKey = lead.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), "")
         class Upload(val id: String, val name: String, val by: String, val seconds: Long)
@@ -92,32 +93,42 @@ object YtRepo {
                 (info.seconds <= 0 || c.seconds <= 0 || abs(c.seconds - info.seconds) <= 12)
         }.distinctBy { it.id }
             .sortedWith(compareBy({ if (mentionsArtist(it)) 0 else 1 }, { if (info.seconds > 0 && it.seconds > 0) abs(it.seconds - info.seconds) else 0 }))
-        // YouTube Music's video search first (the same search the app uses everywhere), then YouTube's.
+        // The song itself on YouTube Music first (the "song" upload is hardly ever 18+ or taken down),
+        // then YouTube Music's videos, then YouTube's.
+        fun musicSongs(q: String) = runCatching {
+            kotlinx.coroutines.runBlocking { YtMusicApi.search(q, YtMusicApi.Filter.SONGS) }.sections.flatMap { it.items }.filterIsInstance<SongItem>()
+                .map { Upload(it.track.url.substringAfter("v=").substringBefore("&"), it.track.title, it.track.artist, it.track.seconds) }
+        }.onFailure { if (it !is InterruptedException && it !is java.io.InterruptedIOException) android.util.Log.w("Glasswave", "other upload: song search failed ($it)") }.getOrNull().orEmpty()
         fun musicVideos(q: String) = runCatching {
             kotlinx.coroutines.runBlocking { YtMusicApi.searchVideos(q) }.map { Upload(it.track.url.substringAfter("v=").substringBefore("&"), it.track.title, it.track.artist, it.track.seconds) }
-        }.onFailure { android.util.Log.w("Glasswave", "18+ song: music video search failed ($it)") }.getOrNull().orEmpty()
+        }.onFailure { if (it !is InterruptedException && it !is java.io.InterruptedIOException) android.util.Log.w("Glasswave", "other upload: music video search failed ($it)") }.getOrNull().orEmpty()
         fun youtube(q: String) = runCatching {
             val yt = ServiceList.YouTube
             val handler = yt.searchQHFactory.fromQuery(q.trim(), listOf(YoutubeSearchQueryHandlerFactory.VIDEOS), "")
             SearchInfo.getInfo(yt, handler).relatedItems.filterIsInstance<StreamInfoItem>().mapNotNull { c ->
                 android.net.Uri.parse(c.url).getQueryParameter("v")?.let { Upload(it, c.name, c.uploaderName.orEmpty(), c.duration) }
             }
-        }.onFailure { android.util.Log.w("Glasswave", "18+ song: search for another upload failed ($it)") }.getOrNull().orEmpty()
+        }.onFailure { if (it !is InterruptedException && it !is java.io.InterruptedIOException) android.util.Log.w("Glasswave", "other upload: YouTube search failed ($it)") }.getOrNull().orEmpty()
         var candidates = emptyList<Upload>()
-        // The full name, then just its first word (finds uploads that blank out the rest).
+        val began = System.currentTimeMillis()
+        // SoundCloud is looked up at the same time, so if YouTube has nothing the player can switch right away.
+        Sources.prewarmSoundCloud(info.title, info.artist, info.seconds)
+        // The full name, then just its first word (finds uploads that blank out the rest). Every
+        // search runs at once; the answers are taken in order of preference as they come in.
         val first = info.title.trim().substringBefore(' ')
         val queries = listOf("${info.title} $lead".trim(), "$first $lead".trim()).distinct()
-        search@ for (q in queries) {
-            for ((where, search) in listOf<Pair<String, (String) -> List<Upload>>>("YouTube Music" to ::musicVideos, "YouTube" to ::youtube)) {
-                val found = search(q)
-                candidates = pick(found)
-                android.util.Log.i("Glasswave", "18+ song \"${info.title}\" on $where ($q): ${found.size} results, ${candidates.size} look like the same song")
-                if (candidates.isNotEmpty()) break@search
-            }
+        val searches = listOf<Pair<String, (String) -> List<Upload>>>("YouTube Music songs" to ::musicSongs, "YouTube Music" to ::musicVideos, "YouTube" to ::youtube)
+        val running = queries.flatMap { q -> searches.map { (where, search) -> Triple(where, q, Sources.pool.submit<List<Upload>> { search(q) }) } }
+        for ((where, q, future) in running) {
+            val found = runCatching { future.get() }.getOrDefault(emptyList())
+            candidates = pick(found)
+            android.util.Log.i("Glasswave", "Other upload of \"${info.title}\" on $where ($q): ${found.size} results, ${candidates.size} look like the same song (${System.currentTimeMillis() - began} ms)")
+            if (candidates.isNotEmpty()) break
         }
+        running.forEach { it.third.cancel(true) }
         for (c in candidates.take(6)) {
             val streams = runCatching { extractor(ytWatchUrl(c.id)).audioStreams }.getOrNull()?.takeIf { it.isNotEmpty() } ?: continue
-            android.util.Log.i("Glasswave", "18+ song: playing ${c.name} (${c.by}) instead")
+            android.util.Log.i("Glasswave", "Other upload: playing ${c.name} (${c.by}) instead, after ${System.currentTimeMillis() - began} ms")
             ageAlt?.edit { putString(id, c.id) }
             return streams
         }
@@ -312,8 +323,8 @@ object YtRepo {
             extractor(videoUrl).audioStreams
         } catch (e: Exception) {
             val err = e as? IOException ?: IOException("YouTube lookup failed", e)
-            // An 18+ song: play another upload of it instead.
-            if (!ageRestricted(e)) throw err
+            // This upload won't play (18+, taken down, private, not in your country): another upload of the song instead.
+            if (!Sources.unplayable(e)) throw err
             otherUpload(videoUrl) ?: throw err
         }
         val now = System.currentTimeMillis()

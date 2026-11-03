@@ -17,7 +17,15 @@ object MixAudio : MixDecoder {
         val page = if (uri.scheme == "gwmatch") {
             YtRepo.match(uri.getQueryParameter("q") ?: throw java.io.IOException("Empty song"), uri.getQueryParameter("d")?.toLongOrNull() ?: 0)
         } else url
-        return AudioSource.Remote(YtRepo.streamUrl(page))
+        val stream = try {
+            YtRepo.streamUrl(page)
+        } catch (e: java.io.IOException) {
+            // The YouTube upload won't play: the same song from SoundCloud, if it's there.
+            val h = Sources.hintFor(url)
+            if (h == null || !Sources.unplayable(e)) throw e
+            Sources.soundCloud(h.title, h.artist, h.seconds)?.url ?: throw e
+        }
+        return AudioSource.Remote(stream)
     }
 
     override fun decode(url: String, part: MixPart): Pcm? = read(source(url), part, RATE, 1)
@@ -56,7 +64,7 @@ object MixAudio : MixDecoder {
     private fun grabber(src: AudioSource, rate: Int, channels: Int): FFmpegFrameGrabber {
         val g = when (src) {
             is AudioSource.LocalFile -> FFmpegFrameGrabber(src.file)
-            is AudioSource.Remote -> FFmpegFrameGrabber(HttpSeekStream(src.url), Int.MAX_VALUE - 8)
+            is AudioSource.Remote -> FFmpegFrameGrabber(seekStream(src.url), Int.MAX_VALUE - 8)
         }
         g.sampleFormat = avutil.AV_SAMPLE_FMT_FLT
         g.sampleRate = rate

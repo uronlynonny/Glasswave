@@ -68,6 +68,8 @@ data class Page(
 )
 
 fun Track.toMediaItem(): MediaItem {
+    // The queue's name for the song, in case its upload won't play and it has to be found again.
+    Sources.hint(url, title, artist, seconds)
     val meta = MediaMetadata.Builder()
         .setTitle(title)
         .setArtist(artist)

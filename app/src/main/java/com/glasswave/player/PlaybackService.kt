@@ -844,13 +844,58 @@ class PlaybackService : MediaSessionService() {
             return
         }
         if (!phone) YtRepo.forgetStreamUrls()
-        if (recoveries < 3) {
+        // An upload that can't be played (18+, taken down, not in your country) isn't worth retrying;
+        // anything else gets three tries. After that the song is looked for somewhere else.
+        val unplayable = !phone && Sources.unplayable(error)
+        if (!unplayable && recoveries < 3) {
             recoveries++
             main.postDelayed({
                 if (p.currentMediaItem?.mediaId == item.mediaId && p.playbackState == Player.STATE_IDLE) p.prepare()
             }, 700L * recoveries)
             return
         }
+        if (!phone && elsewhere.add(item.mediaId)) {
+            fromElsewhere(p, item, error)
+            return
+        }
+        giveUp(p, item, error)
+    }
+
+    /** Songs already looked for on another service, so each is looked for once. */
+    private val elsewhere = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
+
+    /**
+     * The song's YouTube upload won't play and no other upload of it did either: find the same song
+     * on SoundCloud and play that in its place, from the same spot. The queue entry keeps its name,
+     * cover and address (likes, history and lyrics all still work); only where its audio comes from changes.
+     */
+    private fun fromElsewhere(p: ExoPlayer, item: MediaItem, error: PlaybackException) {
+        val hint = Sources.hintFor(item.mediaId)
+        val title = hint?.title ?: item.mediaMetadata.title?.toString().orEmpty()
+        val artist = hint?.artist ?: item.mediaMetadata.artist?.toString().orEmpty()
+        val seconds = hint?.seconds ?: 0L
+        val at = p.currentPosition
+        worker.execute {
+            val found = runCatching { Sources.soundCloud(title, artist, seconds) }
+                .onFailure { android.util.Log.w("Glasswave", "SoundCloud lookup failed", it) }.getOrNull()
+            main.post {
+                val idx = (0 until p.mediaItemCount).firstOrNull { p.getMediaItemAt(it).mediaId == item.mediaId }
+                if (found == null || idx == null) {
+                    giveUp(p, item, error)
+                    return@post
+                }
+                val fixed = item.buildUpon().setUri(found.url)
+                    .setMimeType(if (found.hls) androidx.media3.common.MimeTypes.APPLICATION_M3U8 else null).build()
+                p.replaceMediaItem(idx, fixed)
+                if (p.currentMediaItemIndex == idx && at > 0) p.seekTo(idx, at)
+                p.prepare()
+                Menus.say("Playing \"$title\" from SoundCloud")
+            }
+        }
+    }
+
+    /** It really won't play: tell nonny dev (see [Problems]) and move on to the next song. */
+    private fun giveUp(p: ExoPlayer, item: MediaItem, error: PlaybackException) {
         Problems.songFailed(this, item, error, recoveries)
         val title = item.mediaMetadata.title?.toString() ?: "this song"
         if (p.hasNextMediaItem()) {

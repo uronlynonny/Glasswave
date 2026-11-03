@@ -16,7 +16,7 @@ import java.io.RandomAccessFile
  * kept in the [SongCache] (for [track]), so it plays again instantly and with no internet.
  */
 internal class AheadStream(url: String, private val track: Track? = null) : InputStream() {
-    private val net = HttpSeekStream(url)
+    private val net: SeekStream = seekStream(url)
     private val file: File = File.createTempFile("song-", ".part", dir()).apply { deleteOnExit() }
     private val raf = RandomAccessFile(file, "rw")
     private val lock = Object()
