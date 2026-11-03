@@ -24,7 +24,7 @@ targets:
         basedOnDependencyAnalysis: false
         script: |
           cd "$SRCROOT/../.."
-          ./gradlew -p ios embedAndSignAppleFrameworkForXcode --no-daemon
+          sh ./gradlew -p ios embedAndSignAppleFrameworkForXcode --no-daemon
     info:
       path: Glasswave/Info.plist
       properties:
