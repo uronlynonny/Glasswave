@@ -50,7 +50,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.ClipOp
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.addOutline
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -233,7 +240,8 @@ internal fun MiniCard(ps: PlayerState, window: java.awt.Window) {
             Modifier
                 .fillMaxSize()
                 .hoverable(hover)
-                .shadow(if (MiniGeom.dragging) 0.dp else (1f + 13f * depth).dp, shape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
+                // Drawn only outside the card: a normal shadow sits under it too and shows through once the card is see-through.
+                .outerShadow(if (MiniGeom.dragging) 0.dp else (1f + 13f * depth).dp, shape)
                 .clip(shape)
                 // Double-click: back to the full app.
                 .pointerInput(Unit) { detectTapGestures(onDoubleTap = { Mini.expand() }) }
@@ -488,4 +496,21 @@ private fun Edge(window: java.awt.Window, modifier: Modifier, dx: Int, dy: Int, 
                 )
             },
     )
+}
+
+/** A soft shadow around [shape] that leaves the inside of the shape untouched. */
+private fun Modifier.outerShadow(elevation: Dp, shape: Shape): Modifier = drawBehind {
+    if (elevation.value <= 0f) return@drawBehind
+    val path = Path().apply { addOutline(shape.createOutline(size, layoutDirection, this@drawBehind)) }
+    val blur = elevation.toPx()
+    clipPath(path, ClipOp.Difference) {
+        drawIntoCanvas { canvas ->
+            val paint = Paint().apply { color = Color.Black.copy(alpha = 0.42f) }
+            paint.asFrameworkPaint().maskFilter = org.jetbrains.skia.MaskFilter.makeBlur(org.jetbrains.skia.FilterBlurMode.NORMAL, blur / 2f)
+            canvas.save()
+            canvas.translate(0f, blur * 0.3f)
+            canvas.drawPath(path, paint)
+            canvas.restore()
+        }
+    }
 }
