@@ -1,7 +1,7 @@
 {
-  "lastTime": 1793771669,
+  "lastTime": 1793775963,
   "totals": {
-    "visits": 123,
+    "visits": 124,
     "siteDownloads": 38,
     "apk": 279
   },
@@ -1680,9 +1680,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1793780482,
+      "v": 1,
+      "d": 0,
+      "a": 0
     }
   ],
-  "updated": 1793775864,
+  "updated": 1793780482,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -1785,7 +1791,7 @@
       "m": "\"I Know\" by Polo G wouldn't play (tried 4 times).\nUnknownHostException: www.youtube.com\n\nWindows 10 (10.0), Glasswave for Windows 1.2.30\nhttps://music.youtube.com/watch?v=qnLnogeFHwE"
     }
   ],
-  "lastActiveTime": 1793774561,
+  "lastActiveTime": 1793777398,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -2018,13 +2024,15 @@
     "2026-11-04": {
       "a": [
         "2eb7971e-50c2-4017-ae0c-3fa211ed2872",
-        "48a58487-d748-4501-af35-0a77bd3df207"
+        "36d58cc1-c393-490b-9440-241580552d0a",
+        "48a58487-d748-4501-af35-0a77bd3df207",
+        "b40577e8-17f8-4460-839e-0cef28e7acc4"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 2,
+      "a": 4,
       "w": 0
     },
     "week": {
@@ -2093,7 +2101,7 @@
       },
       {
         "d": "2026-11-04",
-        "a": 2,
+        "a": 4,
         "w": 0
       }
     ]
