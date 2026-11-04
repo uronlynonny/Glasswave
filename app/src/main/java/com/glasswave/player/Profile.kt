@@ -1,6 +1,7 @@
 // Glasswave · created by nonny dev. Original work; see AUTHORS.md.
 package com.glasswave.player
 
+import androidx.compose.material.icons.rounded.EmojiEvents
 import android.content.Context
 import android.content.SharedPreferences
 import android.widget.Toast
@@ -250,6 +251,7 @@ private fun BoxScope.ProfileBody(c: ScreenCtx, page: Backdrop, onClose: () -> Un
             go { vm.open(Route.Saved(PlaylistInfo(Library.LIKED_ID, "Liked songs", Source.LOCAL, null, 0))) }
         }
         ProfileRow(Icons.Rounded.BarChart, "Listening stats") { go { vm.open(Route.Stats) } }
+        ProfileRow(androidx.compose.material.icons.Icons.Rounded.EmojiEvents, "Your badges", Badges.months.firstOrNull()?.let { "${it.count} in ${Badges.label(it.key).substringBefore(' ')}" }, accent = Badges.unseen != null) { go { vm.open(Route.Badges()) } }
         val syncNote = if (vm.syncing) "Syncing…" else Accounts.lastSync.takeIf { it > 0 }?.let { "Last synced ${ago(it)}" }
         ProfileRow(Icons.Rounded.Sync, "Sync playlists now", syncNote) { if (!vm.syncing) vm.syncAll() }
         ProfileRow(Icons.Rounded.Settings, "Accounts & settings") { go { vm.openSettings("ACCOUNTS") } }

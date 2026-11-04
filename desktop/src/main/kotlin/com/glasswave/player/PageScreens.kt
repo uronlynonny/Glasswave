@@ -84,6 +84,7 @@ fun OnlinePage(c: ScreenCtx, item: MusicItem) {
                     else -> null
                 },
                 extra = { CollectionActions(c, item, page?.title ?: item.title, page?.thumb ?: hiRes(item.thumb), tracks) },
+                titleBadge = { if (item is ArtistItem) ArtistBadgeIcon(c, page?.title ?: item.title) },
             )
         }
         if (item !is ArtistItem && tracks.size >= 8) item(key = "find") { FindInList(c, query) { query = it } }
@@ -656,6 +657,8 @@ private fun PageHeader(
     listId: String? = null,
     icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Rounded.MusicNote,
     extra: @Composable () -> Unit = {},
+    /** Next to the name (an artist's badge). */
+    titleBadge: @Composable () -> Unit = {},
 ) {
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 24.dp),
@@ -682,7 +685,10 @@ private fun PageHeader(
             )
         }
         Spacer(Modifier.height(18.dp))
-        GText(title, 26, weight = FontWeight.Bold, maxLines = 2)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            GText(title, 26, weight = FontWeight.Bold, maxLines = 2, modifier = Modifier.weight(1f, fill = false))
+            titleBadge()
+        }
         if (subtitle.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
             GText(subtitle, 15, Dim, maxLines = 2)

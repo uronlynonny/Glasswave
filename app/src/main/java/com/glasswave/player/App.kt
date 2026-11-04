@@ -187,6 +187,7 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
                         Route.Offline -> DownloadsPage(ctx)
                         Route.Phone -> PhoneMusicPage(ctx)
                         Route.Stats -> StatsPage(ctx)
+                        is Route.Badges -> BadgesPage(ctx, key.artist)
                         Tab.HOME -> HomeScreen(ctx)
                         Tab.EXPLORE -> ExploreScreen(ctx)
                         Tab.SEARCH -> SearchScreen(ctx)

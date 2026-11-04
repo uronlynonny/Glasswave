@@ -205,6 +205,7 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
                         Route.Offline -> DownloadsPage(ctx)
                         Route.Pc -> PcMusicPage(ctx)
                         Route.Stats -> StatsPage(ctx)
+                        is Route.Badges -> BadgesPage(ctx, key.artist)
                         Tab.HOME -> HomeScreen(ctx)
                         Tab.SEARCH -> SearchScreen(ctx)
                         Tab.LIBRARY -> LibraryScreen(ctx)

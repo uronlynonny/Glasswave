@@ -129,6 +129,9 @@ object Stats {
     fun ownPlaysAfter(after: Long): List<Play> = readFile(file).filter { it.at > after }.sortedBy { it.at }
 
     /** This device's plays, plus (when signed in to YouTube Music) those from the account's other devices. */
+    /** Every play (this device and synced ones), in the order they were logged. */
+    fun allPlays(): List<Play> = readAll()
+
     private fun readAll(): List<Play> = readFile(file) + (Sync.syncedPlaysFile()?.let { readFile(it) } ?: emptyList())
 
     private fun readFile(file: File): List<Play> = runCatching {

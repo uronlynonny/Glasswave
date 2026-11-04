@@ -295,6 +295,8 @@ object MemScript {
                         }
                         // stats: opens your listening stats.
                         "stats" -> onUi { vm.open(Route.Stats) }
+                        "badges" -> onUi { vm.open(Route.Badges(arg.ifEmpty { null })) }
+                        "foryou" -> System.err.println("GW foryou: " + kotlinx.coroutines.runBlocking { ForYou.shelves() }.joinToString(" | ") { "${it.title} (${it.items.size}: ${it.items.take(3).joinToString { i -> i.title }})" } + " || mixes: " + ForYou.mixes.joinToString { "${it.title} ${it.tracks.size}" })
                         // quality LOW|NORMAL|HIGH: changes the quality setting. artistnamed Name: opens an artist like the stats page does.
                         "quality" -> onUi { Settings.updateQuality(Quality.valueOf(arg)) }
                         "artistnamed" -> onUi { Menus.artistNamed = arg }

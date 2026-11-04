@@ -65,6 +65,8 @@ sealed interface Route {
     data object Pc : Route
     /** Your listening stats: top songs and artists, history. */
     data object Stats : Route
+    /** Your badges (opened from an artist's badge: that artist first). */
+    data class Badges(val artist: String? = null) : Route
 }
 
 /** Loading state for anything fetched from the internet. */
@@ -146,6 +148,8 @@ class MainViewModel : ViewModel() {
     }
 
     fun loadHome(keep: Boolean = false) {
+        // Last month's badges, if a new month has started.
+        viewModelScope.launch { runCatching { com.glasswave.player.Badges.awardIfDue() } }
         if (!keep) home = Load.Loading
         homeAt = System.currentTimeMillis()
         homePlayed = History.played

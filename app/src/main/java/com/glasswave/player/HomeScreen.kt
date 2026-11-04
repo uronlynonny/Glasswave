@@ -1,6 +1,8 @@
 // Glasswave · created by nonny dev. Original work; see AUTHORS.md.
 package com.glasswave.player
 
+import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -181,6 +183,7 @@ fun HomeScreen(c: ScreenCtx) {
                     val heroIndex = sections.indexOfFirst { s -> s.items.size >= 3 && s.items.count { it !is SongItem } * 2 > s.items.size }
                     val recent = History.tracks.take(15)
                     // Flow first: the nonstop mix, right under the mood buttons.
+                    if (vm.homeChip == null && Badges.unseen != null) item(key = "badges") { BadgesRevealCard(c) }
                     if (vm.homeChip == null) item(key = "flow") {
                         FlowStrip(c, sections.flatMap { it.items }.filterIsInstance<SongItem>().map { it.track })
                     }
@@ -192,7 +195,7 @@ fun HomeScreen(c: ScreenCtx) {
                             }
                         }
                         // After the first shelf: Made for you (your mixes), when there are any.
-                        if (i == 0 && vm.homeChip == null && (Library.liked.size >= 3 || Downloads.tracks.size >= 3)) {
+                        if (i == 0 && vm.homeChip == null && (Library.liked.size >= 3 || Downloads.tracks.size >= 3 || ForYou.mixes.isNotEmpty())) {
                             item(key = "madeForYou") {
                                 val seeds = sections.flatMap { it.items }.filterIsInstance<SongItem>().map { it.track }
                                 MadeForYou(c, seeds)
@@ -323,6 +326,14 @@ private fun MadeForYou(c: ScreenCtx, seeds: List<Track>) {
     Column {
         SectionTitle("Made for you")
         LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            // Your mixes: around your top artists, and Discover (artists you haven't played).
+            ForYou.mixes.forEach { m ->
+                item(key = "mix-${m.title}") {
+                    MixTile(m.title, m.subtitle, if (m.discover) androidx.compose.material.icons.Icons.Rounded.Explore else androidx.compose.material.icons.Icons.Rounded.GraphicEq, Color(m.color)) {
+                        c.ps.playList(m.tracks, 0)
+                    }
+                }
+            }
             if (liked >= 3) item(key = "liked") {
                 MixTile("Liked mix", "$liked songs, shuffled", androidx.compose.material.icons.Icons.Rounded.Favorite, Lime) {
                     scope.launch { c.ps.playList(Library.tracks(Library.LIKED_ID), 0, shuffle = true, from = Library.LIKED_ID) }
