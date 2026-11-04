@@ -1,5 +1,5 @@
 {
-  "lastTime": 1793814592,
+  "lastTime": 1793818724,
   "totals": {
     "visits": 125,
     "siteDownloads": 38,
@@ -1734,9 +1734,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1793822060,
+      "v": 0,
+      "d": 0,
+      "a": 0
     }
   ],
-  "updated": 1793818342,
+  "updated": 1793822060,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -1837,9 +1843,25 @@
     {
       "t": 1793733976,
       "m": "\"I Know\" by Polo G wouldn't play (tried 4 times).\nUnknownHostException: www.youtube.com\n\nWindows 10 (10.0), Glasswave for Windows 1.2.30\nhttps://music.youtube.com/watch?v=qnLnogeFHwE"
+    },
+    {
+      "t": 1793818700,
+      "m": "\"Here With Me\" by d4vd wouldn't play (tried 4 times).\nUnknownHostException: youtubei.googleapis.com\n\nWindows 10 (10.0), Glasswave for Windows 1.2.44\nhttps://music.youtube.com/watch?v=mEveOIoiHg4"
+    },
+    {
+      "t": 1793818715,
+      "m": "\"You and I\" by d4vd wouldn't play (tried 4 times).\nUnknownHostException: No such host is known (youtubei.googleapis.com)\n\nWindows 10 (10.0), Glasswave for Windows 1.2.44\nhttps://music.youtube.com/watch?v=zD5YdM5eurU"
+    },
+    {
+      "t": 1793818720,
+      "m": "\"Where Did You Go? (Bonus Track)\" by d4vd wouldn't play (tried 4 times).\nUnknownHostException: youtubei.googleapis.com\n\nWindows 10 (10.0), Glasswave for Windows 1.2.44\nhttps://music.youtube.com/watch?v=D3UCMJclHpo"
+    },
+    {
+      "t": 1793818724,
+      "m": "\"life’s a dream\" by d4vd wouldn't play (tried 4 times).\nUnknownHostException: youtubei.googleapis.com\n\nWindows 10 (10.0), Glasswave for Windows 1.2.44\nhttps://music.youtube.com/watch?v=uAxHw0rLxkM"
     }
   ],
-  "lastActiveTime": 1793817391,
+  "lastActiveTime": 1793821731,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -2078,7 +2100,8 @@
         "48a58487-d748-4501-af35-0a77bd3df207",
         "97b14727-911d-4245-9d38-1ef73d84dcf8",
         "b2176faa-4b0c-441c-9c45-a3fbf51cb66f",
-        "b40577e8-17f8-4460-839e-0cef28e7acc4"
+        "b40577e8-17f8-4460-839e-0cef28e7acc4",
+        "dc31ecd0-296d-4ab2-bec3-c44146ffebd2"
       ],
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
@@ -2089,7 +2112,7 @@
   },
   "active": {
     "today": {
-      "a": 8,
+      "a": 9,
       "w": 3
     },
     "week": {
@@ -2158,7 +2181,7 @@
       },
       {
         "d": "2026-11-04",
-        "a": 8,
+        "a": 9,
         "w": 3
       }
     ]
