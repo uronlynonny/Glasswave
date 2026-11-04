@@ -1,11 +1,11 @@
 {
-  "lastTime": 1793811158,
+  "lastTime": 1793814592,
   "totals": {
     "visits": 125,
     "siteDownloads": 38,
-    "apk": 286
+    "apk": 287
   },
-  "apkTotal": 249,
+  "apkTotal": 250,
   "hours": [
     {
       "t": 1792763089,
@@ -1728,9 +1728,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1793818342,
+      "v": 0,
+      "d": 0,
+      "a": 1
     }
   ],
-  "updated": 1793814590,
+  "updated": 1793818342,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -1833,7 +1839,7 @@
       "m": "\"I Know\" by Polo G wouldn't play (tried 4 times).\nUnknownHostException: www.youtube.com\n\nWindows 10 (10.0), Glasswave for Windows 1.2.30\nhttps://music.youtube.com/watch?v=qnLnogeFHwE"
     }
   ],
-  "lastActiveTime": 1793807339,
+  "lastActiveTime": 1793817391,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -2068,6 +2074,7 @@
         "2b17d6d2-bd71-4aeb-83cc-7ff7a6a21b6f",
         "2eb7971e-50c2-4017-ae0c-3fa211ed2872",
         "36d58cc1-c393-490b-9440-241580552d0a",
+        "401b9ce7-f61d-408e-ad9e-09a614b8d2f9",
         "48a58487-d748-4501-af35-0a77bd3df207",
         "97b14727-911d-4245-9d38-1ef73d84dcf8",
         "b2176faa-4b0c-441c-9c45-a3fbf51cb66f",
@@ -2075,21 +2082,22 @@
       ],
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
-        "b2e637cf-a83b-42e0-9192-60283fd8f9bc"
+        "b2e637cf-a83b-42e0-9192-60283fd8f9bc",
+        "d8dfbeea-6046-4a55-beb1-39a0e683240f"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 7,
-      "w": 2
+      "a": 8,
+      "w": 3
     },
     "week": {
-      "a": 44,
+      "a": 45,
       "w": 12
     },
     "month": {
-      "a": 64,
+      "a": 65,
       "w": 12
     },
     "daily": [
@@ -2150,8 +2158,8 @@
       },
       {
         "d": "2026-11-04",
-        "a": 7,
-        "w": 2
+        "a": 8,
+        "w": 3
       }
     ]
   },
