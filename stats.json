@@ -1,11 +1,11 @@
 {
-  "lastTime": 1793901608,
+  "lastTime": 1793904596,
   "totals": {
     "visits": 126,
     "siteDownloads": 39,
-    "apk": 300
+    "apk": 303
   },
-  "apkTotal": 263,
+  "apkTotal": 266,
   "hours": [
     {
       "t": 1792763089,
@@ -1866,9 +1866,15 @@
       "v": 1,
       "d": 1,
       "a": 4
+    },
+    {
+      "t": 1793908200,
+      "v": 0,
+      "d": 0,
+      "a": 3
     }
   ],
-  "updated": 1793904594,
+  "updated": 1793908200,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -1987,7 +1993,7 @@
       "m": "\"life’s a dream\" by d4vd wouldn't play (tried 4 times).\nUnknownHostException: youtubei.googleapis.com\n\nWindows 10 (10.0), Glasswave for Windows 1.2.44\nhttps://music.youtube.com/watch?v=uAxHw0rLxkM"
     }
   ],
-  "lastActiveTime": 1793901655,
+  "lastActiveTime": 1793906948,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -2240,20 +2246,22 @@
         "0781cb68-6bbb-4118-bf96-987353fc022d",
         "12eb59e5-62aa-40ac-bc7d-f146ab2df32e",
         "36d58cc1-c393-490b-9440-241580552d0a",
+        "5429ab51-c54a-4d18-b15e-3230a6a724b2",
         "564eab64-238a-40d0-a0ee-869efc244f9c",
         "97b14727-911d-4245-9d38-1ef73d84dcf8",
         "b40577e8-17f8-4460-839e-0cef28e7acc4",
         "f26e3a11-ef03-4fea-a5bd-bda93da47da3"
       ],
       "w": [
-        "1acf6e0b-6faa-44ef-aab2-085f9b135094"
+        "1acf6e0b-6faa-44ef-aab2-085f9b135094",
+        "ff5e4c03-6f4b-4aaf-9481-52797777d6ff"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 7,
-      "w": 1
+      "a": 8,
+      "w": 2
     },
     "week": {
       "a": 38,
@@ -2326,8 +2334,8 @@
       },
       {
         "d": "2026-11-05",
-        "a": 7,
-        "w": 1
+        "a": 8,
+        "w": 2
       }
     ]
   },
