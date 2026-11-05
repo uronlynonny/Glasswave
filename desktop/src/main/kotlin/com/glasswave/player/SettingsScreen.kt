@@ -901,6 +901,13 @@ private fun Look(c: ScreenCtx) {
         SwitchRow("Progress bar", "Shows how far into the song you are. Click or drag it to jump.", Settings.miniProgress) { Settings.updateMiniProgress(it) }
     }
     Note("While it's on, the mini player shows up whenever you minimize Glasswave. Its expand button, or a double-click, brings Glasswave back. Also turns on from the mini player button in the player bar. Space plays and pauses while it's in front.")
+    if (Os.isWindows) {
+        Group("System tray") {
+            SwitchRow("Minimize to tray", "Minimizing tucks Glasswave into the tray by the clock instead of the taskbar. The music keeps playing.", Settings.trayMinimize) { Settings.updateTrayMinimize(it) }
+            SwitchRow("Close to tray", "The close button tucks Glasswave into the tray too, instead of quitting.", Settings.trayClose) { Settings.updateTrayClose(it) }
+        }
+        Note("Click the tray icon to bring Glasswave back. Right-click it to play, pause, skip, turn on the mini player or quit.")
+    }
     Group("Play button") {
         Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { PlayButtonArt(c.ps.playing, Settings.buttonStyle) }
         Choices(ButtonStyle.entries, Settings.buttonStyle, { it.label }, { it.detail }) { Settings.updateButtonStyle(it) }

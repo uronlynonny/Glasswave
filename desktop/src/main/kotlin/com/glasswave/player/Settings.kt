@@ -257,6 +257,9 @@ object Settings {
         miniOnTop = prefs.getBoolean("mini_on_top", true)
         miniProgress = prefs.getBoolean("mini_progress", true)
         miniEnabled = prefs.getBoolean("mini_enabled", false)
+        trayMinimize = prefs.getBoolean("tray_minimize", true)
+        trayClose = prefs.getBoolean("tray_close", false)
+        trayTold = prefs.getBoolean("tray_told", false)
         miniBounds = prefs.getString("mini_bounds", null)?.split(",")?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 4 }
     }
 
@@ -312,6 +315,15 @@ object Settings {
     /** The mini player button is on (see [Mini]). */
     var miniEnabled by mutableStateOf(false); private set
     fun updateMiniEnabled(on: Boolean) { miniEnabled = on; prefs.edit { putBoolean("mini_enabled", on) } }
+    /** Windows: minimizing tucks Glasswave into the system tray instead of the taskbar (see [Tray]). */
+    var trayMinimize by mutableStateOf(true); private set
+    fun updateTrayMinimize(on: Boolean) { trayMinimize = on; prefs.edit { putBoolean("tray_minimize", on) } }
+    /** Windows: the close button tucks Glasswave into the tray and the music keeps playing. */
+    var trayClose by mutableStateOf(false); private set
+    fun updateTrayClose(on: Boolean) { trayClose = on; prefs.edit { putBoolean("tray_close", on) } }
+    /** The "still here, in the tray" message has been shown once. */
+    var trayTold = false; private set
+    fun updateTrayTold() { trayTold = true; prefs.edit { putBoolean("tray_told", true) } }
     /** Where the mini player was and how big (x, y, width, height), or null for the default. */
     var miniBounds: List<Int>? = null; private set
     fun updateMiniStyle(s: MiniStyle) { miniStyle = s; prefs.edit { putString("mini_style", s.name) } }

@@ -198,6 +198,13 @@ object MemScript {
                             main.extendedState = if (parts[0] == "mainmin") java.awt.Frame.ICONIFIED else java.awt.Frame.NORMAL
                         }
                         "miniexpand" -> onUi { Mini.expand() }
+                        // trayinfo: the tray icon and whether the main window is tucked away. trayshow: a click on the tray icon.
+                        "trayinfo" -> onUi {
+                            val main = java.awt.Window.getWindows().first { (it as? java.awt.Frame)?.title == "Glasswave" && it.isDisplayable } as java.awt.Frame
+                            val all = java.awt.Window.getWindows().filter { it.isDisplayable }.joinToString { "${(it as? java.awt.Frame)?.title ?: it.javaClass.simpleName}:${if (it.isVisible) "shown" else "hidden"}" }
+                            System.err.println("GW trayinfo: icon=${Tray.iconShown} tucked=${Tray.tucked} mainVisible=${main.isVisible} minimized=${main.extendedState and java.awt.Frame.ICONIFIED != 0} tip=${Tray.icon?.toolTip} mini=${Mini.shown} windows=[$all]")
+                        }
+                        "trayshow" -> onUi { SingleInstance.showMain() }
                         // minimove x y: puts the mini player's card at that spot on screen.
                         "minimove" -> onUi {
                             val (x, y) = arg.split(" ").map { it.toInt() }

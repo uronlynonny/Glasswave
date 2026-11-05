@@ -362,8 +362,23 @@ fun main() {
                 if (System.getProperty("gw.memScript") == null) androidx.compose.ui.window.DefaultWindowExceptionHandlerFactory
                 else androidx.compose.ui.window.WindowExceptionHandlerFactory { androidx.compose.ui.window.WindowExceptionHandler { e -> System.err.println("GW CRASH"); e.printStackTrace(); kotlin.system.exitProcess(3) } },
         ) {
+        // Someone opened Glasswave again, or clicked the tray icon: bring the window back. Handled
+        // out here because a hidden window (tucked in the tray) doesn't run its own effects.
+        LaunchedEffect(SingleInstance.showRequests) {
+            if (SingleInstance.showRequests == 0) return@LaunchedEffect
+            shown = true
+            Tray.tucked = false
+            state.isMinimized = false
+        }
         Window(
-            onCloseRequest = { if (Os.isMac) shown = false else quitAll() },
+            onCloseRequest = {
+                when {
+                    Os.isMac -> shown = false
+                    // Windows, with "Close to tray" on: the music keeps playing from the tray.
+                    Settings.trayClose && Tray.iconShown -> { shown = false; Tray.tucked = true; Tray.tellOnce() }
+                    else -> quitAll()
+                }
+            },
             visible = shown,
             title = "Glasswave",
             icon = AppIconPainter,
@@ -410,8 +425,16 @@ fun main() {
             }
             // Mini player button on: minimizing this window brings up the mini player, and bringing it back tucks it away.
             LaunchedEffect(state.isMinimized, shown) { Mini.mainMinimized(state.isMinimized || !shown) }
+            // Windows, with "Minimize to tray" on: minimizing hides the window, leaving the tray icon.
             LaunchedEffect(state.isMinimized) {
-                if (!state.isMinimized) return@LaunchedEffect
+                if (state.isMinimized && Settings.trayMinimize && Tray.iconShown) {
+                    shown = false
+                    Tray.tucked = true
+                    Tray.tellOnce()
+                }
+            }
+            LaunchedEffect(state.isMinimized || !shown) {
+                if (!state.isMinimized && shown) return@LaunchedEffect
                 kotlinx.coroutines.delay(2_000)
                 while (true) {
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { WinMemory.giveBack() }
@@ -423,6 +446,7 @@ fun main() {
             LaunchedEffect(SingleInstance.showRequests) {
                 if (SingleInstance.showRequests == 0) return@LaunchedEffect
                 shown = true
+                Tray.tucked = false
                 state.isMinimized = false
                 window.toFront()
                 window.requestFocus()
@@ -453,5 +477,7 @@ fun main() {
         }
         // The mini player: its own small window over your other apps.
         MiniPlayerWindow(ps, AppIconPainter)
+        // Windows: the tray icon by the clock (see Settings, System tray).
+        GlasswaveTray(ps, onShow = { SingleInstance.showMain() }, onQuit = { quitAll() })
     }
 }
