@@ -259,6 +259,7 @@ tasks.register<JavaExec>("screenCheck") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("com.glasswave.player.DevScriptKt")
     (project.findProperty("gwscript") as String?)?.let { args(it) }
+    (project.findProperty("extraJvm") as String?)?.let { jvmArgs(it.split(" ")) }
     (project.findProperty("voiceWav") as String?)?.let { systemProperty("gw.voiceTestWav", it) }
     if (project.hasProperty("testDrop")) systemProperty("gw.testDrop", "1")
     // -Poffline: cuts the app off from the internet (everything goes to a proxy that isn't there).

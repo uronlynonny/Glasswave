@@ -366,7 +366,7 @@ fun main() {
             onCloseRequest = { if (Os.isMac) shown = false else quitAll() },
             visible = shown,
             title = "Glasswave",
-            icon = rememberVectorPainter(AppIcon),
+            icon = AppIconPainter,
             state = state,
             onPreviewKeyEvent = { e ->
                 // Caught before any button sees them, and left alone while you type in a text box:
@@ -452,6 +452,6 @@ fun main() {
         }
         }
         // The mini player: its own small window over your other apps.
-        MiniPlayerWindow(ps, rememberVectorPainter(AppIcon))
+        MiniPlayerWindow(ps, AppIconPainter)
     }
 }
