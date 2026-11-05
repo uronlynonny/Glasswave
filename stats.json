@@ -1,5 +1,5 @@
 {
-  "lastTime": 1793904596,
+  "lastTime": 1793909431,
   "totals": {
     "visits": 126,
     "siteDownloads": 39,
@@ -1872,9 +1872,15 @@
       "v": 0,
       "d": 0,
       "a": 3
+    },
+    {
+      "t": 1793911588,
+      "v": 0,
+      "d": 0,
+      "a": 0
     }
   ],
-  "updated": 1793908200,
+  "updated": 1793911588,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -1991,9 +1997,13 @@
     {
       "t": 1793818724,
       "m": "\"life’s a dream\" by d4vd wouldn't play (tried 4 times).\nUnknownHostException: youtubei.googleapis.com\n\nWindows 10 (10.0), Glasswave for Windows 1.2.44\nhttps://music.youtube.com/watch?v=uAxHw0rLxkM"
+    },
+    {
+      "t": 1793909420,
+      "m": "\"RUN\" by Night Lovell wouldn't play (tried 4 times).\nUnknownHostException: youtubei.googleapis.com\n\nWindows 11 (10.0), Glasswave for Windows 1.2.46\nhttps://music.youtube.com/watch?v=jheMKHbA9bA"
     }
   ],
-  "lastActiveTime": 1793906948,
+  "lastActiveTime": 1793908816,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -2254,6 +2264,7 @@
       ],
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
+        "d8dfbeea-6046-4a55-beb1-39a0e683240f",
         "ff5e4c03-6f4b-4aaf-9481-52797777d6ff"
       ]
     }
@@ -2261,7 +2272,7 @@
   "active": {
     "today": {
       "a": 8,
-      "w": 2
+      "w": 3
     },
     "week": {
       "a": 38,
@@ -2335,7 +2346,7 @@
       {
         "d": "2026-11-05",
         "a": 8,
-        "w": 2
+        "w": 3
       }
     ]
   },
