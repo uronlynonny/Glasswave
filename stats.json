@@ -1,11 +1,11 @@
 {
-  "lastTime": 1793969812,
+  "lastTime": 1793974163,
   "totals": {
     "visits": 128,
     "siteDownloads": 40,
-    "apk": 318
+    "apk": 320
   },
-  "apkTotal": 281,
+  "apkTotal": 283,
   "hours": [
     {
       "t": 1792763089,
@@ -1968,9 +1968,15 @@
       "v": 0,
       "d": 0,
       "a": 2
+    },
+    {
+      "t": 1793979964,
+      "v": 0,
+      "d": 0,
+      "a": 2
     }
   ],
-  "updated": 1793974162,
+  "updated": 1793979964,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -2093,7 +2099,7 @@
       "m": "\"RUN\" by Night Lovell wouldn't play (tried 4 times).\nUnknownHostException: youtubei.googleapis.com\n\nWindows 11 (10.0), Glasswave for Windows 1.2.46\nhttps://music.youtube.com/watch?v=jheMKHbA9bA"
     }
   ],
-  "lastActiveTime": 1793967804,
+  "lastActiveTime": 1793976238,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -2365,8 +2371,10 @@
     "2026-11-06": {
       "a": [
         "36d58cc1-c393-490b-9440-241580552d0a",
+        "456dbbc6-fc29-4669-bd6f-0cd7e4236bae",
         "48a58487-d748-4501-af35-0a77bd3df207",
         "5429ab51-c54a-4d18-b15e-3230a6a724b2",
+        "6e949a65-80a1-4177-b071-c7066ee5b105",
         "9d0d487f-f18f-469c-bce1-21413f35d432",
         "b40577e8-17f8-4460-839e-0cef28e7acc4"
       ],
@@ -2377,15 +2385,15 @@
   },
   "active": {
     "today": {
-      "a": 5,
+      "a": 7,
       "w": 1
     },
     "week": {
-      "a": 38,
+      "a": 39,
       "w": 10
     },
     "month": {
-      "a": 69,
+      "a": 70,
       "w": 12
     },
     "daily": [
@@ -2456,7 +2464,7 @@
       },
       {
         "d": "2026-11-06",
-        "a": 5,
+        "a": 7,
         "w": 1
       }
     ]
