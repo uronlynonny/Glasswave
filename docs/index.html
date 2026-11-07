@@ -39,7 +39,7 @@
       "url": "https://uronlynonny.github.io/Glasswave/",
       "downloadUrl": "https://github.com/uronlynonny/Glasswave/releases/latest/download/Glasswave.apk",
       "image": "https://uronlynonny.github.io/Glasswave/og.png?v=2",
-      "fileSize": "3.4 MB",
+      "fileSize": "4.1 MB",
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
       "author": { "@type": "Person", "name": "nonny dev", "url": "https://github.com/uronlynonny" }
     }
@@ -148,7 +148,7 @@ h2 .grad{font-style:italic;padding-right:.06em}
 .chip .dot{width:10px;height:10px;border-radius:50%;background:var(--lime);box-shadow:0 0 12px var(--lime)}
 .chip.d .dot{background:#ff4d4d;box-shadow:0 0 12px #ff4d4d}
 .chip.e{right:-8%;bottom:16%;animation-delay:-5s}
-.chip.a{left:-6%;top:16%}.chip.b{right:-8%;top:50%;animation-delay:-2s}.chip.c{left:0;bottom:12%;animation-delay:-4s}.chip.d{right:-10%;top:6%;animation-delay:-3s}
+.chip.a{left:-6%;top:16%}.chip.b{right:-8%;top:50%;animation-delay:-2s}.chip.c{left:0;bottom:4%;animation-delay:-4s}.chip.d{right:-10%;top:6%;animation-delay:-3s}
 @keyframes bob{50%{transform:translateY(-14px)}}
 @media (max-width:900px){.chip.a{left:0}.chip.b,.chip.d,.chip.e{right:0}}
 
@@ -324,8 +324,8 @@ footer .sig{font-family:Syne;font-weight:700;font-size:18px;color:var(--ink);mar
     <div class="chip glass a"><span class="dot"></span>Synced playlists</div>
     <div class="chip glass d"><span class="dot"></span>Synced from YT Music</div>
     <div class="chip glass b">✦ Synced lyrics</div>
-    <div class="chip glass c">⚡ 3 MB, no ads</div>
-    <div class="chip glass e"><span class="dot"></span>~250 MB RAM usage on PC</div>
+    <div class="chip glass c"><span>⚡ <span data-size="phone">4.1 MB</span> on phone, no ads</span></div>
+    <div class="chip glass e"><span class="dot"></span><span>PC: <span data-size="pc">130 MB</span>, ~250 MB RAM</span></div>
   </div>
 </section>
 
@@ -510,6 +510,25 @@ footer .sig{font-family:Syne;font-weight:700;font-size:18px;color:var(--ink);mar
   if (!seenToday) deviceP.then(device => ping('New visitor', `Someone on ${device} opened the Glasswave site${from}.`, 'eyes'));
   document.querySelectorAll('a[href*="releases/latest/download"], a[data-os="mac"], a[data-os="ios"]').forEach(a =>
     a.addEventListener('click', () => deviceP.then(device => ping('New download', `Someone on ${device} downloaded Glasswave${a.dataset.os === 'windows' ? ' for Windows' : a.dataset.os === 'mac' ? ' for Mac' : a.dataset.os === 'ios' ? ' for iPhone' : ''}${from}.`, 'arrow_down'))));
+
+  // App sizes, straight from the newest releases, so they stay right as the apps grow or shrink.
+  // (The numbers in the page are a fallback; a fresh reading is kept for an hour.)
+  (async () => {
+    const mb = b => (b >= 100e6 ? Math.round(b / 1048576) : (b / 1048576).toFixed(1)) + ' MB';
+    const show = (which, bytes) => { if (bytes > 0) document.querySelectorAll(`[data-size="${which}"]`).forEach(e => e.textContent = mb(bytes)); };
+    let sizes = null;
+    try { const c = JSON.parse(localStorage.getItem('gw-sizes') || 'null'); if (c && Date.now() - c.at < 3600e3) sizes = c; } catch (e) {}
+    if (!sizes) {
+      const api = 'https://api.github.com/repos/uronlynonny/Glasswave/releases/';
+      const size = async (url, name) => {
+        try { const r = await fetch(api + url); if (!r.ok) return 0; return ((await r.json()).assets || []).find(a => a.name === name)?.size || 0; } catch (e) { return 0; }
+      };
+      const [phone, pc] = await Promise.all([size('latest', 'Glasswave.apk'), size('tags/windows', 'Glasswave-Windows.msi')]);
+      sizes = { phone, pc, at: Date.now() };
+      if (phone && pc) try { localStorage.setItem('gw-sizes', JSON.stringify(sizes)); } catch (e) {}
+    }
+    show('phone', sizes.phone); show('pc', sizes.pc);
+  })();
 
   // Visitors on a Mac see the Mac download first.
   if (/Mac OS X/.test(navigator.userAgent) && !/iPhone|iPad/.test(navigator.userAgent)) document.querySelectorAll('a[data-os="mac"]').forEach(m => {
