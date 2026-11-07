@@ -305,11 +305,38 @@ object Updater {
     }
 
     /**
+     * "Restart to update": Glasswave Setup (desktop/setup) waits for the app to close, installs the
+     * update in its own small window (the liquid glass opening and a progress bar), then reopens
+     * Glasswave. It runs from a copy in the updates folder, as its own file gets replaced. False if
+     * it isn't there (then the plain installer runs instead).
+     */
+    private fun runSetupWindow(msi: File, app: String?): Boolean = runCatching {
+        val shipped = System.getProperty("compose.application.resources.dir")
+            ?.let { File(it, "setup/GlasswaveSetup.exe") }?.takeIf { it.isFile } ?: return false
+        val setup = File(dir, "GlasswaveSetup.exe")
+        shipped.copyTo(setup, overwrite = true)
+        val me = ProcessHandle.current()
+        val pids = listOfNotNull(me.pid(), me.parent().orElse(null)?.takeIf { it.info().command().orElse("").endsWith("Glasswave.exe", true) }?.pid())
+        val cmd = mutableListOf(setup.absolutePath, "--msi", msi.absolutePath, "--update", "--wait", pids.joinToString(","))
+        if (app != null) { cmd += "--launch"; cmd += app }
+        ProcessBuilder(cmd)
+            .redirectInput(ProcessBuilder.Redirect.from(File("NUL")))
+            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+            .redirectError(ProcessBuilder.Redirect.DISCARD)
+            .start()
+        ready = null
+        true
+    }.getOrDefault(false)
+
+    /**
      * Starts the installer from a tiny script that outlives the app: it waits for Glasswave to
      * close, installs quietly (a small progress window after "Restart to update", nothing at all
      * when you just close the app), then reopens it only after "Restart to update".
      */
-    private fun runInstaller(msi: File, reopen: Boolean): Boolean = try {
+    private fun runInstaller(msi: File, reopen: Boolean): Boolean =
+        (reopen && runSetupWindow(msi, System.getProperty("jpackage.app-path"))) || runScript(msi, reopen)
+
+    private fun runScript(msi: File, reopen: Boolean): Boolean = try {
         val app = System.getProperty("jpackage.app-path")
         val script = File(dir, "install-update.cmd")
         // This copy of Glasswave and its launcher: the installer waits until both have closed.

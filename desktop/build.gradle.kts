@@ -235,8 +235,40 @@ val macSignInHelper by tasks.registering {
         icon.copyTo(File(o, "glasswave.icns"))
     }
 }
+// Glasswave Setup (setup/Setup.cs): the small window that installs and updates Glasswave for
+// Windows, with the liquid glass opening and one progress bar instead of Windows Installer's
+// wizard. Shipped in the app for updates; the same file is the website's download (it fetches
+// the newest installer itself). Built with the C# compiler that comes with Windows.
+val setupHelper by tasks.registering {
+    val src = file("setup")
+    val icon = file("icons/glasswave.ico")
+    val out = layout.buildDirectory.dir("appres/windows/setup")
+    inputs.dir(src)
+    inputs.file(icon)
+    outputs.dir(out)
+    doLast {
+        val o = out.get().asFile.apply { deleteRecursively(); mkdirs() }
+        val csc = File(System.getenv("WINDIR") ?: "C:\\Windows", "Microsoft.NET/Framework64/v4.0.30319/csc.exe")
+        val cmd = listOf(
+            csc.absolutePath, "-nologo", "-target:winexe", "-platform:x64", "-optimize",
+            "-out:" + File(o, "GlasswaveSetup.exe").absolutePath,
+            "-win32manifest:" + File(src, "Setup.manifest").absolutePath,
+            "-win32icon:" + icon.absolutePath,
+            "-r:System.Windows.Forms.dll", "-r:System.Drawing.dll",
+            "-resource:" + File(src, "intro-strip.png").absolutePath + ",intro-strip.png",
+            "-resource:" + File(src, "intro.txt").absolutePath + ",intro.txt",
+            File(src, "Setup.cs").absolutePath,
+        )
+        val p = ProcessBuilder(cmd).redirectErrorStream(true).start()
+        val log = p.inputStream.bufferedReader().readText()
+        check(p.waitFor() == 0) { "Couldn't build Glasswave Setup: $log" }
+    }
+}
 val signInFor = if (isMac) macSignInHelper else signInHelper
-tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(signInFor) }
+tasks.matching { it.name == "prepareAppResources" }.configureEach {
+    dependsOn(signInFor)
+    if (!isMac) dependsOn(setupHelper)
+}
 
 // Checks (screenCheck, deckCheck, voiceCheck…) never touch your real Glasswave: unless a check
 // picks its own folder, it keeps its library, history, listening stats and cache in build/check-data.
