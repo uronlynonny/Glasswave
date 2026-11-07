@@ -35,6 +35,7 @@ static class Setup
         var form = new SetupForm(args);
         // Checks only: --shot <folder> saves pictures of the window at a few moments, shows nothing.
         if (args.Length >= 2 && args[0] == "--shot") { form.Shots(args[1]); return 0; }
+        if (args.Length >= 2 && args[0] == "--film") { form.Film(args[1]); return 0; }
         Application.Run(form);
         return form.ExitCode;
     }
@@ -119,6 +120,28 @@ class SetupForm : Form
 
     long? fakeTime; // checks only
 
+    // Checks only: a frame every 40 ms of a pretend install, for a preview clip.
+    public void Film(string dir)
+    {
+        Directory.CreateDirectory(dir);
+        int k = 0;
+        for (long t = 0; t <= 7000; t += 40, k++)
+        {
+            fakeTime = t;
+            if (t < 1500) { status = "Getting ready…"; busy = true; progress = 0; }
+            else if (t < 4200) { float d = (t - 1500) / 2700f; status = "Downloading… " + (130 * d).ToString("0.0") + " MB of 130 MB"; busy = false; progress = 0.6f * d; }
+            else if (t < 6400) { status = "Installing…"; busy = false; progress = 0.6f + 0.4f * (t - 4200) / 2200f; canClose = false; }
+            else { title = "Glasswave is ready"; status = "Opening Glasswave…"; progress = 1f; }
+            using (var bmp = new Bitmap(ClientSize.Width, ClientSize.Height))
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.Clear(Color.Black);
+                OnPaint(new PaintEventArgs(g, ClientRectangle));
+                bmp.Save(Path.Combine(dir, "f" + k.ToString("0000") + ".png"));
+            }
+        }
+    }
+
     public void Shots(string dir)
     {
         Directory.CreateDirectory(dir);
@@ -135,6 +158,7 @@ class SetupForm : Form
         };
         shot("1-opening", 300, "Getting ready…", 0, true, false, true);
         shot("2-opening", 700, "Getting ready…", 0, true, false, true);
+        shot("2b-handover", 2250, "Downloading… 3.1 MB of 130 MB", 0.6f * 3.1f / 130f, false, false, true);
         shot("3-download", 2600, "Downloading… 41.2 MB of 130 MB", 0.6f * 41.2f / 130f, false, false, true);
         shot("4-install", 9000, "Installing…", 0.82f, false, false, false);
         title = "Glasswave is ready";
@@ -430,14 +454,29 @@ class SetupForm : Form
         g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
         int w = ClientSize.Width;
 
-        // The opening, once through, then it rests on the wave.
+        // The opening, once through; then the wave keeps flowing, like music, until it's done.
         if (frames.Length > 0)
         {
             long t = fakeTime ?? clock.ElapsedMilliseconds;
-            int i = 0;
-            while (i + 1 < frames.Length && due[i + 1] <= t) i++;
             int side = S(190);
-            g.DrawImage(frames[i], new Rectangle((w - side) / 2, S(24), side, side));
+            var box = new Rectangle((w - side) / 2, S(24), side, side);
+            long flowFrom = due[due.Length - 1] + 300;
+            if (t < flowFrom)
+            {
+                int i = 0;
+                while (i + 1 < frames.Length && due[i + 1] <= t) i++;
+                g.DrawImage(frames[i], box);
+            }
+            else
+            {
+                float k = Math.Min(1f, (t - flowFrom) / 400f); // fades over from the recording
+                if (k < 1f)
+                {
+                    g.DrawImage(frames[frames.Length - 1], box);
+                    using (var cover = new SolidBrush(Color.FromArgb((int)(255 * k), 0, 0, 0))) g.FillRectangle(cover, box);
+                }
+                DrawWave(g, box, (t - flowFrom) / 1000f, k);
+            }
         }
 
         // (Point sizes: Windows scales them for the screen already.)
@@ -494,6 +533,40 @@ class SetupForm : Form
                 g.DrawLine(pen, closeBox.Left + m, closeBox.Top + m, closeBox.Right - m, closeBox.Bottom - m);
                 g.DrawLine(pen, closeBox.Right - m, closeBox.Top + m, closeBox.Left + m, closeBox.Bottom - m);
             }
+        }
+    }
+
+    // Glasswave's wave, drawn live: the logo's shape (about one and a quarter swings), flowing to
+    // the left with a soft glow. At the start it lines up with the recording's last frame.
+    static void DrawWave(Graphics g, Rectangle box, float seconds, float alpha)
+    {
+        float side = box.Width;
+        float cx = box.X + side * 0.5f, cy = box.Y + side * 0.5f;
+        float halfW = side * 0.26f, amp = side * 0.127f, stroke = side * 0.088f;
+        // Starts still (matching the recording) and gets going over the first second.
+        float te = seconds < 1f ? seconds * seconds * 0.5f : seconds - 0.5f;
+        float phase = te * (float)(Math.PI * 2) * 0.55f;
+        amp *= 1f + 0.06f * (float)Math.Sin(te * 2.1);
+        var pts = new PointF[64];
+        for (int i = 0; i < pts.Length; i++)
+        {
+            float u = i / (float)(pts.Length - 1);
+            double th = Math.PI * (-0.07 + 2.09 * u) + phase;
+            pts[i] = new PointF(cx - halfW + 2 * halfW * u, cy - amp * (float)Math.Sin(th));
+        }
+        // A soft glow: a few wide, faint strokes under the wave.
+        float[] widths = { 3.2f, 2.5f, 1.9f, 1.45f };
+        int[] alphas = { 6, 9, 13, 18 };
+        for (int k = 0; k < widths.Length; k++)
+            using (var glow = new Pen(Color.FromArgb((int)(alphas[k] * alpha), Lime), stroke * widths[k]))
+            {
+                glow.StartCap = glow.EndCap = LineCap.Round; glow.LineJoin = LineJoin.Round;
+                g.DrawCurve(glow, pts, 0.5f);
+            }
+        using (var pen = new Pen(Color.FromArgb((int)(255 * alpha), Lime), stroke))
+        {
+            pen.StartCap = pen.EndCap = LineCap.Round; pen.LineJoin = LineJoin.Round;
+            g.DrawCurve(pen, pts, 0.5f);
         }
     }
 
