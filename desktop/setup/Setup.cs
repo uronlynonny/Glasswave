@@ -343,7 +343,11 @@ class SetupForm : Form
 
     static InstallUIHandler handler; // kept alive while Windows Installer calls it
     long total, done;
-    bool forward = true, mainPhase;
+    bool forward = true;
+    // Windows Installer works in two stretches: preparing (short, the bar's first quarter here)
+    // and copying files (the rest). The bar never moves back.
+    float segFrom, segTo, shown;
+    bool started;
     float start, span;
 
     int Install(string file)
@@ -351,6 +355,7 @@ class SetupForm : Form
         // Downloaded: the bar is 60% full, installing fills the rest. An update: installing is all of it.
         start = msi == null ? 0.6f : 0f;
         span = 1f - start;
+        shown = 0f; started = false;
         Say("Installing…", start, true);
         handler = OnInstallerMessage;
         MsiSetInternalUI(2, IntPtr.Zero); // no Windows Installer window
@@ -372,8 +377,14 @@ class SetupForm : Form
         switch (f[1])
         {
             case 0: // a new stretch of work starts
+                Log("installer stage: total=" + f[2] + " direction=" + f[3] + " script=" + f[4]);
                 total = f[2]; forward = f[3] == 0; done = forward ? 0 : total;
-                mainPhase = f[4] == 1 || mainPhase;
+                if (total > 0)
+                {
+                    if (f[4] == 1) { segFrom = 0f; segTo = 0.25f; }
+                    else { segFrom = Math.Max(shown, started ? 0.25f : 0f); segTo = 1f; }
+                    started = true;
+                }
                 break;
             case 2: // work done
                 if (total > 0) done = forward ? done + f[2] : done - f[2];
@@ -382,10 +393,11 @@ class SetupForm : Form
                 total += f[2];
                 break;
         }
-        if (mainPhase && total > 0)
+        if (started && total > 0)
         {
             float frac = Math.Max(0f, Math.Min(1f, (float)done / total));
-            Say("Installing…", start + span * (0.1f + 0.9f * frac), false);
+            shown = Math.Max(shown, segFrom + (segTo - segFrom) * frac);
+            Say("Installing…", start + span * shown, false);
         }
         return 1;
     }
