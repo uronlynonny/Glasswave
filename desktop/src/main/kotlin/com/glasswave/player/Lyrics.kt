@@ -84,10 +84,15 @@ object LyricsRepo {
     private suspend fun load(url: String, title: String, artist: String, seconds: Long): Lyrics? = withContext(Dispatchers.IO) {
         cache[url]?.let { return@withContext it }
         // A downloaded song keeps its lyrics on this PC, so they show offline too.
-        saved(url)?.let { cache[url] = it; return@withContext it }
+        val old = saved(url)
+        if (old != null && savedVersion(url) >= SAVE_VERSION) { cache[url] = old; return@withContext old }
         if (url in none) return@withContext null
         val t = cleanTitle(title)
         val a = mainArtist(artist)
+        // Songs added from YouTube Music playlists often come without a length. Without one, every
+        // version of a song looks the same (album, live, sped up, other cuts), so look it up first.
+        @Suppress("NAME_SHADOWING")
+        val seconds = if (seconds > 0) seconds else runCatching { YtRepo.lengthOf(url) }.getOrDefault(0L)
         // Only lyrics that scroll with the song: LRCLIB, KuGou and NetEase all time their lines, and
         // are asked at the same time, not one after the other.
         val failedBefore = failedCalls.get()
@@ -104,7 +109,7 @@ object LyricsRepo {
             fromYoutube.cancel()
             if (lrclibSynced.wordTimed) lrclibSynced.also { fromKugou.cancel() }
             else fromKugou.await()
-                ?.takeIf { k -> k.wordTimed && fits(k) && sameSong(lrclibSynced, k) }
+                ?.takeIf { k -> k.wordTimed && fits(k) && sameSong(lrclibSynced, k) && sameWords(lrclibSynced, k) >= 0.9 }
                 ?: lrclibSynced
         } else {
             // KuGou when it times every word; otherwise YouTube Music's (made for this exact song),
@@ -125,6 +130,10 @@ object LyricsRepo {
         if (clean != null && clean.lines.isNotEmpty()) {
             cache[url] = clean
             if (Downloads.isDownloaded(url)) save(url, clean)
+        } else if (old != null) {
+            // Couldn't look them up again (offline?): the saved ones still beat none.
+            cache[url] = old
+            return@withContext old
         } else if (failedCalls.get() == failedBefore) none += url
         clean
     }
@@ -173,7 +182,7 @@ object LyricsRepo {
                 }
                 arr.put(line)
             }
-            val json = JSONObject().put("s", ly.synced).put("src", ly.source).put("d", ly.durationSec).put("l", arr)
+            val json = JSONObject().put("s", ly.synced).put("src", ly.source).put("d", ly.durationSec).put("v", SAVE_VERSION).put("l", arr)
             val f = fileFor(url)
             val tmp = java.io.File(f.path + ".tmp")
             tmp.writeText(json.toString())
@@ -181,10 +190,16 @@ object LyricsRepo {
         }
     }
 
+    /** Saves from before the name and version checks (Nov 2026) have no "v": those get looked up again. */
+    private const val SAVE_VERSION = 2
+
+    private fun savedVersion(url: String): Int =
+        runCatching { fileFor(url).takeIf { it.exists() }?.let { JSONObject(it.readText()).optInt("v", 1) } }.getOrNull() ?: 0
+
     /** After a song downloads: find its lyrics now and keep them with it. */
     fun keepFor(t: Track) {
         keeper.launch {
-            if (saved(t.url) != null) return@launch
+            if (saved(t.url) != null && savedVersion(t.url) >= SAVE_VERSION) return@launch
             none -= t.url
             get(t.url, t.title, t.artist, t.seconds)?.let { save(t.url, it) }
         }
@@ -200,7 +215,7 @@ object LyricsRepo {
         keeper.launch {
             kotlinx.coroutines.delay(8_000)
             for (t in Downloads.tracks.toList()) {
-                if (saved(t.url) != null) continue
+                if (saved(t.url) != null && savedVersion(t.url) >= SAVE_VERSION) continue
                 runCatching { get(t.url, t.title, t.artist, t.seconds)?.let { save(t.url, it) } }
                 kotlinx.coroutines.delay(500)
             }
@@ -267,9 +282,13 @@ object LyricsRepo {
             val arr = fetch("https://lrclib.net/api/search?$q")?.let { runCatching { JSONArray(it) }.getOrNull() } ?: continue
             hits += (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }
             // Only stop early once there's a believable synced match of the right length.
-            if (hits.count { hasSynced(it) && gap(it) <= 3 && believable(it, seconds) } >= 3) break
+            if (hits.count { hasSynced(it) && gap(it) <= 3 && believable(it, seconds) && thisSong(it.optString("trackName"), it.optString("artistName"), title, artist) } >= 3) break
         }
-        pickSynced(hits.filter { hasSynced(it) && gap(it) <= 12 && believable(it, seconds) }.distinctBy { it.optLong("id") }, ::gap)
+        pickSynced(
+            hits.filter { hasSynced(it) && gap(it) <= 12 && believable(it, seconds) && thisSong(it.optString("trackName"), it.optString("artistName"), title, artist) }
+                .distinctBy { it.optLong("id") },
+            ::gap,
+        )
             ?.let { fromLrclib(it) }?.let { return it }
         // Lyrics without timing aren't used: they can't scroll with the song.
         return null
@@ -375,6 +394,7 @@ object LyricsRepo {
         val info = search.optJSONObject("data")?.optJSONArray("info") ?: return null
         val songs = (0 until info.length()).mapNotNull { info.optJSONObject(it) }
             .filter { seconds <= 0 || abs(it.optLong("duration") - seconds) <= 8 }
+            .filter { thisSong(it.optString("songname"), it.optString("singername"), title, artist) }
             .sortedBy { if (seconds <= 0) 0L else abs(it.optLong("duration") - seconds) }
         for (s in songs.take(3)) {
             val hash = s.optString("hash")
@@ -388,7 +408,9 @@ object LyricsRepo {
             // KuGou starts with credit lines ("作词 : ..."); leave those out.
             val titleKey = title.substringBefore(" (").substringBefore(" [").trim().lowercase()
             fun credits(lines: List<LyricLine>) = lines.filterNot { l ->
+                // The opening "Artist - Title" line (the title may be written differently, so the artist counts too).
                 (l.ms < 5_000 && l.text.contains(" - ") && titleKey.isNotEmpty() && l.text.lowercase().contains(titleKey)) ||
+                (l.ms < 5_000 && l.text.contains(" - ") && artist.length > 2 && l.text.lowercase().contains(artist.lowercase())) ||
                 l.text.contains("：") || l.text.contains(" : ") || Regex("作词|作曲|编曲|制作|Lyricist|Composer|Producer", RegexOption.IGNORE_CASE).containsMatchIn(l.text)
             }
             // The word-by-word version (KRC) first; the plain timed version if that doesn't work out.
@@ -434,6 +456,70 @@ object LyricsRepo {
         }.sorted()
         if (gaps.size < maxOf(4.0, a.size * 0.5)) return false
         return gaps[gaps.size / 2] <= 1500
+    }
+
+    /**
+     * How much of KuGou's [other] says the same words, in the same order, as LRCLIB's [lrc] (0 to 1).
+     * KuGou's English lyrics are often written down by ear ("Stay" for "Sad", whole lines changed), and
+     * its lines can still line up in time, so [sameSong] alone let them through (Michael Jackson's
+     * "Chicago" had 45 of 82 lines different). Backing vocals in brackets don't count: one site often
+     * leaves them out. Chinese and Japanese count each character as a word.
+     */
+    private fun sameWords(lrc: Lyrics, other: Lyrics): Double {
+        fun tokens(l: Lyrics): List<String> {
+            val out = ArrayList<String>()
+            for (line in l.lines) for (w in uncensor(line.text).replace(bracketed, " ").lowercase().split(nonWord)) {
+                val t = w.replace("'", "").replace("’", "")
+                if (t.isEmpty()) continue
+                if (t.any { Character.UnicodeScript.of(it.code) in cjk }) t.forEach { out += it.toString() } else out += t
+            }
+            return out
+        }
+        val a = tokens(lrc)
+        val b = tokens(other)
+        if (a.isEmpty() || b.isEmpty()) return 0.0
+        // Longest run of words in common, in order (two rows of a table, so it stays small).
+        var prev = IntArray(b.size + 1)
+        var cur = IntArray(b.size + 1)
+        for (i in 1..a.size) {
+            for (j in 1..b.size) cur[j] = if (a[i - 1] == b[j - 1]) prev[j - 1] + 1 else maxOf(prev[j], cur[j - 1])
+            val t = prev; prev = cur; cur = t
+        }
+        return 2.0 * prev[b.size] / (a.size + b.size)
+    }
+
+    private val bracketed = Regex("\\([^)]*\\)")
+
+    /** Words that mark a different version of a song: its lyrics or timing differ from the original. */
+    private val versionWords = listOf("remix", "live", "acoustic", "instrumental", "karaoke", "cover", "sped", "slowed", "nightcore", "unplugged", "demo", "spanglish", "reverb", "8d")
+
+    private fun versionOf(name: String): Set<String> {
+        val n = name.lowercase()
+        return versionWords.filter { Regex("\\b" + it + "\\b").containsMatchIn(n) }.toSet()
+    }
+
+    /** A title boiled down for comparing: no "(feat. …)" or "[Official Video]", no punctuation, lower case. */
+    private fun titleKey(s: String) = cleanTitle(s).replace(bracketed, " ").replace(Regex("\\[[^\\]]*\\]"), " ")
+        .lowercase().replace(nonWord, " ").trim().replace(Regex("\\s+"), " ")
+
+    /**
+     * Is a lyric site's [name] by [by] this song ([title] by [artist])? Same name (uploads called
+     * "Artist - Title" count), same artist when the site names one we can compare, and the same version:
+     * a remix, live, slowed or sped-up upload has different words or timing.
+     */
+    private fun thisSong(name: String, by: String, title: String, artist: String): Boolean {
+        if (versionOf(name) != versionOf(title)) return false
+        val want = titleKey(title)
+        val lead = titleKey(artist)
+        var got = titleKey(name)
+        if (lead.isNotEmpty() && got.startsWith("$lead ")) got = got.removePrefix("$lead ").trim()
+        if (want.isEmpty() || got.isEmpty()) return true
+        val nameOk = got == want || got.contains(want) || (want.contains(got) && got.length >= 4)
+        if (!nameOk) return false
+        val who = titleKey(by)
+        // Artists written in other scripts can't be compared letter by letter; leave those be.
+        val comparable = lead.isNotEmpty() && who.isNotEmpty() && who.all { it.code < 0x2E80 } && lead.all { it.code < 0x2E80 }
+        return !comparable || who.contains(lead) || lead.contains(who) || titleKey(name).contains(lead)
     }
 
     private val nonWord = Regex("[^\\p{L}\\p{N}'’]+")

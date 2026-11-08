@@ -35,6 +35,8 @@ object YtRepo {
     private var ready = false
 
     private val urlCache = ConcurrentHashMap<String, Pair<String, Long>>()
+    /** Songs' lengths in seconds, by video id: seen while finding their streams, or looked up for lyrics. */
+    private val lengths = ConcurrentHashMap<String, Long>()
     private const val URL_LIFETIME_MS = 3 * 60 * 60 * 1000L
 
     /** Spotify song -> YouTube Music song it was matched to. Saved so each song is only searched once. */
@@ -305,6 +307,21 @@ object YtRepo {
         throw IOException("YouTube lookup failed", e)
     }
 
+    private fun idOf(videoUrl: String) = android.net.Uri.parse(videoUrl).getQueryParameter("v")
+
+    /**
+     * A YouTube song's length in seconds, or 0 if it can't be found. Songs added from YouTube Music
+     * playlists often come without one, and lyrics need it to pick the right version. Blocking.
+     */
+    fun lengthOf(videoUrl: String): Long {
+        val id = idOf(videoUrl) ?: return 0L
+        lengths[id]?.let { return it }
+        init()
+        val s = runCatching { extractor(videoUrl).length }.getOrDefault(0L)
+        if (s > 0) lengths[id] = s
+        return s
+    }
+
     /** Blocking. Called by the player on its loading thread, never on the main thread. */
     @Throws(IOException::class)
     fun streamUrl(videoUrl: String, quality: Quality = Settings.quality): String {
@@ -320,7 +337,7 @@ object YtRepo {
 
     private fun lookUpAudio(videoUrl: String, quality: Quality, key: String): String {
         val streams = try {
-            extractor(videoUrl).audioStreams
+            extractor(videoUrl).also { ex -> runCatching { ex.length }.getOrNull()?.takeIf { it > 0 }?.let { s -> idOf(videoUrl)?.let { lengths[it] = s } } }.audioStreams
         } catch (e: Exception) {
             val err = e as? IOException ?: IOException("YouTube lookup failed", e)
             // This upload won't play (18+, taken down, private, not in your country): another upload of the song instead.

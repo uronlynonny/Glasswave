@@ -88,6 +88,14 @@ tasks.register<JavaExec>("mixCheck") {
 }
 
 // For checks only, silent: runs an audio file through speed, pitch and the sound effects.
+// Looks up lyrics for a list of songs the way the app does (see LyricsCheck.kt).
+// ./gradlew -p desktop lyricsCheck -Psongs=path/to/songs.json
+tasks.register<JavaExec>("lyricsCheck") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.LyricsCheckKt")
+    args(listOfNotNull(project.findProperty("songs") as String?))
+}
+
 // ./gradlew -p desktop fxCheck -Pfile=path/to/song.wav
 tasks.register<JavaExec>("fxCheck") {
     classpath = sourceSets.main.get().runtimeClasspath
