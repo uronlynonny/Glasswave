@@ -1,11 +1,11 @@
 {
-  "lastTime": 1794090879,
+  "lastTime": 1794094321,
   "totals": {
     "visits": 131,
     "siteDownloads": 41,
-    "apk": 335
+    "apk": 336
   },
-  "apkTotal": 298,
+  "apkTotal": 299,
   "hours": [
     {
       "t": 1792763089,
@@ -2166,9 +2166,15 @@
       "v": 0,
       "d": 0,
       "a": 0
+    },
+    {
+      "t": 1794099300,
+      "v": 0,
+      "d": 0,
+      "a": 1
     }
   ],
-  "updated": 1794094320,
+  "updated": 1794099300,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -2291,7 +2297,7 @@
       "m": "\"RUN\" by Night Lovell wouldn't play (tried 4 times).\nUnknownHostException: youtubei.googleapis.com\n\nWindows 11 (10.0), Glasswave for Windows 1.2.46\nhttps://music.youtube.com/watch?v=jheMKHbA9bA"
     }
   ],
-  "lastActiveTime": 1794090536,
+  "lastActiveTime": 1794098377,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -2588,7 +2594,8 @@
         "b8885864-55f1-4e0a-b5a8-ebc791bb313c",
         "bcacab1a-2194-4615-8661-c66dadf70705",
         "d902629e-5365-4f58-9131-49265e68c540",
-        "dc31ecd0-296d-4ab2-bec3-c44146ffebd2"
+        "dc31ecd0-296d-4ab2-bec3-c44146ffebd2",
+        "f7c66feb-e1f0-4ad2-a3a3-b5ee965c3749"
       ],
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
@@ -2596,19 +2603,28 @@
         "d8dfbeea-6046-4a55-beb1-39a0e683240f",
         "ff5e4c03-6f4b-4aaf-9481-52797777d6ff"
       ]
+    },
+    "2026-11-08": {
+      "w": [
+        "1acf6e0b-6faa-44ef-aab2-085f9b135094"
+      ],
+      "a": [
+        "2eb7971e-50c2-4017-ae0c-3fa211ed2872",
+        "f7c66feb-e1f0-4ad2-a3a3-b5ee965c3749"
+      ]
     }
   },
   "active": {
     "today": {
-      "a": 10,
-      "w": 4
+      "a": 2,
+      "w": 1
     },
     "week": {
-      "a": 41,
-      "w": 9
+      "a": 37,
+      "w": 8
     },
     "month": {
-      "a": 76,
+      "a": 77,
       "w": 13
     },
     "daily": [
@@ -2684,8 +2700,13 @@
       },
       {
         "d": "2026-11-07",
-        "a": 10,
+        "a": 11,
         "w": 4
+      },
+      {
+        "d": "2026-11-08",
+        "a": 2,
+        "w": 1
       }
     ]
   },
