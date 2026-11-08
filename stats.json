@@ -1,5 +1,5 @@
 {
-  "lastTime": 1794158887,
+  "lastTime": 1794161378,
   "totals": {
     "visits": 133,
     "siteDownloads": 41,
@@ -2280,9 +2280,15 @@
       "v": 0,
       "d": 0,
       "a": 0
+    },
+    {
+      "t": 1794163073,
+      "v": 0,
+      "d": 0,
+      "a": 0
     }
   ],
-  "updated": 1794159088,
+  "updated": 1794163073,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -2403,6 +2409,18 @@
     {
       "t": 1793909420,
       "m": "\"RUN\" by Night Lovell wouldn't play (tried 4 times).\nUnknownHostException: youtubei.googleapis.com\n\nWindows 11 (10.0), Glasswave for Windows 1.2.46\nhttps://music.youtube.com/watch?v=jheMKHbA9bA"
+    },
+    {
+      "t": 1794160279,
+      "m": "\"BIRDS OF A FEATHER\" by Billie Eilish wouldn't play (tried 4 times).\nUnknownHostException: youtubei.googleapis.com\n\nWindows 10 (10.0), Glasswave for Windows 1.2.49\nhttps://music.youtube.com/watch?v=WKZO-CWeOVA"
+    },
+    {
+      "t": 1794161355,
+      "m": "\"Lose Control\" by Yeat, Elton John wouldn't play (tried 4 times).\nUnknownHostException: www.youtube.com\n\nWindows 11 (10.0), Glasswave for Windows 1.2.49\nhttps://music.youtube.com/watch?v=Ks-4Mzk2zeo"
+    },
+    {
+      "t": 1794161378,
+      "m": "\"What I Want\" by Yeat, BNYX® wouldn't play (tried 4 times).\nUnknownHostException: No such host is known (rr2---sn-5pguxaob-5c8l.googlevideo.com)\n\nWindows 11 (10.0), Glasswave for Windows 1.2.49\nhttps://music.youtube.com/watch?v=YUWy-mKIMnc"
     }
   ],
   "lastActiveTime": 1794158255,
