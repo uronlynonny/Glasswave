@@ -1,5 +1,5 @@
 {
-  "lastTime": 1794126365,
+  "lastTime": 1794127658,
   "totals": {
     "visits": 133,
     "siteDownloads": 41,
@@ -2220,9 +2220,15 @@
       "v": 1,
       "d": 0,
       "a": 0
+    },
+    {
+      "t": 1794130984,
+      "v": 0,
+      "d": 0,
+      "a": 0
     }
   ],
-  "updated": 1794127656,
+  "updated": 1794130984,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -2345,7 +2351,7 @@
       "m": "\"RUN\" by Night Lovell wouldn't play (tried 4 times).\nUnknownHostException: youtubei.googleapis.com\n\nWindows 11 (10.0), Glasswave for Windows 1.2.46\nhttps://music.youtube.com/watch?v=jheMKHbA9bA"
     }
   ],
-  "lastActiveTime": 1794123130,
+  "lastActiveTime": 1794128234,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -2657,6 +2663,7 @@
         "1acf6e0b-6faa-44ef-aab2-085f9b135094"
       ],
       "a": [
+        "0781cb68-6bbb-4118-bf96-987353fc022d",
         "2eb7971e-50c2-4017-ae0c-3fa211ed2872",
         "6ce16e7b-e680-44af-8dda-4211206548d5",
         "b40577e8-17f8-4460-839e-0cef28e7acc4",
@@ -2666,7 +2673,7 @@
   },
   "active": {
     "today": {
-      "a": 4,
+      "a": 5,
       "w": 1
     },
     "week": {
@@ -2755,7 +2762,7 @@
       },
       {
         "d": "2026-11-08",
-        "a": 4,
+        "a": 5,
         "w": 1
       }
     ]
