@@ -56,6 +56,18 @@ jobs:
           jq -s --argjson l "$last" '[.[] | select(.event=="message" and .time > $l and .title=="Song failed") | {t: .time, m: .message}]' msgs.jsonl > failed.json
           f=$(jq 'length' failed.json)
 
+          # Lyrics someone reported as wrong or out of sync. Each report names the exact lyrics
+          # ("Ref: LRCLIB:123"); they go into lyrics-blocked.json, which every copy of Glasswave reads,
+          # so one report fixes the song's lyrics for everybody with no one having to step in.
+          LB=data/lyrics-blocked.json
+          [ -f "$LB" ] || echo '{}' > "$LB"
+          jq -s --argjson l "$last" '[.[] | select(.event=="message" and .time > $l and ((.title // "") | test("^Lyrics: (Wrong lyrics|Out of sync)")))
+            | .message as $m
+            | ($m | capture("Ref: (?<r>[A-Za-z ]+:[^\n]+)").r) as $r
+            | ($m | capture("(?<u>https://music\\.youtube\\.com/watch\\?v=[A-Za-z0-9_-]{11})").u) as $u
+            | {u: $u, r: $r}]' msgs.jsonl > newblocked.json || echo '[]' > newblocked.json
+          jq --slurpfile n newblocked.json 'reduce $n[0][] as $b (.; .[$b.u] = (((.[$b.u] // []) + [$b.r]) | unique))' "$LB" > tmp.json && mv tmp.json "$LB" || true
+
           # Active users: each app checks in once a day with a random id. Keep who was seen each day
           # (UTC) for 35 days, and work out daily, 7-day and 30-day counts per platform.
           lastA=$(jq -r '.lastActiveTime // 0' "$F")
@@ -137,5 +149,5 @@ jobs:
           cd data
           git config user.name "glasswave-stats"
           git config user.email "glasswave-stats@users.noreply.github.com"
-          git add stats.json fixed.json
+          git add stats.json fixed.json lyrics-blocked.json
           git commit -qm "Stats for $(date -u +'%Y-%m-%d %H:00') UTC" && git push -q

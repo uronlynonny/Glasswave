@@ -21,13 +21,22 @@ fun main(args: Array<String>) {
         val ly = runCatching { kotlinx.coroutines.runBlocking { LyricsRepo.get(url, title, artist, o.optLong("s")) } }.getOrNull()
         val ms = System.currentTimeMillis() - t0
         if (ly != null) found++
-        val first = ly?.lines?.firstOrNull { it.text.isNotBlank() }?.text?.split(" ")?.take(5)?.joinToString(" ").orEmpty()
-        println(
-            "GW lyrics | %-34s | %-20s | %-8s | %3d lines | %-5s | %5d ms | %s".format(
-                title.take(34), artist.take(20), ly?.source ?: "none", ly?.lines?.size ?: 0,
-                if (ly?.wordTimed == true) "words" else if (ly?.synced == true) "lines" else "-", ms, first,
-            ),
-        )
+        fun show(label: String, l: Lyrics?, took: Long) {
+            val first = l?.lines?.firstOrNull { it.text.isNotBlank() }?.text?.split(" ")?.take(5)?.joinToString(" ").orEmpty()
+            println(
+                "GW lyrics | %-34s | %-20s | %-8s | %3d lines | %-5s | %5d ms | %-16s | %s%s".format(
+                    title.take(34), artist.take(20), l?.source ?: "none", l?.lines?.size ?: 0,
+                    if (l?.wordTimed == true) "words" else if (l?.synced == true) "lines" else "-", took, l?.ref.orEmpty(), label, first,
+                ),
+            )
+        }
+        show("", ly, ms)
+        // "-Preport=1": press "Wrong lyrics" on each, and show what comes instead.
+        if (args.getOrNull(1) == "report" && ly != null) {
+            val t1 = System.currentTimeMillis()
+            val other = kotlinx.coroutines.runBlocking { LyricsRepo.reject(url, title, artist, o.optLong("s"), ly) }
+            show("after report: ", other, System.currentTimeMillis() - t1)
+        }
     }
     println("GW lyrics found for $found of ${songs.length()} songs")
     System.exit(0)

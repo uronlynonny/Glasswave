@@ -93,7 +93,8 @@ tasks.register<JavaExec>("mixCheck") {
 tasks.register<JavaExec>("lyricsCheck") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("com.glasswave.player.LyricsCheckKt")
-    args(listOfNotNull(project.findProperty("songs") as String?))
+    // -Preport=1 also presses "Wrong lyrics" on each song and shows what comes instead.
+    args(listOfNotNull(project.findProperty("songs") as String?, (project.findProperty("report") as String?)?.let { "report" }))
 }
 
 // ./gradlew -p desktop fxCheck -Pfile=path/to/song.wav

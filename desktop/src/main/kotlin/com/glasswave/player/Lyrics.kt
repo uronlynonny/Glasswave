@@ -2,6 +2,8 @@
 package com.glasswave.player
 
 import android.util.Base64
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
@@ -26,7 +28,8 @@ data class LyricWord(val ms: Long, val endMs: Long, val from: Int, val to: Int)
 data class LyricLine(val ms: Long, val text: String, val words: List<LyricWord> = emptyList())
 
 /** [durationSec] is the length of the recording these lyrics were timed to (0 if unknown). */
-data class Lyrics(val lines: List<LyricLine>, val synced: Boolean, val source: String, val durationSec: Int = 0) {
+/** [ref] says exactly which lyrics these are ("LRCLIB:123", "KuGou:456"…), so a report can rule them out. */
+data class Lyrics(val lines: List<LyricLine>, val synced: Boolean, val source: String, val durationSec: Int = 0, val ref: String = "") {
     /** True when the words themselves are timed, not just the lines. */
     val wordTimed: Boolean get() = synced && lines.any { it.words.isNotEmpty() }
 }
@@ -96,10 +99,14 @@ object LyricsRepo {
         // Only lyrics that scroll with the song: LRCLIB, KuGou and NetEase all time their lines, and
         // are asked at the same time, not one after the other.
         val failedBefore = failedCalls.get()
-        val fromKugou = async { runCatching { kugou(t, a, seconds) }.getOrNull() }
-        val fromNetease = async { runCatching { netease(t, a, seconds) }.getOrNull() }
-        val fromYoutube = async { runCatching { youtubeTimed(url) }.getOrNull() }
-        val fromLrclib = runCatching { lrclib(t, a, seconds) }.getOrNull()
+        // Lyrics someone reported as wrong or out of sync for this song are never picked again.
+        refreshShared()
+        val skip = blocked(url)
+        fun ok(l: Lyrics?) = l?.takeIf { it.ref.isEmpty() || it.ref !in skip }
+        val fromKugou = async { runCatching { ok(kugou(t, a, seconds)) }.getOrNull() }
+        val fromNetease = async { runCatching { ok(netease(t, a, seconds)) }.getOrNull() }
+        val fromYoutube = async { runCatching { ok(youtubeTimed(url)) }.getOrNull() }
+        val fromLrclib = runCatching { lrclib(t, a, seconds, skip) }.getOrNull()
         fun fits(k: Lyrics) = seconds <= 0 || (k.lines.lastOrNull()?.ms ?: 0) / 1000 <= seconds + 3
         val lrclibSynced = fromLrclib?.takeIf { it.synced }
         val found = if (lrclibSynced != null) {
@@ -109,7 +116,7 @@ object LyricsRepo {
             fromYoutube.cancel()
             if (lrclibSynced.wordTimed) lrclibSynced.also { fromKugou.cancel() }
             else fromKugou.await()
-                ?.takeIf { k -> k.wordTimed && fits(k) && sameSong(lrclibSynced, k) && sameWords(lrclibSynced, k) >= 0.9 }
+                ?.takeIf { k -> k.wordTimed && fits(k) && sameSong(lrclibSynced, k) && sameWords(lrclibSynced, k) >= 0.9 && sameLines(lrclibSynced, k) >= 0.9 }
                 ?: lrclibSynced
         } else {
             // KuGou when it times every word; otherwise YouTube Music's (made for this exact song),
@@ -167,7 +174,7 @@ object LyricsRepo {
                 LyricLine(l.getLong(0), text, words)
             }
         }
-        Lyrics(lines, o.optBoolean("s"), o.optString("src"), o.optInt("d"))
+        Lyrics(lines, o.optBoolean("s"), o.optString("src"), o.optInt("d"), o.optString("ref"))
     }.getOrNull()?.takeIf { it.lines.isNotEmpty() && it.synced } // older saves can be untimed
 
     private fun save(url: String, ly: Lyrics) {
@@ -182,7 +189,7 @@ object LyricsRepo {
                 }
                 arr.put(line)
             }
-            val json = JSONObject().put("s", ly.synced).put("src", ly.source).put("d", ly.durationSec).put("v", SAVE_VERSION).put("l", arr)
+            val json = JSONObject().put("s", ly.synced).put("src", ly.source).put("d", ly.durationSec).put("v", SAVE_VERSION).put("ref", ly.ref).put("l", arr)
             val f = fileFor(url)
             val tmp = java.io.File(f.path + ".tmp")
             tmp.writeText(json.toString())
@@ -265,7 +272,7 @@ object LyricsRepo {
 
     /* ---------------- LRCLIB ---------------- */
 
-    private fun lrclib(title: String, artist: String, seconds: Long): Lyrics? {
+    private fun lrclib(title: String, artist: String, seconds: Long, skip: Set<String> = emptySet()): Lyrics? {
         // Exact match first (title, artist and length), then a search where the closest length wins:
         // the same song often exists as several cuts (radio edit, album, extended) with different timing.
         val exact = fetch(
@@ -285,7 +292,7 @@ object LyricsRepo {
             if (hits.count { hasSynced(it) && gap(it) <= 3 && believable(it, seconds) && thisSong(it.optString("trackName"), it.optString("artistName"), title, artist) } >= 3) break
         }
         pickSynced(
-            hits.filter { hasSynced(it) && gap(it) <= 12 && believable(it, seconds) && thisSong(it.optString("trackName"), it.optString("artistName"), title, artist) }
+            hits.filter { hasSynced(it) && gap(it) <= 12 && believable(it, seconds) && thisSong(it.optString("trackName"), it.optString("artistName"), title, artist) && "LRCLIB:" + it.optLong("id") !in skip }
                 .distinctBy { it.optLong("id") },
             ::gap,
         )
@@ -334,11 +341,12 @@ object LyricsRepo {
 
     private fun fromLrclib(o: JSONObject): Lyrics? {
         val dur = o.optDouble("duration", 0.0).toInt()
-        if (o.optBoolean("instrumental")) return Lyrics(listOf(LyricLine(0, "♪ Instrumental ♪")), false, "LRCLIB", dur)
+        val ref = "LRCLIB:" + o.optLong("id")
+        if (o.optBoolean("instrumental")) return Lyrics(listOf(LyricLine(0, "♪ Instrumental ♪")), false, "LRCLIB", dur, ref)
         val synced = o.optString("syncedLyrics").takeIf { it.isNotBlank() && it != "null" }
-        if (synced != null) parseLrc(synced).takeIf { it.isNotEmpty() }?.let { return Lyrics(it, true, "LRCLIB", dur) }
+        if (synced != null) parseLrc(synced).takeIf { it.isNotEmpty() }?.let { return Lyrics(it, true, "LRCLIB", dur, ref) }
         val plain = o.optString("plainLyrics").takeIf { it.isNotBlank() && it != "null" } ?: return null
-        return Lyrics(plain.lines().map { LyricLine(-1, it.trim()) }, false, "LRCLIB", dur)
+        return Lyrics(plain.lines().map { LyricLine(-1, it.trim()) }, false, "LRCLIB", dur, ref)
     }
 
     /* ---------------- Per-song nudge ---------------- */
@@ -346,12 +354,63 @@ object LyricsRepo {
     private var prefs: android.content.SharedPreferences? = null
     fun init(context: android.content.Context) {
         prefs = context.getSharedPreferences("lyrics_offset", android.content.Context.MODE_PRIVATE)
+        blockPrefs = context.getSharedPreferences("lyrics_blocked", android.content.Context.MODE_PRIVATE)
         fillIn()
     }
 
     /** How many milliseconds earlier (+) or later (−) this song's lyrics should show. Saved per song. */
     fun offset(url: String): Long = prefs?.getLong(url, 0L) ?: 0L
     fun setOffset(url: String, ms: Long) { prefs?.edit()?.putLong(url, ms.coerceIn(-10_000, 10_000))?.apply() }
+
+    /* ---------------- Lyrics people reported ---------------- */
+
+    /*
+     * "Wrong lyrics" or "Out of sync" rules those exact lyrics out for that song and shows the next
+     * best straight away. Your own reports work at once (kept on this device); everyone's reports
+     * reach the shared list the hourly job keeps (lyrics-blocked.json on the "stats" branch), so one
+     * report fixes a song for everybody, with nobody having to do anything.
+     */
+    private const val SHARED = "https://raw.githubusercontent.com/uronlynonny/Glasswave/stats/lyrics-blocked.json"
+    private var blockPrefs: android.content.SharedPreferences? = null
+    @Volatile private var shared: Map<String, Set<String>> = emptyMap()
+    @Volatile private var sharedAt = 0L
+
+    private fun blocked(url: String): Set<String> =
+        (blockPrefs?.getString(url, null)?.split("\n")?.filter { it.isNotBlank() }.orEmpty() + shared[url].orEmpty()).toSet()
+
+    /** Reads the shared list again when it's more than a few hours old. Blocking. */
+    private fun refreshShared() {
+        if (System.currentTimeMillis() - sharedAt < 3 * 3_600_000L) return
+        sharedAt = System.currentTimeMillis()
+        val o = runCatching { fetch(SHARED)?.let { JSONObject(it) } }.getOrNull() ?: return
+        shared = o.keys().asSequence().associateWith { k ->
+            o.optJSONArray(k)?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() }.orEmpty()
+        }
+    }
+
+    /** Lyrics changed for some song (a report found other ones): lyrics on screen load again. */
+    var changes by androidx.compose.runtime.mutableIntStateOf(0)
+        private set
+
+    /** Never picks [ly] for this song again, and looks for the next best. Returns them, or null if there are none. */
+    suspend fun reject(url: String, title: String, artist: String, seconds: Long, ly: Lyrics?): Lyrics? {
+        if (ly != null && ly.ref.isNotEmpty()) {
+            // This device's own list for the song, plus these.
+            val now = blockPrefs?.getString(url, null)?.split("\n")?.filter { it.isNotBlank() }.orEmpty() + ly.ref
+            blockPrefs?.edit()?.putString(url, now.distinct().joinToString("\n"))?.apply()
+        }
+        return lookAgain(url, title, artist, seconds)
+    }
+
+    /** "No lyrics": forgets that this song had none and looks again. */
+    suspend fun lookAgain(url: String, title: String, artist: String, seconds: Long): Lyrics? {
+        cache.remove(url)
+        none.remove(url)
+        forget(url)
+        val found = get(url, title, artist, seconds)
+        withContext(Dispatchers.Main) { changes++ }
+        return found
+    }
 
     /* ---------------- NetEase ---------------- */
 
@@ -380,7 +439,7 @@ object LyricsRepo {
                 l.text.contains("：") || l.text.contains(" : ") ||
                     Regex("作词|作曲|编曲|制作|Lyricist|Composer|Producer", RegexOption.IGNORE_CASE).containsMatchIn(l.text)
             }
-            if (lines.count { it.text.isNotBlank() } >= 4) return Lyrics(lines, true, "NetEase", (s.optLong("duration") / 1000).toInt())
+            if (lines.count { it.text.isNotBlank() } >= 4) return Lyrics(lines, true, "NetEase", (s.optLong("duration") / 1000).toInt(), "NetEase:" + s.optLong("id"))
         }
         return null
     }
@@ -423,7 +482,7 @@ object LyricsRepo {
                 val body = fetch("$dl&fmt=lrc")?.let { JSONObject(it) } ?: return@run null
                 credits(parseLrc(String(Base64.decode(body.optString("content"), Base64.DEFAULT), Charsets.UTF_8)))
             } ?: continue
-            if (lines.size >= 4) return Lyrics(lines, true, "KuGou", s.optLong("duration").toInt())
+            if (lines.size >= 4) return Lyrics(lines, true, "KuGou", s.optLong("duration").toInt(), "KuGou:" + c.optString("id"))
         }
         return null
     }
@@ -486,6 +545,41 @@ object LyricsRepo {
             val t = prev; prev = cur; cur = t
         }
         return 2.0 * prev[b.size] / (a.size + b.size)
+    }
+
+    /**
+     * How many of LRCLIB's sung lines (two words or more) turn up word for word in KuGou's [other],
+     * near the same time (0 to 1). A few changed words spread over a song still let [sameWords]
+     * score high ("Go" for "So", a line turned into "Ami" in Bruno Mars' "That's What I Like"), so
+     * every line has to be right too. KuGou's line breaks may differ, so its words count as one stream.
+     */
+    private fun sameLines(lrc: Lyrics, other: Lyrics): Double {
+        val stream = other.lines.flatMap { l -> wordsOf(l.text).map { l.ms to it } }
+        val words = stream.map { it.second }
+        var good = 0
+        var total = 0
+        for (l in lrc.lines) {
+            val w = wordsOf(l.text)
+            if (w.size < 2) continue
+            total++
+            val first = stream.indexOfFirst { abs(it.first - l.ms) <= 6000 }
+            if (first < 0) continue
+            val last = stream.indexOfLast { abs(it.first - l.ms) <= 6000 }
+            val seg = words.subList(maxOf(0, first - 5), minOf(words.size, last + 30))
+            if ((0..seg.size - w.size).any { i -> seg.subList(i, i + w.size) == w }) good++
+        }
+        return if (total == 0) 0.0 else good.toDouble() / total
+    }
+
+    /** A line's words for comparing: lower case, no punctuation or bracketed backing vocals; Chinese and Japanese by character. */
+    private fun wordsOf(text: String): List<String> {
+        val out = ArrayList<String>()
+        for (w in uncensor(text).replace(bracketed, " ").lowercase().split(nonWord)) {
+            val t = w.replace("'", "").replace("’", "")
+            if (t.isEmpty()) continue
+            if (t.any { Character.UnicodeScript.of(it.code) in cjk }) t.forEach { out += it.toString() } else out += t
+        }
+        return out
     }
 
     private val bracketed = Regex("\\([^)]*\\)")
@@ -601,7 +695,7 @@ object LyricsRepo {
     private fun youtubeTimed(url: String): Lyrics? {
         val id = YtRepo.videoIdFor(runCatching { YtRepo.uncensored(url) }.getOrDefault(url)) ?: return null
         val lines = YtMusicApi.timedLyrics(id) ?: return null
-        return Lyrics(lines.map { (ms, text) -> LyricLine(ms, text.trim()) }, true, "YouTube Music")
+        return Lyrics(lines.map { (ms, text) -> LyricLine(ms, text.trim()) }, true, "YouTube Music", 0, "YouTube")
     }
 
     private suspend fun youtube(url: String): Lyrics? {

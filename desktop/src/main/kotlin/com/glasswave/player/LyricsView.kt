@@ -120,8 +120,9 @@ import kotlinx.coroutines.delay
 @Composable
 fun LyricsScreen(ps: PlayerState, glow: CursorGlow? = null, onClose: () -> Unit) {
     val url = ps.currentId
-    var state by remember(url) { mutableStateOf<Load<Lyrics?>>(Load.Loading) }
-    LaunchedEffect(url) {
+    val changes = LyricsRepo.changes
+    var state by remember(url, changes) { mutableStateOf<Load<Lyrics?>>(Load.Loading) }
+    LaunchedEffect(url, changes) {
         if (url == null) return@LaunchedEffect
         state = Load.Loading
         // Give the player a moment to know the song's length (it helps pick the right lyrics).
@@ -216,8 +217,23 @@ private fun ReportLyrics(ps: PlayerState, state: Load<Lyrics?>, modifier: Modifi
                             val ly = (state as? Load.Done)?.value
                             val from = ly?.let { it.source + if (it.synced) " (synced)" else " (not synced)" }
                             scope.launch {
-                                val ok = withContext(Dispatchers.IO) { Reviews.lyricsProblem(title, artist, url, kind, at, from) }
-                                Menus.say(if (ok) "Thanks! nonny dev will look at this song's lyrics" else "Couldn't send. Check your internet and try again.")
+                                // Try to put it right at once: other lyrics for "Wrong lyrics" and
+                                // "Out of sync", a fresh look for "No lyrics".
+                                Menus.say(if (kind == "No lyrics") "Looking for lyrics…" else "Looking for other lyrics…")
+                                val secs = ps.durationMs / 1000
+                                val other = runCatching {
+                                    if (kind == "No lyrics") LyricsRepo.lookAgain(url, title, artist, secs)
+                                    else LyricsRepo.reject(url, title, artist, secs, ly)
+                                }.getOrNull()
+                                val fixed = other != null && other.ref != ly?.ref
+                                val ok = withContext(Dispatchers.IO) { Reviews.lyricsProblem(title, artist, url, kind, at, from, ly?.ref.orEmpty(), fixed) }
+                                Menus.say(
+                                    when {
+                                        fixed -> "Fixed: showing other lyrics"
+                                        ok -> "No other lyrics found yet. nonny dev will look at this song"
+                                        else -> "Couldn't send. Check your internet and try again."
+                                    },
+                                )
                             }
                         }.padding(horizontal = 16.dp, vertical = 10.dp),
                     )

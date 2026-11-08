@@ -152,10 +152,11 @@ object Reviews {
      * where in the song it was and where the lyrics came from. True once it's delivered. Call off
      * the main thread.
      */
-    fun lyricsProblem(context: Context, title: String, artist: String, url: String, kind: String, atMs: Long, from: String?): Boolean {
+    fun lyricsProblem(context: Context, title: String, artist: String, url: String, kind: String, atMs: Long, from: String?, ref: String = "", fixed: Boolean = false): Boolean {
         if (!reported.add("$url|$kind")) return true
         val at = "%d:%02d".format(atMs / 60_000, (atMs / 1000) % 60)
-        val body = "\"$title\" by $artist\n$kind (at $at)\n" + (from?.let { "Lyrics from: $it\n" } ?: "") + "$url\n\n" + run {
+        val body = "\"$title\" by $artist\n$kind (at $at)\n" + (from?.let { "Lyrics from: $it\n" } ?: "") +
+            (if (ref.isNotEmpty()) "Ref: $ref\n" else "") + (if (fixed) "Fixed itself: other lyrics found and shown\n" else "") + "$url\n\n" + run {
             val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
             "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE}, Glasswave $version"
         }
