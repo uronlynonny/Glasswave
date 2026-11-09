@@ -9,17 +9,31 @@ import org.json.JSONObject
 
 /**
  * Where Glasswave keeps its files. On Windows: %APPDATA%\Glasswave and %LOCALAPPDATA%\Glasswave Cache.
- * On a Mac: ~/Library/Application Support/Glasswave and ~/Library/Caches/Glasswave, the usual places
- * (the checks set APPDATA and LOCALAPPDATA on a Mac too, to keep their files apart from yours).
+ * On a Mac: ~/Library/Application Support/Glasswave and ~/Library/Caches/Glasswave, the usual places.
+ * On Linux: ~/.local/share/Glasswave and ~/.cache/Glasswave (or wherever XDG_DATA_HOME and
+ * XDG_CACHE_HOME point). The checks set APPDATA and LOCALAPPDATA on a Mac and Linux too, to keep
+ * their files apart from yours.
  */
 object AppDirs {
     private val home = System.getProperty("user.home")
-    private val mac = System.getProperty("os.name").orEmpty().lowercase().startsWith("mac")
+    private val os = System.getProperty("os.name").orEmpty().lowercase()
+    private val mac = os.startsWith("mac")
+    private val linux = os.startsWith("linux")
+    private fun xdg(name: String, fallback: String) =
+        System.getenv(name)?.takeIf { it.startsWith("/") }?.let { File(it) } ?: File(home, fallback)
     val data: File = (System.getenv("APPDATA")?.let { File(it, "Glasswave") }
-        ?: if (mac) File(home, "Library/Application Support/Glasswave") else File(home, "Glasswave")).apply { mkdirs() }
+        ?: when {
+            mac -> File(home, "Library/Application Support/Glasswave")
+            linux -> File(xdg("XDG_DATA_HOME", ".local/share"), "Glasswave")
+            else -> File(home, "Glasswave")
+        }).apply { mkdirs() }
     // Kept apart from the installed app (which lives in %LOCALAPPDATA%\Glasswave), so updates never touch it.
     val cache: File = (System.getenv("LOCALAPPDATA")?.let { File(it, "Glasswave Cache") }
-        ?: if (mac) File(home, "Library/Caches/Glasswave") else File(home, "Glasswave Cache")).apply { mkdirs() }
+        ?: when {
+            mac -> File(home, "Library/Caches/Glasswave")
+            linux -> File(xdg("XDG_CACHE_HOME", ".cache"), "Glasswave")
+            else -> File(home, "Glasswave Cache")
+        }).apply { mkdirs() }
 }
 
 open class Context {

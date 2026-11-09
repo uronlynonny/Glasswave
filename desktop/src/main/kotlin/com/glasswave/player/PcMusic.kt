@@ -77,11 +77,21 @@ object PcMusic {
     private val artDir by lazy { File(dir, "art").apply { mkdirs() } }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** Windows' Music folder (it may have been moved, for example into OneDrive). */
+    /** Windows' Music folder (it may have been moved, for example into OneDrive). On Linux, the
+     *  desktop's Music folder (XDG_MUSIC_DIR in ~/.config/user-dirs.dirs, named in your language). */
     val musicFolder: File by lazy {
-        runCatching {
-            File(com.sun.jna.platform.win32.Shell32Util.getKnownFolderPath(com.sun.jna.platform.win32.KnownFolders.FOLDERID_Music))
-        }.getOrNull()?.takeIf { it.isDirectory } ?: File(System.getProperty("user.home"), "Music")
+        val home = System.getProperty("user.home")
+        when {
+            Os.isWindows -> runCatching {
+                File(com.sun.jna.platform.win32.Shell32Util.getKnownFolderPath(com.sun.jna.platform.win32.KnownFolders.FOLDERID_Music))
+            }.getOrNull()
+            Os.isLinux -> runCatching {
+                File(home, ".config/user-dirs.dirs").readLines().firstNotNullOfOrNull { line ->
+                    Regex("""^XDG_MUSIC_DIR="(.*)"\s*$""").find(line.trim())?.groupValues?.get(1)
+                }?.replace("\$HOME", home)?.let { File(it) }
+            }.getOrNull()
+            else -> null
+        }?.takeIf { it.isDirectory } ?: File(home, "Music")
     }
 
     init {

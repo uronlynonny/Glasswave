@@ -349,14 +349,15 @@ private fun macFont() = androidx.compose.ui.text.font.FontFamily(
         .map { androidx.compose.ui.text.platform.SystemFont(".AppleSystemUIFont", it) },
 )
 
-/** Windows 11's own type (closest to Apple's San Francisco); older Windows falls back to Segoe UI. */
-val TextFont = if (Os.isMac) macFont() else androidx.compose.ui.text.font.FontFamily(
+/** Windows 11's own type (closest to Apple's San Francisco); older Windows falls back to Segoe UI.
+ *  On Linux: the system's own sans-serif font (whatever the desktop uses). */
+val TextFont = if (Os.isMac) macFont() else if (Os.isLinux) androidx.compose.ui.text.font.FontFamily.SansSerif else androidx.compose.ui.text.font.FontFamily(
     androidx.compose.ui.text.platform.SystemFont("Segoe UI Variable Text", FontWeight.Normal),
     androidx.compose.ui.text.platform.SystemFont("Segoe UI Variable Text", FontWeight.Medium),
     androidx.compose.ui.text.platform.SystemFont("Segoe UI Variable Text", FontWeight.SemiBold),
     androidx.compose.ui.text.platform.SystemFont("Segoe UI Variable Text", FontWeight.Bold),
 )
-val DisplayFont = if (Os.isMac) macFont() else androidx.compose.ui.text.font.FontFamily(
+val DisplayFont = if (Os.isMac) macFont() else if (Os.isLinux) androidx.compose.ui.text.font.FontFamily.SansSerif else androidx.compose.ui.text.font.FontFamily(
     androidx.compose.ui.text.platform.SystemFont("Segoe UI Variable Display", FontWeight.Normal),
     androidx.compose.ui.text.platform.SystemFont("Segoe UI Variable Display", FontWeight.Medium),
     androidx.compose.ui.text.platform.SystemFont("Segoe UI Variable Display", FontWeight.SemiBold),

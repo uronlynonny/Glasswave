@@ -84,6 +84,8 @@ object AppVolume {
 
 fun openInBrowser(url: String) {
     runCatching { java.awt.Desktop.getDesktop().browse(java.net.URI(url)) }
+        // Some Linux desktops don't answer Java's way of asking; xdg-open works on all of them.
+        .recoverCatching { if (Os.isLinux) ProcessBuilder("xdg-open", url).start() else throw it }
         .onFailure { Menus.say("Couldn't open your web browser") }
 }
 
@@ -129,7 +131,7 @@ private interface Kernel : JnaLibrary {
 }
 
 object WinPower {
-    private val kernel by lazy { runCatching { Native.load("kernel32", Kernel::class.java) }.getOrNull() }
+    private val kernel by lazy { if (!Os.isWindows) null else runCatching { Native.load("kernel32", Kernel::class.java) }.getOrNull() }
     private var last: Boolean? = null
 
     fun fullSpeed(on: Boolean) {
@@ -158,7 +160,7 @@ private interface Psapi : JnaLibrary {
 }
 
 object WinMemory {
-    private val kernel by lazy { runCatching { Native.load("kernel32", Psapi::class.java) }.getOrNull() }
+    private val kernel by lazy { if (!Os.isWindows) null else runCatching { Native.load("kernel32", Psapi::class.java) }.getOrNull() }
 
     /**
      * Java keeps the room it grew into after a busy moment (a big search, a playlist import) until a
@@ -469,7 +471,7 @@ fun main() {
                     // The mouse's back button goes back too.
                     .onPointerEvent(PointerEventType.Press) { if (it.button == PointerButton.Back) BackDispatcher.back() },
             ) {
-                App(vm, ps, openInBrowser = ::openInBrowser, openEqualizer = { Menus.say(if (Os.isMac) "An equalizer isn't on the Mac version yet" else "Use Windows' sound settings for an equalizer") })
+                App(vm, ps, openInBrowser = ::openInBrowser, openEqualizer = { Menus.say(if (Os.isWindows) "Use Windows' sound settings for an equalizer" else "An equalizer isn't on the ${Os.system} version yet") })
                 // Over everything, see-through: the app's colours show behind it.
                 TitleBar.Bar(window, Modifier.align(androidx.compose.ui.Alignment.TopStart))
             }

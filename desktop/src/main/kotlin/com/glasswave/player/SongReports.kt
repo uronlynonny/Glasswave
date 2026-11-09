@@ -103,7 +103,7 @@ object SongReports {
     }
 
     private fun send(w: Waiting): Boolean {
-        val device = "${System.getProperty("os.name")} (${System.getProperty("os.version")}), Glasswave for ${if (Os.isMac) "Mac" else "Windows"} ${Updater.currentVersion()}"
+        val device = "${System.getProperty("os.name")} (${System.getProperty("os.version")}), Glasswave for ${Os.system} ${Updater.currentVersion()}"
         val msg = "\"${w.title}\"" + (if (w.artist.isNotBlank()) " by ${w.artist}" else "") +
             " won't play for someone. They reported it.\n\n$device\n${w.url}\n\nTap Mark fixed once it plays again: they'll be told."
         val fix = JSONObject().put("u", w.url).put("t", w.title).put("a", w.artist).toString()

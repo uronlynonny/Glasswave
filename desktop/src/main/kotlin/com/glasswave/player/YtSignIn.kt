@@ -27,7 +27,7 @@ object YtSignIn {
     /** Where the sign-in window keeps Google's session, so it can be wiped on sign-out. */
     private val dataDir get() = File(AppDirs.cache, "signin")
 
-    private fun helper(): File? =
+    private fun helper(): File? = if (Os.isLinux) null else
         (System.getProperty("compose.application.resources.dir") ?: System.getProperty("gw.appResources"))
             ?.let { File(it, if (Os.isMac) "signin/GlasswaveSignIn" else "signin/GlasswaveSignIn.exe") }
             ?.takeIf { it.isFile }

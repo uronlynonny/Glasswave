@@ -17,11 +17,12 @@ val appVersion = "1.2.52"
 // Which computer this build is for: the one building it (a Mac build has to be made on a Mac).
 val hostOs = System.getProperty("os.name").lowercase()
 val isMac = hostOs.startsWith("mac")
+val isLinux = hostOs.startsWith("linux")
 // FFmpeg's ready-made native libraries for this computer.
 val nativeTarget = when {
     isMac && System.getProperty("os.arch") == "aarch64" -> "macosx-arm64"
     isMac -> "macosx-x86_64"
-    hostOs.startsWith("linux") -> "linux-x86_64"
+    isLinux -> "linux-x86_64"
     else -> "windows-x86_64"
 }
 val newPipe = Regex("NewPipeExtractor:(v?[0-9][0-9.]*)").find(appBuild)?.groupValues?.get(1)
@@ -54,7 +55,7 @@ dependencies {
     implementation("org.bytedeco:ffmpeg:6.1.1-1.5.10:$nativeTarget")
     implementation("org.bytedeco:javacpp:1.5.10:$nativeTarget")
 
-    // Talks to Windows directly, for the dark title bar (unused on Mac).
+    // Talks to Windows directly, for the dark title bar (unused on Mac and Linux).
     implementation("net.java.dev.jna:jna-platform:5.14.0")
     // Voice search: Whisper speech recognition, run on this PC.
     implementation("io.github.givimad:whisper-jni:1.7.1")
@@ -138,7 +139,13 @@ compose.desktop {
         nativeDistributions {
             // Files shipped beside the app: the YouTube Music sign-in window (see signInHelper).
             appResourcesRootDir.set(layout.buildDirectory.dir("appres"))
-            if (isMac) targetFormats(TargetFormat.Dmg) else targetFormats(TargetFormat.Msi, TargetFormat.Exe)
+            when {
+                isMac -> targetFormats(TargetFormat.Dmg)
+                // Linux: a .deb for Ubuntu, Debian and Mint (a .tar.gz of the app is made from
+                // createDistributable by the Linux build on GitHub, see build-linux.yml).
+                isLinux -> targetFormats(TargetFormat.Deb)
+                else -> targetFormats(TargetFormat.Msi, TargetFormat.Exe)
+            }
             packageName = "Glasswave"
             packageVersion = appVersion
             description = "Glasswave music player"
@@ -154,6 +161,16 @@ compose.desktop {
                 // Installs for this user only, so the app can update itself without asking for admin rights.
                 perUserInstall = true
                 upgradeUuid = "6c1f3b8e-2a4d-4f7e-9b1a-5d8c0e7f3a21"
+            }
+            linux {
+                iconFile.set(project.file("icons/glasswave.png"))
+                // The .deb's own name (Linux package names are lower case): "sudo apt install ./glasswave_….deb".
+                packageName = "glasswave"
+                debMaintainer = "nonny dev <noreply@github.com>"
+                // Where it shows in the apps menu, and its section in the package list.
+                menuGroup = "AudioVideo;Audio;Player"
+                appCategory = "sound"
+                shortcut = true
             }
             macOS {
                 iconFile.set(project.file("icons/glasswave.icns"))
@@ -273,10 +290,15 @@ val setupHelper by tasks.registering {
         check(p.waitFor() == 0) { "Couldn't build Glasswave Setup: $log" }
     }
 }
-val signInFor = if (isMac) macSignInHelper else signInHelper
+// Linux has no sign-in window (and no Glasswave Setup: the .deb installs it), so nothing to build there.
+val signInFor = when {
+    isMac -> macSignInHelper
+    isLinux -> null
+    else -> signInHelper
+}
 tasks.matching { it.name == "prepareAppResources" }.configureEach {
-    dependsOn(signInFor)
-    if (!isMac) dependsOn(setupHelper)
+    signInFor?.let { dependsOn(it) }
+    if (!isMac && !isLinux) dependsOn(setupHelper)
 }
 
 // Checks (screenCheck, deckCheck, voiceCheck…) never touch your real Glasswave: unless a check
@@ -310,7 +332,7 @@ tasks.register<JavaExec>("screenCheck") {
     // -PsignInTest=<folder>: the YouTube Music sign-in window hands back signed-out cookies (no
     // account needed), and the app keeps its data in that folder instead of yours.
     (project.findProperty("signInTest") as String?)?.let { dir ->
-        dependsOn(signInFor)
+        signInFor?.let { dependsOn(it) }
         environment("GW_SIGNIN_TEST", "1")
         systemProperty("gw.signInUrl", "https://music.youtube.com/")
         environment("APPDATA", "$dir/roaming")

@@ -773,7 +773,7 @@ private fun General(c: ScreenCtx) {
     Note("Updates come straight from the Glasswave releases page on GitHub. Android asks you to confirm each install; your songs and settings stay.")
     Group("Help make Glasswave better") {
         Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { HelpArt(c.ps.playing, Settings.reportProblems, Settings.countMe) }
-        SwitchRow("Report songs that won't play", "Sends nonny dev the song, the error, your Windows version and the app version so it gets fixed. Nothing about you.", Settings.reportProblems) { Settings.updateReportProblems(it) }
+        SwitchRow("Report songs that won't play", "Sends nonny dev the song, the error, your ${Os.system} version and the app version so it gets fixed. Nothing about you.", Settings.reportProblems) { Settings.updateReportProblems(it) }
         SwitchRow("Count me in usage numbers", "Tells nonny dev this copy of Glasswave is being used (a random number, nothing about you): once a day, and every few minutes while it's open or playing, so we know how many people listen.", Settings.countMe) { Settings.updateCountMe(it) }
     }
     Note("Nothing about you is ever included: no name, no account.")
@@ -1259,7 +1259,11 @@ fun YtLogin(onCookie: (String) -> Unit, onClose: () -> Unit) {
             "Glasswave without an account: search, Home, albums, artists and your Glasswave playlists all work."
         YtSignIn.Result.NoRuntime -> "Sign-in needs Microsoft Edge WebView2" to
             "It comes with Windows 11 and most Windows 10 PCs, but it's missing here. Install it (free, from Microsoft), then try again."
-        else -> "Sign-in isn't available in this copy" to
+        // Linux has no sign-in window yet (Windows uses Edge's WebView2, a Mac uses WebKit).
+        else -> if (Os.isLinux) "Sign-in isn't on Linux yet" to
+            "Signing in to YouTube Music works on the Windows and Mac versions for now. Everything else works " +
+            "without an account: search, Home, albums, artists and your Glasswave playlists."
+        else "Sign-in isn't available in this copy" to
             "Update Glasswave or reinstall it from the website, then try again."
     }
     Box(Modifier.fillMaxSize().background(Color(0xFF0A0B10)), contentAlignment = Alignment.Center) {
@@ -1622,7 +1626,7 @@ private fun FontChoices() {
     ) {
         Column(Modifier.weight(1f)) {
             androidx.compose.foundation.text.BasicText("Default", style = TextStyle(color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, fontFamily = TextFont))
-            GText("Windows' own clean font.", 13, Dim)
+            GText(if (Os.isWindows) "Windows' own clean font." else if (Os.isMac) "The Mac's own clean font." else "Your system's own font.", 13, Dim)
         }
         AnimatedVisibility(own == null, enter = scaleIn(bouncy()), exit = scaleOut(smooth(120))) { Ico(Icons.Rounded.Check, Accent, 24.dp) }
     }

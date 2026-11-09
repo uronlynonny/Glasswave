@@ -1,0 +1,151 @@
+name: Build Glasswave for Linux
+
+# A Linux package has to be made on Linux, so GitHub's own Ubuntu machines build it whenever the
+# desktop app changes on main. Before anything is uploaded, the app is started on a screen-less
+# display and plays a song (pictures of it are kept with the run). The .deb and a .tar.gz go up to
+# the rolling "linux" release (releases/download/linux/Glasswave-Linux.deb and .tar.gz).
+on:
+  push:
+    branches: [main]
+    paths: ['desktop/**', 'app/build.gradle.kts', '.github/workflows/build-linux.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: linux-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Build the Linux packages
+        run: sh ./gradlew -p desktop packageDeb createDistributable --no-daemon --stacktrace
+
+      # The .deb adds Glasswave to the apps menu as it installs. On a computer without a menu
+      # folder, that step fails and so did the whole install; now the menu entry is a bonus.
+      - name: Let the .deb install without an apps menu
+        run: |
+          set -e
+          DEB=$(find desktop -path '*binaries/main/deb/*.deb' | head -1)
+          D=$(mktemp -d)
+          dpkg-deb -R "$DEB" "$D"
+          for S in postinst prerm; do
+            [ -f "$D/DEBIAN/$S" ] || continue
+            sed -i -E 's/^([[:space:]]*xdg-desktop-menu [^\\]*)$/\1 || true/' "$D/DEBIAN/$S"
+            echo "--- $S"; grep -n "xdg-desktop-menu" "$D/DEBIAN/$S"
+          done
+          dpkg-deb --root-owner-group -b "$D" "$DEB"
+
+      # A screen-less display, and a pretend speaker: GitHub's machines have no sound card, so a
+      # silent PulseAudio output stands in (the checks play muted, but Java still needs somewhere
+      # to play to).
+      - name: Set up a display and sound output for the checks
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q xvfb x11-apps imagemagick alsa-utils ffmpeg pulseaudio libasound2-plugins
+          pulseaudio -D --exit-idle-time=-1 || true
+          sleep 2
+          pactl load-module module-null-sink sink_name=check || true
+          pactl set-default-sink check || true
+          echo 'pcm.!default { type pulse }' > ~/.asoundrc
+          echo 'ctl.!default { type pulse }' >> ~/.asoundrc
+          aplay -L | head -5 || true
+          ffmpeg -loglevel error -f lavfi -i "sine=duration=1" -f alsa default && echo "Sound output works"
+
+      - name: Check the installed app starts
+        run: |
+          set -e
+          sudo apt-get install -y -q ./$(find desktop -path '*binaries/main/deb/*.deb' | head -1)
+          APP=$(dpkg -L glasswave | grep '/bin/[Gg]lasswave$' | head -1)
+          echo "Installed launcher: $APP"
+          mkdir -p check/data
+          # Its own data folders, apart from anything else.
+          export APPDATA="$PWD/check/data/roaming" LOCALAPPDATA="$PWD/check/data/local"
+          xvfb-run -a -s "-screen 0 1440x960x24" sh -c "
+            '$APP' > check/launch.log 2>&1 &
+            PID=\$!
+            sleep 40
+            import -window root check/launch.png || xwd -root -silent | convert xwd:- check/launch.png || true
+            if kill -0 \$PID 2>/dev/null; then echo 'Glasswave is running'; kill \$PID; else echo 'Glasswave closed by itself'; cat check/launch.log; exit 1; fi
+          "
+          tail -40 check/launch.log
+
+      # A song file on "this PC" is played through the real app: FFmpeg decoding and the sound card.
+      # (YouTube is tried too, but it refuses GitHub's servers with "Sign in to confirm that you're not
+      # a bot", so that only warns.)
+      - name: Check a song plays
+        run: |
+          set -e
+          mkdir -p check/music
+          ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=60" -metadata title="Linux Check" -metadata artist="Glasswave" "check/music/Linux Check.mp3"
+          cat > check/play.txt <<EOF
+          wait 15
+          shot home
+          pcfolder $PWD/check/music
+          pcplay Linux Check
+          wait 10
+          state
+          full
+          wait 3
+          shot player
+          play daft punk get lucky
+          wait 20
+          state
+          quit
+          EOF
+          xvfb-run -a -s "-screen 0 1440x960x24" sh ./gradlew -p desktop memCheck -Pgwscript="$PWD/check/play.txt" -PdataDir="$PWD/check/data2" --no-daemon 2>&1 | tee check/play.log
+          if grep -q "GW CRASH" check/play.log; then echo "The app crashed"; exit 1; fi
+          LOCAL=$(grep "GW state 'Linux Check'" check/play.log | head -1)
+          echo "$LOCAL"
+          SECS=$(echo "$LOCAL" | sed -n 's/.* at \([0-9]*\)s playing=true.*/\1/p')
+          if [ -z "$SECS" ] || [ "$SECS" -lt 3 ]; then echo "The song file didn't play"; exit 1; fi
+          echo "The song file played for $SECS s"
+          YT=$(grep "GW state" check/play.log | tail -1)
+          if echo "$YT" | grep -q "Linux Check" || echo "$YT" | grep -q " at 0s "; then
+            echo "::warning::YouTube didn't play here (it often refuses GitHub's servers): $YT"
+          else echo "YouTube played: $YT"; fi
+
+      - name: Keep the check pictures and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-checks
+          path: check/
+          if-no-files-found: ignore
+
+      - name: Put it on the "linux" release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          DEB=$(find desktop -path '*binaries/main/deb/*.deb' | head -1)
+          APPDIR=$(find desktop -path '*binaries/main/app' -type d | head -1)
+          VERSION=$(sed -n 's/^val appVersion = "\(.*\)"/\1/p' desktop/build.gradle.kts)
+          echo "Built $DEB and $APPDIR ($VERSION)"
+          ls "$APPDIR"
+          tar -czf "Glasswave-Linux-$VERSION.tar.gz" -C "$APPDIR" .
+          cp "$DEB" "Glasswave-Linux-$VERSION.deb"
+          if ! gh release view linux >/dev/null 2>&1; then
+            gh release create linux --title "Glasswave for Linux $VERSION" --latest=false \
+              --notes "Glasswave for Linux (64-bit Intel/AMD). On Ubuntu, Debian or Mint: download Glasswave-Linux.deb and run: sudo apt install ./Glasswave-Linux.deb. Anywhere else: unpack Glasswave-Linux.tar.gz and run Glasswave from its bin folder."
+          fi
+          # Upload under a new name first, then swap, so the download links never break.
+          for EXT in deb tar.gz; do
+            gh release upload linux "Glasswave-Linux-$VERSION.$EXT" --clobber
+            OLD=$(gh api repos/${{ github.repository }}/releases/tags/linux --jq ".assets[] | select(.name==\"Glasswave-Linux.$EXT\") | .id")
+            NEW=$(gh api repos/${{ github.repository }}/releases/tags/linux --jq ".assets[] | select(.name==\"Glasswave-Linux-$VERSION.$EXT\") | .id")
+            if [ -n "$OLD" ]; then gh api -X DELETE repos/${{ github.repository }}/releases/assets/$OLD; fi
+            gh api -X PATCH repos/${{ github.repository }}/releases/assets/$NEW -f name=Glasswave-Linux.$EXT
+          done
+          gh release edit linux --title "Glasswave for Linux $VERSION"

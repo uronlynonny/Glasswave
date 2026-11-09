@@ -90,7 +90,7 @@ object Active {
 
     private fun sendLive(state: String): Thread = Thread {
         runCatching {
-            val body = JSONObject().put("id", id()).put("p", if (Os.isMac) "mac" else "windows").put("v", Updater.currentVersion()).put("s", state)
+            val body = JSONObject().put("id", id()).put("p", Os.system.lowercase()).put("v", Updater.currentVersion()).put("s", state)
                 .put("os", osName()).toString()
             val req = Request.Builder().url("https://ntfy.sh/$LIVE_TOPIC")
                 .post(body.toRequestBody("application/json".toMediaType()))

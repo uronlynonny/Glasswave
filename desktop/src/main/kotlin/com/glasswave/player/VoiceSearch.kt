@@ -104,7 +104,8 @@ fun VoiceSearch(onResult: (String) -> Unit, onClose: () -> Unit) {
                         busy = false
                         level = 0f
                         status = if (e is IllegalArgumentException || e is javax.sound.sampled.LineUnavailableException)
-                            "No microphone found. Plug one in, or allow apps to use it in Windows Settings › Privacy › Microphone."
+                            if (Os.isWindows) "No microphone found. Plug one in, or allow apps to use it in Windows Settings › Privacy › Microphone."
+                            else "No microphone found. Plug one in, or check your system's sound settings."
                         else "Something went wrong. Click the mic to try again."
                     }
                 }

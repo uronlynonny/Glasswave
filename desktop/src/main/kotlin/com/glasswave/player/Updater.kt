@@ -143,6 +143,10 @@ object Updater {
             if (tell) status = "On a Mac, new versions come from the Glasswave website for now."
             return
         }
+        if (!Os.isWindows) {
+            if (tell) status = "On Linux, get new versions from Glasswave's releases on GitHub."
+            return
+        }
         if (fromStore) {
             if (tell) {
                 status = "Glasswave updates through the Microsoft Store."
@@ -174,7 +178,7 @@ object Updater {
     }
 
     fun checkIfDue() {
-        if (fromStore || Os.isMac) return
+        if (fromStore || !Os.isWindows) return
         if (System.currentTimeMillis() - lastChecked > 3600_000L) check()
     }
 
@@ -300,7 +304,7 @@ object Updater {
 
     /** Called as the app closes: a downloaded update installs silently, ready for next time. */
     fun installOnExit() {
-        if (fromStore || Os.isMac) return
+        if (fromStore || !Os.isWindows) return
         ready?.let { runInstaller(it, reopen = false) }
     }
 

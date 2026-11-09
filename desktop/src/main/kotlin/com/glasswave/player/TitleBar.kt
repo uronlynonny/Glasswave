@@ -116,6 +116,8 @@ object TitleBar {
     fun install(window: java.awt.Window) {
         if (proc != null || macBar || System.getProperty("gw.nativeTitleBar") != null) return
         if (Os.isMac) return installMac(window)
+        // Linux: the desktop's own title bar stays (each desktop draws its own).
+        if (!Os.isWindows) return
         runCatching {
             val u = Native.load("user32", User32::class.java)
             val hwnd = Native.getWindowPointer(window) ?: return
