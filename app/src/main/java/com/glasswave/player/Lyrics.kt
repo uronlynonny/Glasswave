@@ -61,6 +61,18 @@ object LyricsRepo {
 
     private fun cleanTitle(t: String) = t.replace(junk, "").replace(feat, "").trim()
     private fun mainArtist(a: String) = a.replace(" - Topic", "").split(",", "&", " x ", " X ", " and ").first().trim()
+
+    /**
+     * Uploads named "Artist - Title" (or "Artist Feat. Someone - Title"): just the title. Otherwise
+     * "Migos Feat. Juice WRLD - Anti Social" lost everything after "Feat." and was looked up as "Migos".
+     */
+    private fun withoutArtist(title: String, artist: String): String {
+        val cut = title.indexOf(" - ")
+        if (cut <= 0) return title
+        val before = title.substring(0, cut).lowercase()
+        val lead = mainArtist(artist).lowercase()
+        return if (lead.length > 1 && before.contains(lead)) title.substring(cut + 3).trim().ifEmpty { title } else title
+    }
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
     /** Lookups running right now, so opening the lyrics joins one already under way. */
@@ -90,7 +102,7 @@ object LyricsRepo {
         val old = readSaved(url)
         if (old != null && savedVersion(url) >= SAVE_VERSION) { cache[url] = old; return@withContext old }
         if (url in none) return@withContext null
-        val t = cleanTitle(title)
+        val t = cleanTitle(withoutArtist(title, artist))
         val a = mainArtist(artist)
         // Songs added from YouTube Music playlists often come without a length. Without one, every
         // version of a song looks the same (album, live, sped up, other cuts), so look it up first.
