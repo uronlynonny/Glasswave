@@ -1,5 +1,5 @@
 {
-  "lastTime": 1794225190,
+  "lastTime": 1794229385,
   "totals": {
     "visits": 136,
     "siteDownloads": 41,
@@ -2388,9 +2388,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1794233989,
+      "v": 0,
+      "d": 0,
+      "a": 0
     }
   ],
-  "updated": 1794229383,
+  "updated": 1794233989,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -2525,7 +2531,7 @@
       "m": "\"What I Want\" by Yeat, BNYX® wouldn't play (tried 4 times).\nUnknownHostException: No such host is known (rr2---sn-5pguxaob-5c8l.googlevideo.com)\n\nWindows 11 (10.0), Glasswave for Windows 1.2.49\nhttps://music.youtube.com/watch?v=YUWy-mKIMnc"
     }
   ],
-  "lastActiveTime": 1794225522,
+  "lastActiveTime": 1794233414,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -2854,19 +2860,23 @@
         "02cea2b1-c3ca-4489-b81f-7d00461ab459",
         "12eb59e5-62aa-40ac-bc7d-f146ab2df32e",
         "1b697a4b-8989-45c1-b384-47c543c1e598",
+        "36d58cc1-c393-490b-9440-241580552d0a",
         "6ce16e7b-e680-44af-8dda-4211206548d5",
         "6e949a65-80a1-4177-b071-c7066ee5b105",
-        "b40577e8-17f8-4460-839e-0cef28e7acc4"
+        "b40577e8-17f8-4460-839e-0cef28e7acc4",
+        "f7c66feb-e1f0-4ad2-a3a3-b5ee965c3749"
       ],
       "w": [
-        "1acf6e0b-6faa-44ef-aab2-085f9b135094"
+        "1acf6e0b-6faa-44ef-aab2-085f9b135094",
+        "5314926c-62ca-4c50-98d6-e2455e0df570",
+        "d8dfbeea-6046-4a55-beb1-39a0e683240f"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 6,
-      "w": 1
+      "a": 8,
+      "w": 3
     },
     "week": {
       "a": 35,
@@ -2959,8 +2969,8 @@
       },
       {
         "d": "2026-11-09",
-        "a": 6,
-        "w": 1
+        "a": 8,
+        "w": 3
       }
     ]
   },
