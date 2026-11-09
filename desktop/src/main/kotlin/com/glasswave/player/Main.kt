@@ -326,6 +326,7 @@ fun main() {
     // Already open: that window comes to the front instead of a second copy starting.
     if (!SingleInstance.claim()) return
     startUp()
+    GpuReset.start()
     application {
         val ps = remember { PlayerState().also { p -> boot("player") { p.connect(); GlobalKeys.start(p) } } }
         // The keyboard's media keys go to Glasswave while it has a song loaded.
@@ -407,6 +408,7 @@ fun main() {
                 window.minimumSize = java.awt.Dimension(420, 640)
                 if (Os.isWindows) glassTitleBar(window)
                 TitleBar.install(window)
+                GpuReset.watch(window)
             }
             LaunchedEffect(Unit) {
                 while (true) {
@@ -452,6 +454,9 @@ fun main() {
                 state.isMinimized = false
                 window.toFront()
                 window.requestFocus()
+                // A fresh drawing surface too, in case it went white while away (see GpuReset).
+                kotlinx.coroutines.delay(150)
+                GpuReset.rebuild(window, "opened from the tray")
             }
             val density = LocalDensity.current.density
             val focusManager = androidx.compose.ui.platform.LocalFocusManager.current

@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -151,6 +152,8 @@ object SleepTimer {
     /** When the timer ends (milliseconds since 1970), or 0 when off. */
     var endsAt by mutableLongStateOf(0L); private set
     var endOfSong by mutableStateOf(false); private set
+    /** How long the timer was set for (minutes), so its choice stays highlighted. */
+    var minutes by mutableIntStateOf(0); private set
 
     private val fire = Runnable {
         player?.pause()
@@ -160,6 +163,7 @@ object SleepTimer {
     fun start(minutes: Int) {
         cancel()
         endsAt = System.currentTimeMillis() + minutes * 60_000L
+        this.minutes = minutes
         handler.postDelayed(fire, minutes * 60_000L)
     }
 

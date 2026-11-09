@@ -760,19 +760,19 @@ private fun MoreSheet(ps: PlayerState, fp: Backdrop, colors: CoverColors, openEq
             AnimatedVisibility(showSleep) {
                 Column {
                     SheetLabel("Sleep timer")
+                    val times = listOf("15 min" to 15, "30 min" to 30, "45 min" to 45, "1 hour" to 60, "2 hours" to 120, "3 hours" to 180, "4 hours" to 240, "6 hours" to 360)
                     ChoiceRow(
-                        listOf("Off", "15 min", "30 min", "45 min", "1 hour", "End of song"),
+                        listOf("Off") + times.map { it.first } + "End of song",
                         when {
                             SleepTimer.endOfSong -> "End of song"
-                            SleepTimer.endsAt > 0 -> ""
+                            SleepTimer.endsAt > 0 -> times.firstOrNull { it.second == SleepTimer.minutes }?.first.orEmpty()
                             else -> "Off"
                         },
                     ) { pick ->
                         when (pick) {
                             "Off" -> SleepTimer.cancel()
                             "End of song" -> SleepTimer.startEndOfSong()
-                            "1 hour" -> SleepTimer.start(60)
-                            else -> SleepTimer.start(pick.substringBefore(' ').toInt())
+                            else -> times.firstOrNull { it.first == pick }?.let { SleepTimer.start(it.second) }
                         }
                     }
                 }

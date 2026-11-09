@@ -205,6 +205,20 @@ object MemScript {
                             System.err.println("GW trayinfo: icon=${Tray.iconShown} tucked=${Tray.tucked} mainVisible=${main.isVisible} minimized=${main.extendedState and java.awt.Frame.ICONIFIED != 0} tip=${Tray.icon?.toolTip} mini=${Mini.shown} windows=[$all]")
                         }
                         "trayshow" -> onUi { SingleInstance.showMain() }
+                        // traymenu x y: a right-click on the tray icon at that spot. traymenuinfo: whether it's open and where.
+                        "traymenu" -> onUi { val (x, y) = arg.split(" ").map { it.toInt() }; TrayMenu.openAt(x, y) }
+                        "traymenuinfo" -> onUi {
+                            val m = java.awt.Window.getWindows().firstOrNull { (it as? java.awt.Dialog)?.title == "Glasswave menu" }
+                            System.err.println("GW traymenu: open=${TrayMenu.open} window=${m?.isVisible} bounds=${m?.bounds} focused=${m?.isFocused}")
+                        }
+                        // menushot name: a picture of the tray menu.
+                        "menushot" -> {
+                            var bmp: org.jetbrains.skia.Bitmap? = null
+                            onUi { bmp = java.awt.Window.getWindows().firstOrNull { (it as? java.awt.Dialog)?.title == "Glasswave menu" }?.let { GpuMemory.findLayer(it) }?.screenshot() }
+                            File(file.parentFile, "$arg.png").writeBytes(org.jetbrains.skia.Image.makeFromBitmap(bmp!!).encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)!!.bytes)
+                        }
+                        // rebuild: a fresh drawing surface for every window, as after the PC wakes (see GpuReset).
+                        "rebuild" -> onUi { val before = Rebuilds.count; GpuReset.rebuildAll("test"); System.err.println("GW rebuild: ${Rebuilds.count - before} windows") }
                         // minimove x y: puts the mini player's card at that spot on screen.
                         "minimove" -> onUi {
                             val (x, y) = arg.split(" ").map { it.toInt() }
