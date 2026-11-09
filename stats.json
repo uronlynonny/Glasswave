@@ -1,11 +1,11 @@
 {
-  "lastTime": 1794256133,
+  "lastTime": 1794259215,
   "totals": {
     "visits": 137,
     "siteDownloads": 42,
-    "apk": 344
+    "apk": 347
   },
-  "apkTotal": 307,
+  "apkTotal": 310,
   "hours": [
     {
       "t": 1792763089,
@@ -2430,9 +2430,15 @@
       "v": 1,
       "d": 1,
       "a": 1
+    },
+    {
+      "t": 1794260789,
+      "v": 0,
+      "d": 0,
+      "a": 3
     }
   ],
-  "updated": 1794257416,
+  "updated": 1794260789,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -2565,9 +2571,37 @@
     {
       "t": 1794161378,
       "m": "\"What I Want\" by Yeat, BNYX® wouldn't play (tried 4 times).\nUnknownHostException: No such host is known (rr2---sn-5pguxaob-5c8l.googlevideo.com)\n\nWindows 11 (10.0), Glasswave for Windows 1.2.49\nhttps://music.youtube.com/watch?v=YUWy-mKIMnc"
+    },
+    {
+      "t": 1794258620,
+      "m": "\"Get Lucky (feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.51\nhttps://music.youtube.com/watch?v=4D7u5KF7SP8"
+    },
+    {
+      "t": 1794258626,
+      "m": "\"Get Lucky (Radio Edit - feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.51\nhttps://music.youtube.com/watch?v=Rgrt_8mXrK8"
+    },
+    {
+      "t": 1794258633,
+      "m": "\"GET LUCKY!\" by YdBB wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.51\nhttps://music.youtube.com/watch?v=4-D_Xos8frA"
+    },
+    {
+      "t": 1794258639,
+      "m": "\"One More Time (12 Mix)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.51\nhttps://music.youtube.com/watch?v=bmjsUsS8QuM"
+    },
+    {
+      "t": 1794259203,
+      "m": "\"Get Lucky (feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.51\nhttps://music.youtube.com/watch?v=4D7u5KF7SP8"
+    },
+    {
+      "t": 1794259209,
+      "m": "\"Get Lucky (Radio Edit - feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.51\nhttps://music.youtube.com/watch?v=Rgrt_8mXrK8"
+    },
+    {
+      "t": 1794259215,
+      "m": "\"GET LUCKY!\" by YdBB wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.51\nhttps://music.youtube.com/watch?v=4-D_Xos8frA"
     }
   ],
-  "lastActiveTime": 1794256146,
+  "lastActiveTime": 1794259122,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -2894,12 +2928,14 @@
     "2026-11-09": {
       "a": [
         "02cea2b1-c3ca-4489-b81f-7d00461ab459",
+        "0c37d4d7-f086-4867-84fa-9fc5320d57d8",
         "12eb59e5-62aa-40ac-bc7d-f146ab2df32e",
         "1b697a4b-8989-45c1-b384-47c543c1e598",
         "36d58cc1-c393-490b-9440-241580552d0a",
         "6ce16e7b-e680-44af-8dda-4211206548d5",
         "6e949a65-80a1-4177-b071-c7066ee5b105",
         "8cde233d-ab15-4b47-8ce0-d64751f652dd",
+        "9eca4f31-9444-4f04-9efb-ef119d06f154",
         "b40577e8-17f8-4460-839e-0cef28e7acc4",
         "dc31ecd0-296d-4ab2-bec3-c44146ffebd2",
         "f7c66feb-e1f0-4ad2-a3a3-b5ee965c3749"
@@ -2907,23 +2943,25 @@
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
         "5314926c-62ca-4c50-98d6-e2455e0df570",
+        "73d3f55c-82d2-4126-818b-e41117b9ad94",
         "d8dfbeea-6046-4a55-beb1-39a0e683240f",
+        "e9bfc071-ff3a-48df-b808-a0003112bd7e",
         "ed231edb-5cff-47a4-b2b3-7a9b3b6c8355"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 10,
-      "w": 4
+      "a": 12,
+      "w": 6
     },
     "week": {
-      "a": 36,
-      "w": 8
+      "a": 37,
+      "w": 10
     },
     "month": {
-      "a": 83,
-      "w": 14
+      "a": 84,
+      "w": 16
     },
     "daily": [
       {
@@ -3008,8 +3046,8 @@
       },
       {
         "d": "2026-11-09",
-        "a": 10,
-        "w": 4
+        "a": 12,
+        "w": 6
       }
     ]
   },
