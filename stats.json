@@ -1,11 +1,11 @@
 {
-  "lastTime": 1794264166,
+  "lastTime": 1794268816,
   "totals": {
     "visits": 137,
     "siteDownloads": 42,
-    "apk": 349
+    "apk": 350
   },
-  "apkTotal": 312,
+  "apkTotal": 313,
   "hours": [
     {
       "t": 1792763089,
@@ -2448,9 +2448,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1794272106,
+      "v": 0,
+      "d": 0,
+      "a": 1
     }
   ],
-  "updated": 1794267473,
+  "updated": 1794272106,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -2611,9 +2617,45 @@
     {
       "t": 1794259215,
       "m": "\"GET LUCKY!\" by YdBB wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.51\nhttps://music.youtube.com/watch?v=4-D_Xos8frA"
+    },
+    {
+      "t": 1794267632,
+      "m": "\"Get Lucky (feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.51\nhttps://music.youtube.com/watch?v=4D7u5KF7SP8"
+    },
+    {
+      "t": 1794267638,
+      "m": "\"Get Lucky (Radio Edit - feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.51\nhttps://music.youtube.com/watch?v=Rgrt_8mXrK8"
+    },
+    {
+      "t": 1794267643,
+      "m": "\"GET LUCKY!\" by YdBB wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.51\nhttps://music.youtube.com/watch?v=4-D_Xos8frA"
+    },
+    {
+      "t": 1794268045,
+      "m": "\"Get Lucky (feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.52\nhttps://music.youtube.com/watch?v=4D7u5KF7SP8"
+    },
+    {
+      "t": 1794268051,
+      "m": "\"Get Lucky (Radio Edit - feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.52\nhttps://music.youtube.com/watch?v=Rgrt_8mXrK8"
+    },
+    {
+      "t": 1794268057,
+      "m": "\"Harder, Better, Faster, Stronger\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.52\nhttps://music.youtube.com/watch?v=JhulBGMA7G4"
+    },
+    {
+      "t": 1794268805,
+      "m": "\"Get Lucky (feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.53\nhttps://music.youtube.com/watch?v=4D7u5KF7SP8"
+    },
+    {
+      "t": 1794268811,
+      "m": "\"Get Lucky (Radio Edit - feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.53\nhttps://music.youtube.com/watch?v=Rgrt_8mXrK8"
+    },
+    {
+      "t": 1794268816,
+      "m": "\"GET LUCKY!\" by YdBB wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.53\nhttps://music.youtube.com/watch?v=4-D_Xos8frA"
     }
   ],
-  "lastActiveTime": 1794259122,
+  "lastActiveTime": 1794269235,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -2944,6 +2986,7 @@
         "12eb59e5-62aa-40ac-bc7d-f146ab2df32e",
         "1b697a4b-8989-45c1-b384-47c543c1e598",
         "36d58cc1-c393-490b-9440-241580552d0a",
+        "6cdab9c0-ec8e-4ebe-88a1-b5509a71ea2b",
         "6ce16e7b-e680-44af-8dda-4211206548d5",
         "6e949a65-80a1-4177-b071-c7066ee5b105",
         "8cde233d-ab15-4b47-8ce0-d64751f652dd",
@@ -2953,27 +2996,36 @@
         "f7c66feb-e1f0-4ad2-a3a3-b5ee965c3749"
       ],
       "w": [
+        "042de431-f8cf-41e1-9157-04b9d595dc31",
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
         "5314926c-62ca-4c50-98d6-e2455e0df570",
         "73d3f55c-82d2-4126-818b-e41117b9ad94",
+        "b0fbe1c8-1fc2-4d1f-9647-00b51445a35e",
+        "b272a327-d470-4a96-9381-b5220206f5ed",
         "d8dfbeea-6046-4a55-beb1-39a0e683240f",
         "e9bfc071-ff3a-48df-b808-a0003112bd7e",
+        "ed231edb-5cff-47a4-b2b3-7a9b3b6c8355"
+      ]
+    },
+    "2026-11-10": {
+      "w": [
+        "1acf6e0b-6faa-44ef-aab2-085f9b135094",
         "ed231edb-5cff-47a4-b2b3-7a9b3b6c8355"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 12,
-      "w": 6
+      "a": 0,
+      "w": 2
     },
     "week": {
-      "a": 37,
-      "w": 10
+      "a": 35,
+      "w": 12
     },
     "month": {
-      "a": 84,
-      "w": 16
+      "a": 85,
+      "w": 19
     },
     "daily": [
       {
@@ -3058,8 +3110,13 @@
       },
       {
         "d": "2026-11-09",
-        "a": 12,
-        "w": 6
+        "a": 13,
+        "w": 9
+      },
+      {
+        "d": "2026-11-10",
+        "a": 0,
+        "w": 2
       }
     ]
   },
