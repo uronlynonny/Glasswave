@@ -1,11 +1,11 @@
 {
-  "lastTime": 1794307892,
+  "lastTime": 1794311259,
   "totals": {
     "visits": 138,
     "siteDownloads": 42,
-    "apk": 377
+    "apk": 379
   },
-  "apkTotal": 340,
+  "apkTotal": 342,
   "hours": [
     {
       "t": 1792763089,
@@ -2514,9 +2514,15 @@
       "v": 0,
       "d": 0,
       "a": 4
+    },
+    {
+      "t": 1794315371,
+      "v": 0,
+      "d": 0,
+      "a": 2
     }
   ],
-  "updated": 1794311257,
+  "updated": 1794315371,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -2739,7 +2745,7 @@
       "m": "\"One More Time (12 Mix)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.53\nhttps://music.youtube.com/watch?v=bmjsUsS8QuM"
     }
   ],
-  "lastActiveTime": 1794307969,
+  "lastActiveTime": 1794313235,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -3095,6 +3101,7 @@
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
         "1ed204ba-1d0f-4fc0-8796-8304e99163c8",
+        "5314926c-62ca-4c50-98d6-e2455e0df570",
         "5ea3e644-f0d2-4b07-a691-69e51d72c0f2",
         "b2e637cf-a83b-42e0-9192-60283fd8f9bc",
         "ed231edb-5cff-47a4-b2b3-7a9b3b6c8355"
@@ -3102,6 +3109,7 @@
       "a": [
         "12eb59e5-62aa-40ac-bc7d-f146ab2df32e",
         "36d58cc1-c393-490b-9440-241580552d0a",
+        "42a62c8a-17e4-430a-af10-195aa727fd4b",
         "6cdab9c0-ec8e-4ebe-88a1-b5509a71ea2b",
         "6ce16e7b-e680-44af-8dda-4211206548d5",
         "88302033-2b32-4afc-b11f-33032ffd292b",
@@ -3114,15 +3122,15 @@
   },
   "active": {
     "today": {
-      "a": 9,
-      "w": 5
+      "a": 10,
+      "w": 6
     },
     "week": {
-      "a": 37,
+      "a": 38,
       "w": 14
     },
     "month": {
-      "a": 87,
+      "a": 88,
       "w": 21
     },
     "daily": [
@@ -3213,8 +3221,8 @@
       },
       {
         "d": "2026-11-10",
-        "a": 9,
-        "w": 5
+        "a": 10,
+        "w": 6
       }
     ]
   },
