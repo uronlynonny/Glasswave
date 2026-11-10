@@ -218,7 +218,13 @@ fun FullPlayer(ps: PlayerState, colors: CoverColors, onClose: () -> Unit, openEq
     val corner by animateDpAsState(if (dragY.value > 1f) 36.dp else 0.dp, smooth(120), label = "corner")
     var sheet by remember { mutableStateOf(Sheet.NONE) }
     var lyrics by remember { mutableStateOf(false) }
-    androidx.activity.compose.BackHandler(enabled = lyrics) { lyrics = false }
+    // Back with the player open shrinks the player and nothing else: the page under it (Settings,
+    // a playlist...) stays as it was. Registered here, after the pages, so it comes before their
+    // own Back. Only a song menu that's open over the player closes first.
+    androidx.activity.compose.BackHandler(enabled = !Menus.anyOpen) { onClose() }
+    // Inside the player: the queue or the ••• sheet, and the lyrics, close before the player does.
+    androidx.activity.compose.BackHandler(enabled = sheet != Sheet.NONE && !Menus.anyOpen) { sheet = Sheet.NONE }
+    androidx.activity.compose.BackHandler(enabled = lyrics && sheet == Sheet.NONE && !Menus.anyOpen) { lyrics = false }
 
     Box(
         Modifier
