@@ -1,11 +1,11 @@
 {
-  "lastTime": 1794286146,
+  "lastTime": 1794291912,
   "totals": {
     "visits": 138,
     "siteDownloads": 42,
-    "apk": 353
+    "apk": 355
   },
-  "apkTotal": 316,
+  "apkTotal": 318,
   "hours": [
     {
       "t": 1792763089,
@@ -2484,9 +2484,15 @@
       "v": 0,
       "d": 0,
       "a": 0
+    },
+    {
+      "t": 1794293976,
+      "v": 0,
+      "d": 0,
+      "a": 2
     }
   ],
-  "updated": 1794289842,
+  "updated": 1794293976,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -2683,9 +2689,21 @@
     {
       "t": 1794268816,
       "m": "\"GET LUCKY!\" by YdBB wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.53\nhttps://music.youtube.com/watch?v=4-D_Xos8frA"
+    },
+    {
+      "t": 1794291901,
+      "m": "\"Get Lucky (feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: No playable audio found\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.53\nhttps://music.youtube.com/watch?v=4D7u5KF7SP8"
+    },
+    {
+      "t": 1794291907,
+      "m": "\"Get Lucky (Radio Edit - feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.53\nhttps://music.youtube.com/watch?v=Rgrt_8mXrK8"
+    },
+    {
+      "t": 1794291912,
+      "m": "\"One More Time (12 Mix)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.53\nhttps://music.youtube.com/watch?v=bmjsUsS8QuM"
     }
   ],
-  "lastActiveTime": 1794284749,
+  "lastActiveTime": 1794291817,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -3040,26 +3058,29 @@
     "2026-11-10": {
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
+        "5ea3e644-f0d2-4b07-a691-69e51d72c0f2",
         "ed231edb-5cff-47a4-b2b3-7a9b3b6c8355"
       ],
       "a": [
+        "6cdab9c0-ec8e-4ebe-88a1-b5509a71ea2b",
         "88302033-2b32-4afc-b11f-33032ffd292b",
+        "b40577e8-17f8-4460-839e-0cef28e7acc4",
         "ce5a14a9-a93c-4b3f-a066-261a7f38a11e"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 2,
-      "w": 2
+      "a": 4,
+      "w": 3
     },
     "week": {
       "a": 37,
-      "w": 12
+      "w": 13
     },
     "month": {
       "a": 87,
-      "w": 19
+      "w": 20
     },
     "daily": [
       {
@@ -3149,8 +3170,8 @@
       },
       {
         "d": "2026-11-10",
-        "a": 2,
-        "w": 2
+        "a": 4,
+        "w": 3
       }
     ]
   },
