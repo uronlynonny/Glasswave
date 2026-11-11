@@ -33,8 +33,11 @@ import org.json.JSONObject
  * PC. Everyone hears the same song at the same spot (each device streams it itself), anyone can add
  * songs, and the host can remove people or end it.
  *
- * Same relay as [Sync] (ntfy.sh), no Glasswave server. The code is the secret: the key and the relay
- * channel are worked out from it, so only people with the code can read or send. No sign-in needed.
+ * On the same Wi-Fi or hotspot the devices talk straight to each other ([JamLan]): no internet relay,
+ * no daily limit. Someone further away is reached through the same relay as [Sync] (ntfy.sh, which
+ * allows about 250 messages a day per internet connection), so only what they need goes there, and
+ * only while they're in the Jam. The code is the secret: the key and the relay channel are worked out
+ * from it, so only people with the code can read or send. No sign-in needed.
  *
  * The host's own player is the truth. It says what's playing ("st": the song, Up next, play/pause and
  * where it was at a given moment) whenever that changes. Members make their players match, and turn
@@ -74,7 +77,14 @@ object Jam {
     enum class Role { NONE, HOST, MEMBER }
 
     /** Someone in the Jam. [device]: "Windows PC", "Pixel 8". */
-    data class Member(val id: String, val name: String, val device: String, val kind: String, val photo: String?, val host: Boolean, val heardAt: Long)
+    data class Member(
+        val id: String, val name: String, val device: String, val kind: String, val photo: String?, val host: Boolean, val heardAt: Long,
+        /** Connected straight across the Wi-Fi (else through the relay). */
+        val lan: Boolean = false,
+    )
+
+    /** Not heard from for a while (straight across the Wi-Fi they check in every few seconds; over the relay, every 25 minutes). */
+    fun isAway(m: Member, now: Long): Boolean = !m.host && now - m.heardAt > (if (m.lan) 60_000L else 35 * 60_000L)
 
     var role by mutableStateOf(Role.NONE)
         private set
@@ -122,9 +132,14 @@ object Jam {
 
     fun init(context: Context) {
         prefs = context.getSharedPreferences("jam", Context.MODE_PRIVATE)
+        syncPrefs = context.getSharedPreferences("sync", Context.MODE_PRIVATE)
         nearbyOn = prefs.getBoolean("nearby", true)
         usedOnce = prefs.getBoolean("used", false)
+        JamNearby.init(prefs)
     }
+
+    /** Sync's settings: the relay's daily messages are shared with it (see [budget]). */
+    private lateinit var syncPrefs: SharedPreferences
 
     /** This device in Jams (also how nearby Jams tell their own announcements apart). */
     internal val deviceId: String get() = if (::prefs.isInitialized) myId else ""
@@ -136,7 +151,7 @@ object Jam {
     fun updateNearby(on: Boolean) {
         nearbyOn = on
         if (::prefs.isInitialized) prefs.edit().putBoolean("nearby", on).apply()
-        JamNearby.hosting(isHost && on)
+        JamNearby.hosting(isHost)
     }
 
     /** The Jam panel has been opened on this device before (nearby Jams are only looked for after that). */
@@ -170,6 +185,7 @@ object Jam {
         val k = MessageDigest.getInstance("SHA-256").digest("glasswave-jam-v1|$c".toByteArray())
         key = SecretKeySpec(k, "AES")
         topic = "gwj-" + sha("topic|" + k.joinToString("") { "%02x".format(it) }).take(32)
+        lanId = sha("lan|" + k.joinToString("") { "%02x".format(it) }).take(16)
         code = c.chunked(3).joinToString("-")
     }
 
@@ -206,8 +222,11 @@ object Jam {
         hostState = null
         hostDirtyAt = 0L
         addedBy = emptyMap()
+        everRemote = false
+        // The relay is only listened to (free): someone further away may join through it.
         listen(backlog = null)
-        JamNearby.hosting(nearbyOn)
+        lanStart()
+        JamNearby.hosting(true)
         Menus.say("Jam started. Share the code so others can join")
     }
 
@@ -224,7 +243,11 @@ object Jam {
         expTrack = null; lastTickAt = 0L; selfUntil = 0L
         snapshot = null
         pending.clear(); requestedAdds.clear()
-        // The last hour: whatever the host said lately shows straight away.
+        relayJoinSent = false; lanLostAt = 0L; lastProbeAt = 0L
+        // Looks for the host on this Wi-Fi first; the relay is only written to if it isn't here.
+        lanStart()
+        probe()
+        // The last hour: whatever the host said lately shows straight away (reading is free).
         listen(backlog = "1h")
     }
 
@@ -232,7 +255,7 @@ object Jam {
     fun leave() {
         when (role) {
             Role.NONE -> return
-            Role.HOST -> { sendLater({ JSONObject().put("ty", "end") }, essential = true); finish("Jam ended") }
+            Role.HOST -> { sendLater({ JSONObject().put("ty", "end") }, essential = true, relay = anyRemote() || everRemote); finish("Jam ended") }
             Role.MEMBER -> { sendLater({ JSONObject().put("ty", "bye").put("to", hostId) }, essential = true); finish("You left the Jam") }
         }
     }
@@ -244,7 +267,8 @@ object Jam {
         banned += id
         publishMembers()
         markHostDirty()
-        sendLater({ JSONObject().put("ty", "kick").put("to", id) }, essential = true)
+        sendLater({ JSONObject().put("ty", "kick").put("to", id) }, essential = true, relay = links[id] == null)
+        dropLink(id)
         Menus.say("${m.name} was removed from the Jam")
     }
 
@@ -257,13 +281,20 @@ object Jam {
 
     /** App closing: tell the others (blocking, a moment at most). */
     fun goodbye() {
-        if (key == null) return
+        val k = key ?: return
+        val t = topic ?: return
         val o = when (role) {
             Role.HOST -> JSONObject().put("ty", "end")
             Role.MEMBER -> JSONObject().put("ty", "bye").put("to", hostId)
             Role.NONE -> return
         }
-        runCatching { send(o, essential = true) }
+        val relay = if (isHost) anyRemote() || everRemote else hostLink == null
+        runCatching {
+            val st = stamp(o)
+            val body = seal(st, k)
+            (links.values + listOfNotNull(hostLink)).forEach { it.sendNow(body) }
+            if (relay) post(t, k, st, essential = true)
+        }
     }
 
     private fun begin(c: String) {
@@ -290,6 +321,7 @@ object Jam {
     private fun finish(message: String?) {
         val wasMember = role == Role.MEMBER
         if (role == Role.HOST) JamNearby.hosting(false)
+        lanStop()
         generation++
         listener?.interrupt()
         listener = null
@@ -318,7 +350,7 @@ object Jam {
         message?.let { Menus.say(it) }
     }
 
-    private fun me(host: Boolean) = Member(myId, myName(), SyncPlatform.deviceName(), SyncPlatform.kind, Profile.photo, host, elapsed())
+    private fun me(host: Boolean) = Member(myId, myName(), SyncPlatform.deviceName(), SyncPlatform.kind, Profile.photo, host, elapsed(), lan = true)
 
     private fun publishMembers() {
         members = members0.values.sortedWith(compareByDescending<Member> { it.host })
@@ -328,12 +360,17 @@ object Jam {
 
     @Volatile private var lastSentAt = 0L
 
-    /** Messages sent today. The relay allows about 250 a day per internet connection, shared with Sync. */
+    /**
+     * Messages sent through the relay today. It allows about 250 a day per internet connection, and
+     * Sync uses it too, so Jam stops at 160 for the two together (Sync can still go on to 200).
+     */
+    @Synchronized
     private fun budget(essential: Boolean): Boolean {
         val day = System.currentTimeMillis() / 86_400_000
         if (prefs.getLong("budget_day", -1) != day) prefs.edit().putLong("budget_day", day).putInt("budget", 0).apply()
         val used = prefs.getInt("budget", 0)
-        if (used >= (if (essential) 210 else 190)) return false
+        val sync = if (::syncPrefs.isInitialized && syncPrefs.getLong("budget_day", -1) == day) syncPrefs.getInt("budget", 0) else 0
+        if (used + sync >= (if (essential) 160 else 110)) return false
         prefs.edit().putInt("budget", used + 1).apply()
         return true
     }
@@ -366,11 +403,39 @@ object Jam {
     /** The relay's address. */
     internal val relay: String get() = RELAY
 
-    /** Blocking. Signs it with who's sending, and posts it to the Jam's channel. */
-    private fun send(o: JSONObject, essential: Boolean = false): Boolean {
+    /**
+     * Blocking. Signs it with who's sending, and sends it: straight to everyone connected across the
+     * Wi-Fi, and through the relay when [relay] (someone isn't connected straight).
+     */
+    private fun send(o: JSONObject, essential: Boolean = false, relay: Boolean = true, lan: List<JamLan.Link> = lanTargets()): Boolean {
         val t = topic ?: return false
-        return post(t, key ?: return false, stamp(o), essential)
+        val k = key ?: return false
+        val st = stamp(o)
+        var ok = false
+        if (lan.isNotEmpty()) {
+            val body = seal(st, k)
+            for (l in lan) if (l.send(body)) ok = true
+            if (ok) lastLanAt = elapsed()
+        }
+        if (relay) {
+            android.util.Log.i("Glasswave", "Jam: \"${o.optString("ty")}\" through the relay (${if (lan.isEmpty()) "no one connected straight" else "someone isn't"})")
+            ok = post(t, k, st, essential) || ok
+        }
+        return ok
     }
+
+    /** Everyone this device is connected straight to, for this Jam. */
+    private fun lanTargets(): List<JamLan.Link> = if (role == Role.HOST) links.values.toList() else listOfNotNull(hostLink)
+
+    /** Whether a message now needs the relay: someone in the Jam isn't connected straight. */
+    private fun viaRelay(): Boolean = when (role) {
+        Role.HOST -> anyRemote()
+        Role.MEMBER -> hostLink == null
+        Role.NONE -> false
+    }
+
+    /** The host: someone in the Jam is only reachable through the relay. */
+    private fun anyRemote(): Boolean = members0.values.any { !it.host && links[it.id] == null }
 
     /** Blocking. Seals [o] with [k] and posts it to relay channel [t] (counted against the day's messages). */
     internal fun post(t: String, k: SecretKeySpec, o: JSONObject, essential: Boolean = false): Boolean {
@@ -394,17 +459,33 @@ object Jam {
         }.getOrDefault(false)
         if (ok) {
             lastSentAt = elapsed()
+            lastRelayAt = elapsed()
             main.post { if (status == RELAY_FULL) status = null }
         }
         return ok
     }
 
-    private fun sendLater(o: () -> JSONObject?, essential: Boolean = false, done: ((Boolean) -> Unit)? = null) {
+    /**
+     * Sends on the Jam's thread. Who it goes to is decided now (on the main thread): leaving clears
+     * the connections straight after, and the goodbye must still reach them.
+     */
+    private fun sendLater(
+        o: () -> JSONObject?, essential: Boolean = false, relay: Boolean = viaRelay(),
+        lan: List<JamLan.Link> = lanTargets(), done: ((Boolean) -> Unit)? = null,
+    ) {
         if (key == null) return
         io.execute {
-            val ok = o()?.let { runCatching { send(it, essential) }.getOrDefault(false) } ?: false
+            val ok = o()?.let { runCatching { send(it, essential, relay, lan) }.getOrDefault(false) } ?: false
             done?.let { main.post { it(ok) } }
         }
+    }
+
+    /** Straight across the Wi-Fi only (free, so as often as needed). */
+    private fun sendLan(o: JSONObject) = sendLater({ o }, relay = false)
+
+    /** Sends on one connection only (before it's known to be the Jam's). */
+    private fun sendOn(l: JamLan.Link, o: JSONObject) {
+        io.execute { val k = key ?: return@execute; runCatching { l.send(seal(stamp(o), k)) } }
     }
 
     // Songs on the wire: [address, title, artist, seconds, cover, added by]
@@ -423,6 +504,14 @@ object Jam {
     // ---------------------------------------------------------------- receiving
 
     private val seenMids = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
+
+    /** Not seen before (the same message can come both straight and through the relay). */
+    private fun fresh(o: JSONObject): Boolean {
+        val mid = o.optString("mid")
+        if (mid.isEmpty()) return true
+        if (seenMids.size > 5_000) seenMids.clear()
+        return seenMids.add(mid)
+    }
 
     /** Keeps a connection to the Jam's channel open, reconnecting when it drops. */
     private fun listen(backlog: String?) {
@@ -452,8 +541,7 @@ object Jam {
                             if (ev.optString("event") != "message") continue
                             lastMessageId = ev.optString("id").ifEmpty { lastMessageId }
                             val o = open(ev.optString("message")) ?: continue
-                            val mid = o.optString("mid")
-                            if (mid.isNotEmpty() && !seenMids.add(mid)) continue
+                            if (!fresh(o)) continue
                             val relayAt = ev.optLong("time") * 1000
                             main.post { if (gen == generation) runCatching { handle(o, relayAt) } }
                         }
@@ -474,14 +562,15 @@ object Jam {
     private fun onConnected(awayMs: Long) {
         connected = true
         if (status?.startsWith("Reconnecting") == true) status = null
-        if (role == Role.MEMBER) {
-            // First time, or back after a while: say hello, and the host answers with where things are.
-            if (!everConnected || awayMs > 30_000 || state == null) sendLater({ JSONObject().put("ty", "join") }, essential = true)
+        // Back on the relay after a while, and not connected straight: say hello again (the first
+        // hello waits a moment for the Wi-Fi, see memberTick).
+        if (role == Role.MEMBER && hostLink == null && relayJoinSent && (awayMs > 30_000 || state == null)) {
+            sendLater({ JSONObject().put("ty", "join") }, essential = true, relay = true)
         }
         everConnected = true
     }
 
-    private fun handle(o: JSONObject, relayAt: Long) {
+    private fun handle(o: JSONObject, relayAt: Long, lan: Boolean = false) {
         val from = o.optString("d")
         if (from.isEmpty() || from == myId) return
         val sentAt = o.optLong("ts")
@@ -489,7 +578,7 @@ object Jam {
         val age = (JamClock.now() - sentAt).let { if (sentAt <= 0 || it < -60_000) JamClock.now() - relayAt else it }.coerceAtLeast(0)
         val ty = o.optString("ty")
         when (role) {
-            Role.HOST -> hostHandle(o, from, ty, age)
+            Role.HOST -> hostHandle(o, from, ty, age, lan)
             Role.MEMBER -> memberHandle(o, from, ty, age)
             Role.NONE -> {}
         }
@@ -514,15 +603,21 @@ object Jam {
         if (hostDirtyAt == 0L || at < hostDirtyAt) hostDirtyAt = at
     }
 
-    private fun hostHandle(o: JSONObject, from: String, ty: String, age: Long) {
+    private fun hostHandle(o: JSONObject, from: String, ty: String, age: Long, lan: Boolean) {
         if (from in banned) {
-            if (ty == "join" || ty == "rq") sendLater({ JSONObject().put("ty", "kick").put("to", from) })
+            if (ty == "join" || ty == "rq") {
+                sendLater({ JSONObject().put("ty", "kick").put("to", from) }, relay = !lan)
+                dropLink(from)
+            }
             return
         }
         val name = o.optString("n").ifEmpty { "Someone" }
         fun heard() {
             val known = members0[from]
-            members0[from] = Member(from, name, o.optString("dn"), o.optString("k"), o.optString("ph").ifEmpty { null }, false, elapsed())
+            val direct = lan || links[from] != null
+            members0[from] = Member(from, name, o.optString("dn"), o.optString("k"), o.optString("ph").ifEmpty { null }, false, elapsed(), direct)
+            if (!direct) everRemote = true
+            if (known != null && known.lan != direct) publishMembers()
             if (known == null) {
                 publishMembers()
                 markHostDirty(0)
@@ -532,8 +627,11 @@ object Jam {
         when (ty) {
             "join" -> { if (age > 15 * 60_000) return; heard(); markHostDirty(0) }
             "here" -> { if (age > 15 * 60_000) return; heard() }
+            // How far apart the clocks are (straight across the Wi-Fi): the answer goes straight back.
+            "tq" -> links[from]?.let { l -> sendOn(l, JSONObject().put("ty", "ta").put("to", from).put("t0", o.optLong("t0")).put("t1", JamClock.now())) }
             "bye" -> {
                 members0.remove(from)?.let { if (age < 120_000) Menus.say("${it.name} left the Jam") }
+                dropLink(from)
                 publishMembers()
                 markHostDirty(0)
             }
@@ -583,13 +681,19 @@ object Jam {
     }
 
     private fun hostTick() {
-        if (!connected && everConnected) status = "Reconnecting…" else if (status == "Reconnecting…") status = null
+        val remote = anyRemote()
+        if (!connected && everConnected && remote) status = "Reconnecting…" else if (status == "Reconnecting…") status = null
         val p = player ?: return
         val now = elapsed()
-        // People not heard from in 30 minutes have gone.
-        val gone = members0.values.filter { !it.host && now - it.heardAt > 30 * 60_000 }
+        // A direct connection that's gone quiet (they check in every 10 seconds) has dropped.
+        links.values.filter { now - it.heardAt > 35_000 }.forEach { it.close() }
+        // People who've gone: across the Wi-Fi, 3 minutes after their connection dropped (unless
+        // they're back through the relay); through the relay, after an hour without a word.
+        val gone = members0.values.filter { !it.host && links[it.id] == null && now - it.heardAt > (if (it.lan) 3 * 60_000L else 60 * 60_000L) }
         if (gone.isNotEmpty()) { gone.forEach { members0.remove(it.id) }; publishMembers(); markHostDirty(0) }
         if (members0.size < 2) { hostDirtyAt = 0L; hostState = null; return } // nobody to tell
+        // Still here, for those connected straight (free).
+        if (links.isNotEmpty() && now - lastLanAt > 10_000) { lastLanAt = now; sendLan(JSONObject().put("ty", "pg")) }
         p.normalSpeed()
 
         val t = p.current()
@@ -606,8 +710,9 @@ object Jam {
             val said = if (last.playing) last.posMs + (now - last.atElapsed) else last.posMs
             if (kotlin.math.abs(pos - said) > 1_500) markHostDirty(0)
         }
-        // Every 4 minutes anyway, so members know the host is still there.
-        if (now - lastSentAt > 4 * 60_000 && now - (last?.atElapsed ?: 0) > 4 * 60_000) markHostDirty(0)
+        // Members on the relay hear from the host every 25 minutes at least, so they know it's still
+        // there (each message counts against the relay's daily limit, so no more often than that).
+        if (remote && now - lastRelayAt > 25 * 60_000 && now - (last?.atElapsed ?: 0) > 25 * 60_000) markHostDirty(0)
 
         if (hostDirtyAt == 0L || now < hostDirtyAt || hostSending) return
         // A new song: wait until it's actually playing (or 2.5 s), so the time it gives is right.
@@ -620,7 +725,7 @@ object Jam {
         hostState = sent
         val prevTrack = hostPrev(t)
         val msg = stateMessage(t, prevTrack, up, playing, anchorPos, anchorAt, p.durationMs())
-        sendLater({ msg }, essential = true) { ok ->
+        sendLater({ msg }, essential = true, relay = remote) { ok ->
             hostSending = false
             // Didn't go out (no internet): try again shortly.
             if (!ok && isHost) { hostState = null; markHostDirty(3_000) }
@@ -646,7 +751,7 @@ object Jam {
         seq = maxOf(seq + 1, JamClock.now())
         val m = JSONArray()
         members.forEach { x ->
-            m.put(JSONArray().put(x.id).put(x.name).put(x.device).put(x.kind).put(x.photo ?: "").put(if (x.host) 1 else 0).put((elapsed() - x.heardAt) / 1000))
+            m.put(JSONArray().put(x.id).put(x.name).put(x.device).put(x.kind).put(x.photo ?: "").put(if (x.host) 1 else 0).put((elapsed() - x.heardAt) / 1000).put(if (x.lan) 1 else 0))
         }
         // As many songs from Up next as fit in one message (covers for the first few).
         var n = up.size
@@ -735,9 +840,9 @@ object Jam {
                 val now = elapsed()
                 val ms = (0 until (list?.length() ?: 0)).mapNotNull { i ->
                     val a = list!!.optJSONArray(i) ?: return@mapNotNull null
-                    Member(a.optString(0), a.optString(1), a.optString(2), a.optString(3), a.optString(4).ifEmpty { null }, a.optInt(5) == 1, now - a.optLong(6) * 1000)
+                    Member(a.optString(0), a.optString(1), a.optString(2), a.optString(3), a.optString(4).ifEmpty { null }, a.optInt(5) == 1, now - a.optLong(6) * 1000, a.optInt(7) == 1)
                 }
-                if (ms.isNotEmpty() && ms.none { it.id == myId } && age < 60_000 && everConnected && joinedOnce) {
+                if (ms.isNotEmpty() && ms.none { it.id == myId } && age < 60_000 && (everConnected || hostLink != null) && joinedOnce) {
                     // The host no longer lists us: removed while we were away.
                     return finish("You're no longer in ${hostName}'s Jam")
                 }
@@ -745,6 +850,15 @@ object Jam {
                 members = ms
                 if (status == "Joining…" || status?.startsWith("Lost touch") == true) status = null
                 reconcile()
+            }
+            "pg" -> if (from == hostId) {
+                hostHeardAt = elapsed()
+                if (status?.startsWith("Lost touch") == true) status = null
+            }
+            // The host's clock, measured straight across the Wi-Fi (closer than the time servers get).
+            "ta" -> if (o.optString("to") == myId && (hostId == null || from == hostId)) {
+                val t0 = o.optLong("t0"); val t1 = o.optLong("t1"); val t3 = lineWallAt
+                if (t0 > 0 && t3 >= t0) JamClock.lanSample(t3 - t0, t1 - (t0 + t3) / 2)
             }
             "end" -> if (hostId == null || from == hostId) finish(if (state == null) "That Jam has ended" else "$hostName ended the Jam")
             "kick" -> if (o.optString("to") == myId && (hostId == null || from == hostId)) finish("$hostName removed you from the Jam")
@@ -773,6 +887,25 @@ object Jam {
 
     private fun memberTick() {
         val now = elapsed()
+        val link = hostLink
+        if (link == null) {
+            // Looking for the host on this Wi-Fi: often at first (and after losing it), then now and then.
+            val lately = now - joinStarted < 30_000 || (lanLostAt > 0 && now - lanLostAt < 30_000)
+            if (now - lastProbeAt > (if (lately) 2_000 else 10_000)) probe()
+            // Connected, but nothing that opens came back: not the host after all.
+            if (candidates.isNotEmpty() && now - candidateAt > 6_000) { candidates.forEach { it.close() }; candidates.clear() }
+            // Not here: through the relay, after a few seconds of looking.
+            val since = maxOf(joinStarted, lanLostAt)
+            if (!relayJoinSent && connected && now - since > (if (JamLan.off) 0 else 3_000)) {
+                relayJoinSent = true
+                sendLater({ JSONObject().put("ty", "join") }, essential = true, relay = true)
+            }
+        } else {
+            // Gone quiet (the host checks in every 10 seconds): the connection has dropped.
+            if (now - link.heardAt > 35_000) link.close()
+            if (now - lastLanAt > 10_000) { lastLanAt = now; sendLan(JSONObject().put("ty", "here")) }
+            if (now - lastTimeAt > 2 * 60_000) askTime()
+        }
         val s = state
         if (s == null) {
             if (now - joinStarted > 15_000) {
@@ -780,14 +913,16 @@ object Jam {
             }
             return
         }
-        // The host has gone quiet: keep playing what's queued, and give up after a while.
+        // The host has gone quiet: keep playing what's queued, and give up after a while. (Over the
+        // relay the host only checks in every 25 minutes; straight across the Wi-Fi, every 10 seconds.)
         val quiet = now - hostHeardAt
-        if (quiet > 20 * 60_000) return finish("Lost touch with $hostName, so you left the Jam")
-        if (quiet > 9 * 60_000) status = "Lost touch with $hostName. Playing on…"
-        else if (!connected && everConnected) status = "Reconnecting…"
+        val lostLan = link == null && lanLostAt > 0 && hostHeardAt < lanLostAt
+        if (quiet > 70 * 60_000) return finish("Lost touch with $hostName, so you left the Jam")
+        if (quiet > 30 * 60_000 || (lostLan && quiet > 60_000)) status = "Lost touch with $hostName. Playing on…"
+        else if (!connected && everConnected && link == null) status = "Reconnecting…"
         else if (status == "Reconnecting…") status = null
-        // Still here (every 5 minutes).
-        if (now - lastPingAt > 5 * 60_000) { lastPingAt = now; sendLater({ JSONObject().put("ty", "here") }) }
+        // Still here, over the relay (every 25 minutes).
+        if (link == null && now - lastPingAt > 25 * 60_000) { lastPingAt = now; sendLater({ JSONObject().put("ty", "here") }) }
 
         val p = player ?: return
         // Positions mean nothing until the clock is checked (a few seconds at most).
@@ -932,6 +1067,175 @@ object Jam {
         }
     }
 
+    // ---------------------------------------------------------------- straight across the Wi-Fi
+
+    /** Names this Jam on the local network (worked out from the code; says nothing about it). */
+    @Volatile private var lanId: String? = null
+    @Volatile private var server: java.net.ServerSocket? = null
+    /** The host: direct connections to members, by who they are. */
+    private val links = java.util.concurrent.ConcurrentHashMap<String, JamLan.Link>()
+    /** A member: the direct connection to the host. */
+    @Volatile private var hostLink: JamLan.Link? = null
+    /** A member: connections that haven't shown yet that they're the host's. */
+    private val candidates = HashSet<JamLan.Link>()
+    private var candidateAt = 0L
+    private var connecting = false
+    private var lastProbeAt = 0L
+    @Volatile private var lastLanAt = 0L
+    private var lastTimeAt = 0L
+    /** When the direct connection to the host was lost (0: it wasn't). */
+    private var lanLostAt = 0L
+    /** A member has said hello through the relay (the host wasn't found on this Wi-Fi). */
+    private var relayJoinSent = false
+    /** The last message through the relay (elapsed). */
+    @Volatile private var lastRelayAt = 0L
+    /** The host: someone has been in this Jam through the relay (so "it's over" goes there too). */
+    private var everRemote = false
+    /** This device's clock when the line being handled arrived. */
+    private var lineWallAt = 0L
+
+    /** A member: connected straight to the host (nothing goes through the relay). */
+    val direct: Boolean get() = hostLink != null
+
+    private val linkEvents = object : JamLan.Events {
+        override fun line(link: JamLan.Link, text: String, wallAt: Long) = onLine(link, text, wallAt)
+        override fun closed(link: JamLan.Link) = onLinkClosed(link)
+        override fun accepted(link: JamLan.Link) = onAccepted(link)
+    }
+
+    private fun lanStart() {
+        if (JamLan.off) return
+        JamLan.need("jam", true)
+        val gen = generation
+        JamLan.serve(linkEvents) { ss -> if (gen == generation && inJam) server = ss else runCatching { ss?.close() } }
+    }
+
+    private fun lanStop() {
+        val ss = server
+        server = null
+        val all = links.values.toList() + listOfNotNull(hostLink) + candidates
+        links.clear(); hostLink = null; candidates.clear(); connecting = false
+        // On the Jam's thread, so the goodbye queued just before goes out first.
+        io.execute { all.forEach { it.close() }; runCatching { ss?.close() } }
+        main.postDelayed({ if (!inJam) JamLan.need("jam", false) }, 3_000)
+        JamClock.lanDone()
+    }
+
+    /** The host's details for its "here I am" on the network: which Jam (not its code) and where to connect. */
+    internal fun lanFields(o: JSONObject) {
+        val j = lanId ?: return
+        val ss = server ?: return
+        if (isHost) o.put("j", j).put("p", ss.localPort)
+    }
+
+    /** A member: "is this Jam's host here?" to everyone on the network. */
+    private fun probe() {
+        lastProbeAt = elapsed()
+        val j = lanId ?: return
+        if (JamLan.off || role != Role.MEMBER) return
+        JamLan.broadcast(JSONObject().put("gw", "jamq").put("v", 1).put("id", myId).put("j", j))
+    }
+
+    /** Closes the direct connection to [id], after anything already queued for it. */
+    private fun dropLink(id: String) { io.execute { links.remove(id)?.close() } }
+
+    /** Something heard on the local network (see [JamLan]). */
+    internal fun heardLan(o: JSONObject, from: java.net.InetSocketAddress) {
+        val j = lanId ?: return
+        if (o.optString("j") != j || o.optString("id") == myId) return
+        when (o.optString("gw")) {
+            // The host's "here I am": connect to it.
+            "jam" -> if (role == Role.MEMBER && hostLink == null && !connecting && candidates.isEmpty()) {
+                val port = o.optInt("p")
+                if (port > 0) connectToHost(from, port)
+            }
+            // A member looking for this Jam: answer it straight (that gets through a PC's firewall).
+            "jamq" -> if (isHost) JamLan.sendTo(JamNearby.beacon(), from)
+            // A member that couldn't reach this device: connect to it instead.
+            "jamm" -> if (isHost) {
+                val port = o.optInt("p")
+                if (port > 0) JamLan.connect(from.address, port, linkEvents) { l -> if (l != null && !isHost) l.close() }
+            }
+        }
+    }
+
+    private fun connectToHost(beacon: java.net.InetSocketAddress, port: Int) {
+        connecting = true
+        val gen = generation
+        JamLan.connect(beacon.address, port, linkEvents) { l ->
+            connecting = false
+            if (gen != generation || role != Role.MEMBER) { l?.close(); return@connect }
+            if (l != null) {
+                candidates += l
+                candidateAt = elapsed()
+                sendOn(l, JSONObject().put("ty", "join"))
+            } else {
+                // Couldn't reach it (usually a PC's firewall): ask it to connect to this device instead.
+                val mine = server?.localPort ?: return@connect
+                JamLan.sendTo(JSONObject().put("gw", "jamm").put("v", 1).put("id", myId).put("j", lanId).put("p", mine), beacon)
+            }
+        }
+    }
+
+    private fun onAccepted(l: JamLan.Link) {
+        when (role) {
+            // The host connecting here (see "jamm"): say hello on it.
+            Role.MEMBER -> if (hostLink == null) { candidates += l; candidateAt = elapsed(); sendOn(l, JSONObject().put("ty", "join")) } else l.close()
+            Role.HOST -> {} // members say who they are in their first message
+            Role.NONE -> l.close()
+        }
+    }
+
+    private fun onLine(l: JamLan.Link, text: String, wallAt: Long) {
+        if (!inJam) { l.close(); return }
+        // Only people with the code can write anything that opens.
+        val o = open(text) ?: run { l.close(); return }
+        val from = o.optString("d")
+        if (from.isEmpty() || from == myId) return
+        when (role) {
+            Role.HOST -> if (l.peer != from) {
+                l.peer = from
+                links.put(from, l)?.takeIf { it !== l }?.close()
+            }
+            Role.MEMBER -> if (l !== hostLink) {
+                val h = hostLink
+                if ((h != null && !h.closed) || (hostId != null && from != hostId)) { candidates -= l; l.close(); return }
+                useHostLink(l, from)
+            }
+            Role.NONE -> return
+        }
+        if (!fresh(o)) return
+        lineWallAt = wallAt
+        handle(o, System.currentTimeMillis(), lan = true)
+    }
+
+    private fun useHostLink(l: JamLan.Link, from: String) {
+        hostLink = l
+        l.peer = from
+        candidates -= l
+        candidates.forEach { it.close() }
+        candidates.clear()
+        lanLostAt = 0L
+        relayJoinSent = false
+        askTime()
+    }
+
+    private fun onLinkClosed(l: JamLan.Link) {
+        candidates -= l
+        if (l === hostLink) { hostLink = null; lanLostAt = elapsed(); lastProbeAt = 0L }
+        l.peer?.let { p -> if (links[p] === l) links.remove(p) }
+        if (isHost) publishMembers()
+    }
+
+    /** Measures how far this clock is from the host's: a few quick questions across the Wi-Fi. */
+    private fun askTime() {
+        lastTimeAt = elapsed()
+        JamClock.lanRound()
+        for (i in 0 until 5) main.postDelayed({
+            hostLink?.let { l -> sendOn(l, JSONObject().put("ty", "tq").put("t0", JamClock.wall())) }
+        }, i * 200L)
+    }
+
     // ---------------------------------------------------------------- the clock
 
     private val ticker = object : Runnable {
@@ -970,6 +1274,26 @@ internal object JamClock {
     fun wall(): Long = System.currentTimeMillis() + testSkew
     fun now(): Long = wall() + offset
 
+    /** The quickest answer from the host across the Wi-Fi so far (ms there and back), while in a Jam. */
+    @Volatile private var lanBest = Long.MAX_VALUE
+
+    /**
+     * One answer from the host across the Wi-Fi: [rtt] there and back, [off] how far this clock is
+     * from the host's. The quickest is the most exact; it then counts instead of the time servers.
+     */
+    fun lanSample(rtt: Long, off: Long) {
+        if (rtt < 0 || rtt > 1_000 || rtt > lanBest) return
+        lanBest = rtt
+        offset = off
+        checked = true
+    }
+
+    /** A new round of questions: lets a slightly slower answer count, as clocks drift apart over time. */
+    fun lanRound() { if (lanBest != Long.MAX_VALUE) lanBest += 15 }
+
+    /** Out of the Jam: the time servers count again. */
+    fun lanDone() { lanBest = Long.MAX_VALUE }
+
     /** Blocking: the best of a few answers (the quickest round trip is the most exact). */
     fun refresh() {
         checkedAt = SystemClock.elapsedRealtime()
@@ -978,6 +1302,8 @@ internal object JamClock {
             repeat(2) { sample(host)?.let { s -> if (best == null || s.first < best!!.first) best = s } }
             if ((best?.first ?: Long.MAX_VALUE) < 60) break
         }
+        // Measured against the host across the Wi-Fi: that's closer, keep it.
+        if (lanBest != Long.MAX_VALUE) return
         best?.let { offset = it.second; checked = true }
     }
 

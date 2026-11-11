@@ -50,6 +50,13 @@ private fun rememberNow(everyMs: Long = 1000): Long {
     return now
 }
 
+/** The device the "Playing on…" bar shows (another of yours, playing while this one isn't), or null. */
+internal fun remoteStripDevice(localPlaying: Boolean, now: Long): Sync.Device? =
+    if (!syncAvailable || localPlaying) null else Sync.devices.firstOrNull { it.playingNow(now) && it.track != null }
+
+/** [Sync.ownTag] of the device the "Playing on…" bar shows, or null. */
+internal fun remoteStripTag(localPlaying: Boolean, now: Long): String? = remoteStripDevice(localPlaying, now)?.let { Sync.ownTag(it.id) }
+
 /** True when the Devices button should show: signed in to YouTube Music with syncing on. */
 val syncAvailable: Boolean get() = Sync.available
 
@@ -72,8 +79,10 @@ fun DevicesButton(size: androidx.compose.ui.unit.Dp = 44.dp, iconSize: androidx.
 fun RemoteStrip(localPlaying: Boolean, modifier: Modifier = Modifier) {
     if (!syncAvailable || localPlaying) return
     val now = rememberNow()
-    val d = Sync.devices.firstOrNull { it.playingNow(now) && it.track != null } ?: return
+    val d = remoteStripDevice(localPlaying, now) ?: return
     val t = d.track ?: return
+    // That device is hosting a Jam nearby: join it from here (it isn't asked about separately).
+    val jam = if (Jam.inJam) null else Sync.ownTag(d.id)?.let { tag -> JamNearby.found.firstOrNull { it.ownTag == tag } }
     Row(
         modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF121519))
             .pressable(0.99f) { Sync.panelOpen = true }.padding(horizontal = 10.dp),
@@ -84,6 +93,14 @@ fun RemoteStrip(localPlaying: Boolean, modifier: Modifier = Modifier) {
         Column(Modifier.weight(1f)) {
             GText("Playing on ${d.name}", 11, CoverTint.accent, FontWeight.SemiBold, 1)
             GText(listOf(t.title, t.artist).filter { it.isNotBlank() }.joinToString(" · "), 13, Color.White, maxLines = 1)
+        }
+        if (jam != null) {
+            Box(
+                Modifier.height(32.dp).clip(RoundedCornerShape(16.dp)).background(Color.White)
+                    .pressable(0.94f) { Jam.join(jam.code); Jam.panelOpen = true }.padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) { GText("Join Jam", 12, Color(0xFF111111), FontWeight.Bold, 1) }
+            Spacer(Modifier.width(4.dp))
         }
         Box(Modifier.size(38.dp).pressable(0.88f) { Sync.command(d, "toggle") }, contentAlignment = Alignment.Center) {
             Ico(Icons.Rounded.Pause, Color.White, 24.dp)

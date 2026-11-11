@@ -135,10 +135,11 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
     // Full speed while music plays, even minimized (see WinPower).
     LaunchedEffect(ps.playing) { WinPower.fullSpeed(ps.playing) }
 
-    // Keep the progress bars moving while a song plays.
+    // Keep the progress bars moving while a song plays. One update going wrong mustn't stop them for the
+    // rest of the song, so a failed one is skipped and the next goes ahead.
     LaunchedEffect(ps.playing) {
         while (ps.playing) {
-            ps.tick()
+            runCatching { ps.tick() }.onFailure { android.util.Log.w("Glasswave", "progress update failed", it) }
             delay(400)
         }
     }
@@ -236,7 +237,6 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
                 Modifier.align(Alignment.BottomCenter).padding(bottom = if (ps.hasItem) PlayerBarSpace - 4.dp else 16.dp)
                     .widthIn(max = 520.dp).padding(horizontal = 16.dp),
             ) {
-                NearbyJamBanner(Modifier.padding(bottom = 8.dp))
                 RemoteStrip(ps.playing)
             }
             // The icon rail, floating over the page as glass (it opens over it on hover).
@@ -246,7 +246,6 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
                     .padding(bottom = if (ps.hasItem) PlayerBarSpace - 12.dp else 0.dp),
             )
         } else Column(Modifier.align(Alignment.BottomCenter).drawWithContent { if (!covered) drawContent() }.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).widthIn(max = 560.dp)) {
-            NearbyJamBanner(Modifier.padding(bottom = 10.dp))
             RemoteStrip(ps.playing, Modifier.padding(bottom = 10.dp))
             AnimatedVisibility(
                 visible = ps.hasItem,
@@ -272,6 +271,9 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
                     vm.openSettings("SOUND")
                 }, onPeek = { peeking = it })
         }
+
+        // "Ada is in a Jam nearby": drops in at the top, clear of the player and the "Playing on…" bar.
+        NearbyJamPrompt(ps.playing, Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 16.dp, vertical = if (desk) 18.dp else 10.dp))
 
         // Your account, from the picture on the top right of Home.
         ProfileSheet(ctx, page, vm.profileOpen) { vm.profileOpen = false }

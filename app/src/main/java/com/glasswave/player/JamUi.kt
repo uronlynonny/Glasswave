@@ -1,6 +1,11 @@
 // Glasswave · created by nonny dev. Original work; see AUTHORS.md.
 package com.glasswave.player
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -209,9 +214,7 @@ private fun NearbyRow(f: JamNearby.Found, onJoin: () -> Unit) {
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = 0.05f)).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(36.dp).clip(CircleShape).background(CoverTint.accent.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-            Ico(if (f.onWifi) Icons.Rounded.Wifi else Icons.Rounded.NearMe, CoverTint.accent, 18.dp)
-        }
+        HostPicture(f, 36.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             GText("${f.host}'s Jam", 15, Color.White, FontWeight.SemiBold, 1)
@@ -224,34 +227,78 @@ private fun NearbyRow(f: JamNearby.Found, onJoin: () -> Unit) {
     }
 }
 
-/**
- * "Ada's Jam is nearby": a slim bar when someone near you is hosting a Jam and you're not in one.
- * Join, or wave it away.
- */
+/** The host's YouTube Music picture (or their initial), with a Wi-Fi or "near you" mark in the corner. */
 @Composable
-fun NearbyJamBanner(modifier: Modifier = Modifier) {
-    if (Jam.inJam) return
-    val f = JamNearby.found.firstOrNull { it.code !in JamNearby.dismissed } ?: return
-    Row(
-        modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFF121519))
-            .pressable(0.99f) { Jam.panelOpen = true }.padding(start = 12.dp, end = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(34.dp).clip(CircleShape).background(CoverTint.accent.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-            Ico(Icons.Rounded.Groups, CoverTint.accent, 19.dp)
-        }
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            GText("${f.host}'s Jam is nearby", 13, Color.White, FontWeight.SemiBold, 1)
-            GText(f.song?.let { "Playing $it" } ?: "Listen along", 12, CoverTint.accent, maxLines = 1)
+private fun HostPicture(f: JamNearby.Found, size: Dp) {
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        if (f.photo != null) Cover(f.photo, Modifier.size(size), size / 2, circle = true)
+        else Box(Modifier.size(size).clip(CircleShape).background(CoverTint.accent.copy(alpha = 0.22f)), contentAlignment = Alignment.Center) {
+            GText(f.host.take(1).uppercase(), (size.value * 0.42f).toInt(), Color.White, FontWeight.Bold, 1)
         }
         Box(
-            Modifier.height(34.dp).clip(RoundedCornerShape(17.dp)).background(Color.White)
-                .pressable(0.94f) { Jam.join(f.code); Jam.panelOpen = true }.padding(horizontal = 16.dp),
+            Modifier.align(Alignment.BottomEnd).offset(x = 3.dp, y = 3.dp).size(size * 0.44f).clip(CircleShape).background(Color(0xFF1A1D23)),
             contentAlignment = Alignment.Center,
-        ) { GText("Join", 13, Color(0xFF111111), FontWeight.Bold, 1) }
-        Box(Modifier.size(38.dp).pressable(0.88f) { JamNearby.dismissed = JamNearby.dismissed + f.code }, contentAlignment = Alignment.Center) {
-            Ico(Icons.Rounded.Close, Dim, 20.dp)
+        ) { Ico(if (f.onWifi) Icons.Rounded.Wifi else Icons.Rounded.NearMe, CoverTint.accent, size * 0.26f) }
+    }
+}
+
+/** The Jam nearby that's shown on its own: not in a Jam, not waved away, and not already on the "Playing on…" bar. */
+private fun promptFor(localPlaying: Boolean, now: Long): JamNearby.Found? {
+    if (Jam.inJam || Jam.panelOpen) return null
+    val strip = remoteStripTag(localPlaying, now)
+    return JamNearby.found.firstOrNull { it.code !in JamNearby.dismissed && !(strip != null && it.ownTag == strip) }
+}
+
+/**
+ * "Ada is in a Jam nearby": a card that drops in at the top when someone near you (on this Wi-Fi, or in
+ * this area) is hosting a Jam and you're not in one. Their picture, Join or Cancel. Cancel means that
+ * Jam doesn't ask again. When the Jam is your own other device's and the "Playing on…" bar already shows
+ * it, that bar gets the Join button instead (see [RemoteStrip]), so the two never stack up.
+ */
+@Composable
+fun NearbyJamPrompt(localPlaying: Boolean, modifier: Modifier = Modifier) {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { delay(2_000); now = System.currentTimeMillis() } }
+    val f = promptFor(localPlaying, now)
+    // Keeps the last one while it slides away.
+    val last = remember { arrayOfNulls<JamNearby.Found>(1) }
+    if (f != null) last[0] = f
+    AnimatedVisibility(
+        visible = f != null,
+        modifier = modifier,
+        enter = slideInVertically(smooth(260)) { -it } + fadeIn(smooth(200)),
+        exit = slideOutVertically(smooth(220)) { -it } + fadeOut(smooth(180)),
+    ) {
+        val x = f ?: last[0] ?: return@AnimatedVisibility
+        Column(
+            Modifier.widthIn(max = 420.dp).fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color(0xF2121519))
+                .pressable(1f) { } // taps on it don't reach the page underneath
+                .padding(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                HostPicture(x, 48.dp)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    GText("${x.host} is in a Jam nearby", 16, Color.White, FontWeight.Bold, 2)
+                    GText(
+                        listOfNotNull(x.song?.let { "Playing $it" }, if (x.onWifi) "on your Wi-Fi" else "near you").joinToString(" · "),
+                        13, CoverTint.accent, maxLines = 1,
+                    )
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier.weight(1f).height(42.dp).clip(RoundedCornerShape(21.dp)).background(Color.White.copy(alpha = 0.08f))
+                        .pressable(0.95f) { JamNearby.dismiss(x.code) },
+                    contentAlignment = Alignment.Center,
+                ) { GText("Cancel", 14, Color.White, FontWeight.SemiBold, 1) }
+                Box(
+                    Modifier.weight(1f).height(42.dp).clip(RoundedCornerShape(21.dp)).background(Color.White)
+                        .pressable(0.95f) { Jam.join(x.code); Jam.panelOpen = true },
+                    contentAlignment = Alignment.Center,
+                ) { GText("Join", 14, Color(0xFF111111), FontWeight.Bold, 1) }
+            }
         }
     }
 }
@@ -334,7 +381,7 @@ private fun InJam(ps: PlayerState, backdrop: Backdrop) {
     GText(if (Jam.members.size == 1) "Just you so far" else "In this Jam · ${Jam.members.size}", 13, Faint, FontWeight.SemiBold)
     Spacer(Modifier.height(8.dp))
     for (m in Jam.members) {
-        val away = !m.host && now - m.heardAt > 12 * 60_000
+        val away = Jam.isAway(m, now)
         PersonRow(m, isMe = Jam.isMe(m), away = away, canRemove = Jam.isHost && !m.host)
         Spacer(Modifier.height(8.dp))
     }
@@ -395,7 +442,10 @@ private fun PersonRow(m: Jam.Member, isMe: Boolean, away: Boolean, canRemove: Bo
         Column(Modifier.weight(1f)) {
             GText(m.name + (if (isMe) " (you)" else ""), 15, if (away) Dim else Color.White, FontWeight.SemiBold, 1)
             GText(
-                listOfNotNull(if (m.host) "Host" else null, m.device.takeIf { it.isNotBlank() }, if (away) "away" else null).joinToString(" · "),
+                listOfNotNull(
+                    if (m.host) "Host" else null, m.device.takeIf { it.isNotBlank() },
+                    if (!m.host && m.lan && !away) "on this Wi-Fi" else null, if (away) "away" else null,
+                ).joinToString(" · "),
                 12, if (m.host) CoverTint.accent else Dim, maxLines = 1,
             )
         }

@@ -13,7 +13,7 @@ plugins {
 val appBuild = file("../app/build.gradle.kts").readText()
 // Glasswave for Windows has its own version number, separate from the phone app.
 // Raise it for every Windows release: installed copies update themselves to a higher number.
-val appVersion = "1.2.57"
+val appVersion = "1.2.58"
 // Which computer this build is for: the one building it (a Mac build has to be made on a Mac).
 val hostOs = System.getProperty("os.name").lowercase()
 val isMac = hostOs.startsWith("mac")
@@ -531,4 +531,6 @@ tasks.register<JavaExec>("jamCheck") {
     mainClass.set("com.glasswave.player.JamCheckKt")
     systemProperty("gw.jamDir", layout.buildDirectory.dir("check-data/jam").get().asFile.absolutePath)
     if (project.hasProperty("local")) systemProperty("gw.jamLocal", "1")
+    // -PnoLan: as if the two were in different places (everything through the relay).
+    if (project.hasProperty("noLan")) systemProperty("gw.jamNoLan", "1")
 }

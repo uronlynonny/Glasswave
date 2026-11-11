@@ -213,7 +213,6 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
         }
 
         Column(Modifier.align(Alignment.BottomCenter).drawWithContent { if (!covered) drawContent() }.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).widthIn(max = 560.dp)) {
-            NearbyJamBanner(Modifier.padding(bottom = 10.dp))
             RemoteStrip(ps.playing, Modifier.padding(bottom = 10.dp))
             AnimatedVisibility(
                 visible = ps.hasItem,
@@ -235,6 +234,9 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
         ) {
             FullPlayer(ps, colors, onClose = { full = false; peeking = false }, openEqualizer = openEqualizer, onPeek = { peeking = it })
         }
+
+        // "Ada is in a Jam nearby": drops in at the top, clear of the player and the "Playing on…" bar.
+        NearbyJamPrompt(ps.playing, Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp))
 
         // Your account, from the picture on the top right of Home.
         ProfileSheet(ctx, page, vm.profileOpen) { vm.profileOpen = false }

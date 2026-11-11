@@ -90,6 +90,14 @@ fun main(args: Array<String>) {
                 }
                 "search" -> onUi { vm.selectTab(Tab.SEARCH); vm.onQuery(arg); vm.submitSearch() }
                 "tab" -> onUi { vm.selectTab(Tab.valueOf(arg)) }
+                // automix on|off. seekend 40: jumps to 40 seconds before the end of the song.
+                "automix" -> onUi { Settings.updateAutomix(arg == "on") }
+                "seekend" -> onUi { if (ps.durationMs > 0) ps.seekTo(ps.durationMs - arg.toLong() * 1000) }
+                // playfirst: plays the first song in the search results.
+                "playfirst" -> onUi {
+                    val t = ((vm.results as? Load.Done)?.value).orEmpty().flatMap { it.items }.filterIsInstance<SongItem>().firstOrNull()?.track
+                    if (t != null) ps.playList(listOf(t), 0) else println("GW: no song in the results")
+                }
                 // dl: downloads the song that's playing. lyrics: shows what lyrics the app finds for it.
                 "dl" -> onUi { ps.currentTrack()?.let { Downloads.download(it) } }
                 "lyrics" -> {

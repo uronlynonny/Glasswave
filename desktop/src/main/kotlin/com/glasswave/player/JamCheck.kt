@@ -18,11 +18,16 @@ import javax.swing.SwingUtilities
  * ends it. After
  * each, both must be on the same song, both playing or both paused, and within 300 ms of each other
  * for 2 seconds in a row.  ./gradlew -p desktop jamCheck   (-Plocal: stand-in relay, nothing sent out)
+ *
+ * By default the two find each other on this computer's network and talk straight (as on one Wi-Fi):
+ * then nothing of the Jam may go through the relay. -PnoLan: as if they were in different places,
+ * so everything goes through the relay (and the Wi-Fi steps are skipped).
  */
 fun main(args: Array<String>) {
     if (args.firstOrNull() == "device") return device(args[1])
     val base = File(System.getProperty("gw.jamDir") ?: error("gw.jamDir"))
     val relay = if (System.getProperty("gw.jamLocal") != null) LocalRelay.start() else null
+    val noLan = System.getProperty("gw.jamNoLan") != null
     val java = ProcessHandle.current().info().command().get()
     val skew = mapOf("host" to 0L, "guest" to 7_000L)
     // Pretend places: the guest is one area square up and to the right of the host (about 5 km away).
@@ -31,12 +36,22 @@ fun main(args: Array<String>) {
         val dir = File(base, role).apply { deleteRecursively(); mkdirs() }
         val props = mutableListOf("-Dgw.noCheckIn=1", "-Dgw.jamName=${role.replaceFirstChar { it.uppercase() }}", "-Dgw.jamClockSkew=${skew[role]}", "-Dgw.jamLocation=${place[role]}")
         relay?.let { props += "-Dgw.jamRelay=$it" }
+        if (noLan) props += "-Dgw.jamNoLan=1"
         ProcessBuilder(listOf(java) + props + listOf("-cp", System.getProperty("java.class.path"), "com.glasswave.player.JamCheckKt", "device", role))
             .apply { environment()["APPDATA"] = dir.absolutePath; environment()["LOCALAPPDATA"] = dir.absolutePath }
             .redirectErrorStream(true).start()
     }
-    val check = Check(kids)
-    val ok = runCatching { check.run() }.onFailure { println("CHECK STOPPED: $it") }.getOrDefault(false)
+    val check = Check(kids, noLan)
+    var ok = runCatching { check.run() }.onFailure { println("CHECK STOPPED: $it") }.getOrDefault(false)
+    if (relay != null) {
+        val jam = LocalRelay.posts.filterKeys { it.startsWith("gwj-") }.values.sum()
+        val near = LocalRelay.posts.filterKeys { it.startsWith("gwn-") }.values.sum()
+        println("relay: $jam Jam message(s), $near nearby listing(s) went through the relay")
+        if (!noLan) {
+            if (jam == 0) println("PASS  on the same network nothing of the Jam went through the relay")
+            else { println("FAIL  on the same network $jam Jam message(s) went through the relay"); ok = false }
+        }
+    }
     kids.values.forEach { runCatching { it.outputStream.write("quit\n".toByteArray()); it.outputStream.flush() } }
     Thread.sleep(1500)
     kids.values.forEach { it.destroyForcibly() }
@@ -50,7 +65,7 @@ private data class Seen(
     val role: String, val people: Int, val up: List<String>, val loads: Int,
 )
 
-private class Check(val kids: Map<String, Process>) {
+private class Check(val kids: Map<String, Process>, val noLan: Boolean) {
     val seen = ConcurrentHashMap<String, Seen>()
     val lines = ConcurrentHashMap<String, MutableList<String>>()
     @Volatile var code: String? = null
@@ -58,6 +73,8 @@ private class Check(val kids: Map<String, Process>) {
     @Volatile var nearby: List<String> = emptyList()
     @Volatile var qr: String? = null
     @Volatile var link: String? = null
+    /** Each one's last word on whether it's connected straight to the host. */
+    val direct = ConcurrentHashMap<String, Boolean>()
     var failures = 0
 
     init {
@@ -74,6 +91,7 @@ private class Check(val kids: Map<String, Process>) {
                     if (l.startsWith("NEARBY ") && name == "guest") nearby = l.substringAfter("NEARBY ").split(',').filter { it.contains('/') }
                     if (l.startsWith("QR ")) qr = l.substringAfter("QR ")
                     if (l.startsWith("LINK ")) link = l.substringAfter("LINK ")
+                    if (l.startsWith("DIRECT ")) direct[name] = l.substringAfter("DIRECT ").trim() == "true"
                     println("  [$name] $l")
                 }
             }
@@ -151,8 +169,10 @@ private class Check(val kids: Map<String, Process>) {
         // Nearby: first only by area (the host is in the next square), then on the Wi-Fi too.
         tell("guest", "look area")
         waitFor("nearby: the guest finds the Jam in its area (the host is one square over)", 40) { "$raw/area" in nearby }
-        tell("guest", "look both")
-        waitFor("nearby: and on this Wi-Fi", 20) { "$raw/wifi" in nearby }
+        if (!noLan) {
+            tell("guest", "look both")
+            waitFor("nearby: and on this Wi-Fi", 20) { "$raw/wifi" in nearby }
+        }
         tell("host", "nearby off")
         waitFor("host turns off Show to people nearby: the Jam disappears for the guest", 20) { nearby.none { it.startsWith(raw) } }
         tell("host", "nearby on")
@@ -165,11 +185,14 @@ private class Check(val kids: Map<String, Process>) {
         }
 
         // Join from nearby: no code typed.
-        tell("guest", "joinnearby")
+        tell("guest", "joinnearby $raw")
         together("join from nearby: the guest hears the host's song at the host's spot", 30) { h().people == 2 && g().people == 2 }
+        if (!noLan) waitFor("the guest is connected straight to the host (no relay)", 10) { direct["guest"] == true }
         tell("host", "clock")
         tell("guest", "clock")
 
+        // For its first 3 seconds after joining, the guest's player takes any change as its own loading.
+        Thread.sleep(3_000)
         tell("guest", "pause")
         together("pause (guest)", 12) { !h().wants && !g().wants }
         Thread.sleep(1_500)
@@ -332,6 +355,11 @@ private fun device(role: String) {
         javax.swing.Timer(100) {
             if (Jam.status != lastStatus) { lastStatus = Jam.status; println("status: ${Jam.status ?: "(none)"}") }
         }.start()
+        // Connected straight to the host, when that changes.
+        var lastDirect: Boolean? = null
+        javax.swing.Timer(100) {
+            if (Jam.direct != lastDirect) { lastDirect = Jam.direct; println("DIRECT ${Jam.direct}") }
+        }.start()
         // Jams nearby, when the list changes.
         var lastNearby = ""
         javax.swing.Timer(100) {
@@ -367,7 +395,8 @@ private fun device(role: String) {
                 "remove" -> Jam.members.firstOrNull { !it.host }?.let { Jam.remove(it.id) }
                 "look" -> JamNearby.listen(wifi = arg == "wifi" || arg == "both", area = arg == "area" || arg == "both")
                 "nearby" -> Jam.updateNearby(arg == "on")
-                "joinnearby" -> JamNearby.found.firstOrNull()?.let { Jam.join(it.code) } ?: println("nothing nearby")
+                // This check's own Jam (others may be live on the same network).
+                "joinnearby" -> JamNearby.found.firstOrNull { it.code == arg }?.let { Jam.join(it.code) } ?: println("not nearby: $arg")
                 "clock" -> println("clock: ${if (JamClock.checked) "checked, this one is ${-JamClock.offset} ms off" else "not checked (no time server answered)"}")
                 "qr" -> Jam.inviteLink()?.let { l ->
                     println("LINK $l")
@@ -389,6 +418,8 @@ private object LocalRelay {
     private val all = java.util.concurrent.CopyOnWriteArrayList<Msg>()
     private val lock = Object()
     private var n = 0L
+    /** Messages posted, by channel. */
+    val posts = ConcurrentHashMap<String, Int>()
 
     fun start(): String {
         val server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
@@ -400,6 +431,7 @@ private object LocalRelay {
                 // A little delay, like the real thing.
                 Thread.sleep(40L + (Math.random() * 120).toLong())
                 synchronized(lock) { all += Msg("m${++n}", System.currentTimeMillis() / 1000, path, text); lock.notifyAll() }
+                posts.merge(path, 1, Int::plus)
                 ex.sendResponseHeaders(200, 0); ex.responseBody.use { it.write("{}".toByteArray()) }
                 return@createContext
             }

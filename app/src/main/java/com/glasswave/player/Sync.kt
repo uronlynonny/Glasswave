@@ -95,6 +95,8 @@ object Sync {
 
     private const val RELAY = "https://ntfy.sh"
     private lateinit var prefs: SharedPreferences
+    /** Jam's settings: the relay's daily messages are shared with it (see [budget]). */
+    private lateinit var jamPrefs: SharedPreferences
     private lateinit var filesDir: File
     private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "Glasswave sync").apply { isDaemon = true } }
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
@@ -115,6 +117,7 @@ object Sync {
 
     fun init(context: Context) {
         prefs = context.getSharedPreferences("sync", Context.MODE_PRIVATE)
+        jamPrefs = context.getSharedPreferences("jam", Context.MODE_PRIVATE)
         filesDir = context.filesDir
     }
 
@@ -197,16 +200,27 @@ object Sync {
 
     private fun sha(s: String) = MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
 
+    /**
+     * A stand-in for one of this account's devices (this one by default) that's fine to show to devices
+     * nearby: it can't be worked back to the device. Lets a Jam nearby be recognised as your own PC
+     * or phone. Null when syncing is off.
+     */
+    internal fun ownTag(id: String? = null): String? {
+        if (!::prefs.isInitialized || !available) return null
+        return sha("own|" + (id ?: myId)).take(16)
+    }
+
     // ---------------------------------------------------------------- sending
 
-    /** Messages sent today (the relay allows 250 a day per internet connection). */
+    /** Messages sent today (the relay allows 250 a day per internet connection; Jam's count too). */
     private fun budget(essential: Boolean): Boolean {
         val day = System.currentTimeMillis() / 86_400_000
         if (prefs.getLong("budget_day", -1) != day) prefs.edit().putLong("budget_day", day).putInt("budget", 0).apply()
-        val used = prefs.getInt("budget", 0)
+        val jam = if (::jamPrefs.isInitialized && jamPrefs.getLong("budget_day", -1) == day) jamPrefs.getInt("budget", 0) else 0
+        val used = prefs.getInt("budget", 0) + jam
         // Keep room for the ones that matter (commands, moving playback) when it's been a busy day.
         if (used >= (if (essential) 200 else 140)) return false
-        prefs.edit().putInt("budget", used + 1).apply()
+        prefs.edit().putInt("budget", prefs.getInt("budget", 0) + 1).apply()
         return true
     }
 

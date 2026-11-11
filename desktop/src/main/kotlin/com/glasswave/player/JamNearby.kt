@@ -1,16 +1,11 @@
 // Glasswave · created by nonny dev. Original work; see AUTHORS.md.
 package com.glasswave.player
 
+import android.content.SharedPreferences
 import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import java.net.DatagramPacket
-import java.net.DatagramSocket
-import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.net.NetworkInterface
-import java.net.SocketTimeoutException
 import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -20,191 +15,176 @@ import org.json.JSONObject
 
 /**
  * Jams nearby, so people around you can join without a code, strangers included:
- *  - In this area: the host's Jam is listed for its rough area (a square about 5 km across), through
- *    the same relay as everything else. Glasswave on other phones and PCs looks at its own square and
- *    the eight around it (roughly 5–10 km), and offers to join. The area comes from the phone's
- *    approximate location (or, without that, from its internet address); on a PC, from Windows'
- *    location, else the internet address.
- *  - On this Wi-Fi: the host's device also says so on the local network every few seconds, which is
- *    instant and works without any location.
- * Announced only while hosting with "Show to people nearby" on; every open Glasswave (not in a Jam)
- * looks. What others see: the host's name, the song, and that it's somewhere near. Same file in both apps.
+ *  - On this Wi-Fi or hotspot: the host's device says so on the local network every few seconds
+ *    ([JamLan]). Instant, free, and needs no location or internet.
+ *  - In this area: the host's Jam is also listed for its rough area (a square about 5 km across)
+ *    through the relay, every 20 minutes. Glasswave on other phones and PCs looks at its own square
+ *    and the eight around it (roughly 5–10 km). The area comes from the phone's approximate location
+ *    (or, without that, from its internet address); on a PC, from Windows' location, else the
+ *    internet address.
+ * Listed only while hosting with "Show to people nearby" on (the host still says it's there, without
+ * the code, so members who have the code can find it); every open Glasswave (not in a Jam) looks.
+ * What others see: the host's name and picture, the song, and that it's somewhere near. Same file in
+ * both apps.
  */
 object JamNearby {
-    /** A Jam nearby. [onWifi]: on the same Wi-Fi (else somewhere in this area). */
-    data class Found(val code: String, val host: String, val kind: String, val song: String?, val hostId: String, val seenAt: Long, val onWifi: Boolean)
+    /**
+     * A Jam nearby. [onWifi]: on the same Wi-Fi (else somewhere in this area). [ownTag]: set when the
+     * host is signed in to YouTube Music (see [Sync.ownTag]), to tell your own devices apart.
+     */
+    data class Found(
+        val code: String, val host: String, val kind: String, val song: String?, val hostId: String, val seenAt: Long, val onWifi: Boolean,
+        val photo: String? = null, val ownTag: String? = null, val firstSeen: Long = seenAt,
+    )
 
-    /** Jams nearby, those on this Wi-Fi first. */
+    /** Jams nearby, those on this Wi-Fi first, each in the order it turned up (so nothing jumps about). */
     var found by mutableStateOf<List<Found>>(emptyList())
         private set
-    /** Jams waved away (by code), so their prompt doesn't come back. */
+    /** Jams waved away (by code): their prompt doesn't come back. Kept across restarts. */
     var dismissed by mutableStateOf<Set<String>>(emptySet())
+        private set
     /** The area being looked at is known (else: still finding where this is, or couldn't). */
     var areaKnown by mutableStateOf(false)
         private set
 
-    private const val PORT = 47811
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "Glasswave jam nearby").apply { isDaemon = true } }
-    /** "It's over" goes out on its own thread, so it never waits behind the regular announcements. */
+    /** "It's over" goes out on its own thread, so it never waits behind finding the area. */
     private val urgent = Executors.newSingleThreadExecutor { r -> Thread(r, "Glasswave jam nearby (goodbye)").apply { isDaemon = true } }
     private val onWifi = LinkedHashMap<String, Found>()
     private val inArea = LinkedHashMap<String, Found>()
-    /** The newest message heard for each Jam: an older copy arriving late (another network adapter) is ignored. */
+    /** The newest message heard from each host: an older copy arriving late is ignored. */
     private val newest = HashMap<String, Long>()
     private var lastSent = 0L
+    private var prefs: SharedPreferences? = null
 
     private fun elapsed() = SystemClock.elapsedRealtime()
 
-    /** Looks for Jams: on this Wi-Fi while [wifi], in this area while [area]. */
-    fun listen(wifi: Boolean, area: Boolean) {
-        if (wifi) startWifi() else stopWifi()
-        if (area) startArea() else stopArea()
+    fun init(p: SharedPreferences) {
+        prefs = p
+        dismissed = p.getString("dismissed", null).orEmpty().split(',').filter { it.isNotBlank() }.toSet()
     }
 
-    /** The host: tells people nearby about this Jam, or stops (and says it's over). */
-    fun hosting(on: Boolean) {
-        announceWifi(on)
-        announceArea(on)
+    /** "Cancel" on the prompt: that Jam doesn't ask again. */
+    fun dismiss(code: String) {
+        dismissed = (dismissed.toList() + code).takeLast(60).toSet()
+        prefs?.edit()?.putString("dismissed", dismissed.joinToString(","))?.apply()
     }
+
+    /** Looks for Jams: on this Wi-Fi while [wifi], in this area while [area]. */
+    fun listen(wifi: Boolean, area: Boolean) {
+        if (wifi != wifiLooking) {
+            wifiLooking = wifi
+            JamLan.need("nearby", wifi)
+            if (!wifi) { onWifi.clear(); publish() }
+        }
+        if (area) startArea() else stopArea()
+        startPruner()
+    }
+
+    private var wifiLooking = false
+
+    /** The host: says so on the Wi-Fi while [active], and lists it for people nearby while "Show to people nearby" is on. */
+    fun hosting(active: Boolean) {
+        val public = active && Jam.nearbyOn
+        if (active != beaconing) {
+            beaconing = active
+            main.removeCallbacks(beaconer)
+            if (active) main.post(beaconer)
+        }
+        if (public != listed) {
+            val was = listed
+            listed = public
+            if (was) {
+                // Off the list (or over): said three times straight away, as one message on a busy network can go missing.
+                val m = message(public = false, active = active)
+                JamLan.broadcast(m)
+                main.postDelayed({ JamLan.broadcast(m) }, 400)
+                main.postDelayed({ JamLan.broadcast(m) }, 1_000)
+            }
+        }
+        announceArea(public)
+    }
+
+    private var beaconing = false
+    private var listed = false
+
+    /** What this host says on the network right now (also the answer to a member looking for it). */
+    internal fun beacon(): JSONObject = message(listed, beaconing)
+
+    private fun message(public: Boolean, active: Boolean): JSONObject {
+        // Numbered (always rising), so the newest word wins whatever order copies arrive in.
+        lastSent = maxOf(lastSent + 1, System.currentTimeMillis())
+        val o = JSONObject().put("gw", "jam").put("v", 1).put("t", lastSent).put("id", Jam.deviceId).put("gone", !public)
+        val c = Jam.code
+        if (public && c != null) {
+            o.put("c", c.replace("-", "")).put("n", Jam.myDisplayName()).put("k", SyncPlatform.kind)
+                .put("s", Jam.player?.current()?.title ?: "").put("ph", Profile.photo ?: "").put("o", Sync.ownTag() ?: "")
+        }
+        if (active) Jam.lanFields(o)
+        return o
+    }
+
+    /** Every 3 seconds while hosting, to everyone on this Wi-Fi. */
+    private val beaconer = object : Runnable {
+        override fun run() {
+            if (!beaconing) return
+            JamLan.broadcast(message(listed, true))
+            main.postDelayed(this, 3_000)
+        }
+    }
+
+    /** Heard on the local network (see [JamLan]). */
+    internal fun heardLan(o: JSONObject) { if (wifiLooking) heard(o, wifi = true) }
 
     private fun heard(o: JSONObject, wifi: Boolean) {
         if (o.optString("gw") != "jam" || o.optInt("v") != 1) return
         val id = o.optString("id")
         if (id.isEmpty() || id == Jam.deviceId) return
-        val code = Jam.parseCode(o.optString("c")) ?: return
         val t = o.optLong("t")
         if (t > 0) {
-            if (t < (newest[code] ?: 0L)) return
-            newest[code] = t
+            if (t < (newest[id] ?: 0L)) return
+            newest[id] = t
+        }
+        val code = if (o.optBoolean("gone")) null else Jam.parseCode(o.optString("c"))
+        if (code == null) {
+            // Not listed (any more): forget this host's Jams.
+            val a = onWifi.values.removeAll { it.hostId == id }
+            val b = inArea.values.removeAll { it.hostId == id }
+            if (a || b) publish()
+            return
         }
         val map = if (wifi) onWifi else inArea
-        if (o.optBoolean("gone")) { onWifi.remove(code); inArea.remove(code) }
-        else map[code] = Found(code, o.optString("n").ifEmpty { "Someone" }.take(40), o.optString("k"), o.optString("s").ifEmpty { null }?.take(80), id, elapsed(), wifi)
+        val old = map[code]
+        map[code] = Found(
+            code, o.optString("n").ifEmpty { "Someone" }.take(40), o.optString("k"), o.optString("s").ifEmpty { null }?.take(80), id,
+            elapsed(), wifi, o.optString("ph").ifEmpty { null }?.take(500), o.optString("o").ifEmpty { null }, old?.firstSeen ?: elapsed(),
+        )
         publish()
     }
 
     private fun publish() {
-        val w = onWifi.values.sortedByDescending { it.seenAt }
-        found = w + inArea.values.filter { it.code !in onWifi }.sortedByDescending { it.seenAt }
+        val w = onWifi.values.sortedBy { it.firstSeen }
+        found = w + inArea.values.filter { it.code !in onWifi }.sortedBy { it.firstSeen }
     }
 
-    private fun message(gone: Boolean): JSONObject? {
-        val c = Jam.code ?: return null
-        // Numbered (always rising), so the newest word wins whatever order copies arrive in.
-        lastSent = maxOf(lastSent + 1, System.currentTimeMillis())
-        return JSONObject().put("gw", "jam").put("v", 1).put("t", lastSent).put("id", Jam.deviceId).put("c", c.replace("-", ""))
-            .put("n", Jam.myDisplayName()).put("k", SyncPlatform.kind).put("s", Jam.player?.current()?.title ?: "").put("gone", gone)
-    }
-
-    /** Forgets Jams not heard from lately (Wi-Fi: 10 seconds; area: 25 minutes, as they're said every 10). */
+    /** Forgets Jams not heard from lately (Wi-Fi: 10 seconds; area: 45 minutes, as they're listed every 20). */
     private val pruner = object : Runnable {
         override fun run() {
             val now = elapsed()
             val a = onWifi.values.removeAll { now - it.seenAt > 10_000 }
-            val b = inArea.values.removeAll { now - it.seenAt > 25 * 60_000 }
+            val b = inArea.values.removeAll { now - it.seenAt > 45 * 60_000 }
             if (a || b) publish()
-            if (wifiSocket != null || areaOn) main.postDelayed(this, 2_000)
+            if (wifiLooking || areaOn) main.postDelayed(this, 2_000)
         }
     }
 
     private fun startPruner() { main.removeCallbacks(pruner); main.postDelayed(pruner, 2_000) }
 
-    // ---------------------------------------------------------------- on this Wi-Fi
-
-    @Volatile private var wifiSocket: DatagramSocket? = null
-
-    private fun startWifi() {
-        if (wifiSocket != null) return
-        val s = runCatching {
-            DatagramSocket(null).apply { reuseAddress = true; broadcast = true; soTimeout = 1_500; bind(InetSocketAddress(PORT)) }
-        }.getOrNull() ?: return
-        wifiSocket = s
-        JamPlatform.holdWifi(true)
-        Thread({
-            val buf = ByteArray(2048)
-            while (wifiSocket === s) {
-                try {
-                    val p = DatagramPacket(buf, buf.size)
-                    s.receive(p)
-                    val o = runCatching { JSONObject(String(p.data, 0, p.length, Charsets.UTF_8)) }.getOrNull() ?: continue
-                    main.post { heard(o, wifi = true) }
-                } catch (e: SocketTimeoutException) {
-                } catch (e: Exception) {
-                    if (wifiSocket !== s) break
-                    try { Thread.sleep(1_000) } catch (_: InterruptedException) { break }
-                }
-            }
-        }, "Glasswave jam nearby (Wi-Fi)").apply { isDaemon = true; start() }
-        startPruner()
-    }
-
-    private fun stopWifi() {
-        val s = wifiSocket ?: return
-        wifiSocket = null
-        runCatching { s.close() }
-        JamPlatform.holdWifi(false)
-        onWifi.clear()
+    /** Automated checks only (pictures): pretend this Jam was heard nearby. */
+    internal fun testFound(f: Found) {
+        (if (f.onWifi) onWifi else inArea)[f.code] = f.copy(seenAt = elapsed())
         publish()
-    }
-
-    private var wifiAnnouncing = false
-
-    private fun announceWifi(on: Boolean) {
-        if (on == wifiAnnouncing) return
-        wifiAnnouncing = on
-        main.removeCallbacks(wifiAnnouncer)
-        if (on) main.post(wifiAnnouncer)
-        else message(gone = true)?.toString()?.let { gone ->
-            // Said three times: a single message on a busy network can go missing.
-            sendWifi(gone, now = true)
-            main.postDelayed({ sendWifi(gone, now = true) }, 400)
-            main.postDelayed({ sendWifi(gone, now = true) }, 1_000)
-        }
-    }
-
-    private val wifiAnnouncer = object : Runnable {
-        override fun run() {
-            if (!wifiAnnouncing) return
-            message(gone = false)?.let { sendWifi(it.toString()) }
-            main.postDelayed(this, 3_000)
-        }
-    }
-
-    /** To every Wi-Fi/Ethernet network this device is on (each one's broadcast address). */
-    private fun sendWifi(text: String, now: Boolean = false) {
-        val bytes = text.toByteArray(Charsets.UTF_8)
-        (if (now) urgent else io).execute {
-            runCatching {
-                DatagramSocket().use { s ->
-                    s.broadcast = true
-                    for (t in broadcastTargets()) runCatching { s.send(DatagramPacket(bytes, bytes.size, t, PORT)) }
-                }
-            }
-        }
-    }
-
-    @Volatile private var targets: List<InetAddress> = emptyList()
-    @Volatile private var targetsAt = 0L
-
-    /**
-     * Where to send: each network's broadcast address. Asking Windows for its networks can take
-     * seconds, so the answer is kept for a minute (else announcements pile up behind it).
-     */
-    @Synchronized
-    private fun broadcastTargets(): List<InetAddress> {
-        if (targets.isNotEmpty() && elapsed() - targetsAt < 60_000) return targets
-        val found = LinkedHashSet<InetAddress>()
-        runCatching {
-            for (ni in NetworkInterface.getNetworkInterfaces()) {
-                if (!ni.isUp || ni.isLoopback || ni.isVirtual) continue
-                ni.interfaceAddresses.mapNotNullTo(found) { it.broadcast }
-            }
-        }
-        runCatching { found += InetAddress.getByName("255.255.255.255") }
-        targets = found.toList()
-        targetsAt = elapsed()
-        return targets
     }
 
     // ---------------------------------------------------------------- in this area
@@ -249,7 +229,6 @@ object JamNearby {
         if (areaOn) return
         areaOn = true
         val gen = ++areaGen
-        startPruner()
         Thread({
             val here = whereAmI()
             if (here == null || gen != areaGen) return@Thread
@@ -260,7 +239,7 @@ object JamNearby {
             for (dy in -1..1) for (dx in -1..1) cells += Geohash.encode(here.lat + dy * step.first, here.lon + dx * step.second, AREA_PRECISION)
             val channels = cells.associate { c -> channel(c).let { it.first to it.second } }
             val client = YtRepo.http.newBuilder().readTimeout(90, TimeUnit.SECONDS).build()
-            var since = "25m"
+            var since = "45m"
             var wait = 5_000L
             while (gen == areaGen) {
                 try {
@@ -288,12 +267,6 @@ object JamNearby {
         }, "Glasswave jam nearby (area)").apply { isDaemon = true; start() }
     }
 
-    /** Automated checks only (pictures): pretend this Jam was heard nearby. */
-    internal fun testFound(f: Found) {
-        (if (f.onWifi) onWifi else inArea)[f.code] = f.copy(seenAt = elapsed())
-        publish()
-    }
-
     /** Location permission was answered: find where this is again, and look around there. */
     fun relocate() {
         spot = null
@@ -319,23 +292,23 @@ object JamNearby {
         if (on) main.post(areaAnnouncer)
         else {
             val c = myCell ?: return
-            val msg = message(gone = true) ?: return
+            val msg = message(public = false, active = false)
             urgent.execute { runCatching { val (t, k) = channel(c); Jam.post(t, k, msg) } }
         }
     }
 
-    /** Lists the Jam for this area now, and again every 10 minutes while it lasts. */
+    /** Lists the Jam for this area now, and again every 20 minutes while it lasts (each one counts against the relay's daily limit). */
     private val areaAnnouncer = object : Runnable {
         override fun run() {
             if (!areaAnnouncing) return
-            val msg = message(gone = false)
-            if (msg != null) io.execute {
+            val msg = message(public = true, active = false)
+            io.execute {
                 val here = whereAmI() ?: return@execute
                 val c = Geohash.encode(here.lat, here.lon, AREA_PRECISION)
                 myCell = c
                 runCatching { val (t, k) = channel(c); Jam.post(t, k, msg) }
             }
-            main.postDelayed(this, 10 * 60_000)
+            main.postDelayed(this, 20 * 60_000)
         }
     }
 
