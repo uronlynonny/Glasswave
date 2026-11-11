@@ -1,11 +1,11 @@
 {
-  "lastTime": 1794397907,
+  "lastTime": 1794401987,
   "totals": {
     "visits": 141,
     "siteDownloads": 44,
-    "apk": 388
+    "apk": 389
   },
-  "apkTotal": 351,
+  "apkTotal": 352,
   "hours": [
     {
       "t": 1792763089,
@@ -2652,9 +2652,15 @@
       "v": 0,
       "d": 0,
       "a": 0
+    },
+    {
+      "t": 1794406357,
+      "v": 0,
+      "d": 0,
+      "a": 1
     }
   ],
-  "updated": 1794401986,
+  "updated": 1794406357,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -2877,7 +2883,7 @@
       "m": "\"One More Time (12 Mix)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.53\nhttps://music.youtube.com/watch?v=bmjsUsS8QuM"
     }
   ],
-  "lastActiveTime": 1794401608,
+  "lastActiveTime": 1794403870,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -3269,6 +3275,7 @@
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
         "2cde5f08-41b5-47f3-8920-6cc59cb3c0a8",
+        "d8dfbeea-6046-4a55-beb1-39a0e683240f",
         "ed231edb-5cff-47a4-b2b3-7a9b3b6c8355"
       ]
     }
@@ -3276,7 +3283,7 @@
   "active": {
     "today": {
       "a": 8,
-      "w": 3
+      "w": 4
     },
     "week": {
       "a": 40,
@@ -3380,7 +3387,7 @@
       {
         "d": "2026-11-11",
         "a": 8,
-        "w": 3
+        "w": 4
       }
     ]
   },
