@@ -228,6 +228,26 @@ class PlayerState(private val context: Context) {
         }
     }
 
+    /**
+     * Replaces everything after the current song with [tracks] (a Jam keeps everyone's Up next the
+     * same). Songs already in the right place stay, so the next one stays loaded.
+     */
+    fun setUpcoming(tracks: List<Track>) {
+        val c = controller ?: return
+        if (c.mediaItemCount == 0) return
+        val from = c.currentMediaItemIndex + 1
+        var same = 0
+        while (same < tracks.size && from + same < c.mediaItemCount && c.getMediaItemAt(from + same).mediaId == tracks[same].url) same++
+        if (from + same < c.mediaItemCount) c.removeMediaItems(from + same, c.mediaItemCount)
+        if (same < tracks.size) c.addMediaItems(tracks.drop(same).map { it.toMediaItem() })
+    }
+
+    /** Play is pressed (it may still be loading). */
+    val wantsToPlay: Boolean get() = controller?.playWhenReady ?: false
+
+    /** Sound is coming out right now: playing, and not loading or buffering. */
+    val sounding: Boolean get() = controller?.isPlaying ?: false
+
     /** Adds songs to the very end of the queue. */
     fun appendTracks(tracks: List<Track>) {
         controller?.addMediaItems(tracks.map { it.toMediaItem() })

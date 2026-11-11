@@ -109,6 +109,34 @@ fun main(args: Array<String>) {
                 "fakephone" -> Sync.testHeard(Sync.Device("fake-phone", "Nonny's Phone", "phone", true,
                     Track("https://music.youtube.com/watch?v=x", "Calm Down", "Rema", 239, "https://i.ytimg.com/vi/WcIcVapfqXw/hqdefault.jpg"), 61_000, 239_000, System.currentTimeMillis()))
                 "devices" -> onUi { Sync.panelOpen = !Sync.panelOpen }
+                // jam: opens the Jam panel. jamstart: starts a Jam. jampeople: two pretend people join it.
+                // jamqueue: three songs in the queue (paused), the second one added by a pretend person.
+                "jam" -> onUi { Jam.panelOpen = !Jam.panelOpen }
+                "jamstart" -> onUi { Jam.start() }
+                // jamnearby: a pretend Jam nearby (in the area), for the banner and the panel's list.
+                "jamnearby" -> onUi {
+                    JamNearby.testFound(JamNearby.Found("K7QF2XD9P", "Ada", "phone", "Calm Down", "pretend-host", 0, onWifi = false))
+                    JamNearby.testFound(JamNearby.Found("M4RT8VWQX", "Tobi", "pc", "Blinding Lights", "pretend-host-2", 0, onWifi = true))
+                }
+                "jampeople" -> onUi {
+                    Jam.testPeople(
+                        listOf(
+                            Jam.Member("p1", "Ada", "Pixel 8", "phone", null, false, android.os.SystemClock.elapsedRealtime()),
+                            Jam.Member("p2", "Tobi", "Windows PC", "pc", null, false, android.os.SystemClock.elapsedRealtime()),
+                        ),
+                        mapOf("https://music.youtube.com/watch?v=kJQP7kiw5Fk" to "Ada"),
+                    )
+                }
+                "jamqueue" -> onUi {
+                    ps.playList(
+                        listOf(
+                            Track("https://music.youtube.com/watch?v=WcIcVapfqXw", "Calm Down", "Rema", 239, "https://i.ytimg.com/vi/WcIcVapfqXw/hqdefault.jpg"),
+                            Track("https://music.youtube.com/watch?v=kJQP7kiw5Fk", "Despacito", "Luis Fonsi", 282, "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg"),
+                            Track("https://music.youtube.com/watch?v=fHI8X4OXluQ", "Blinding Lights", "The Weeknd", 200, "https://i.ytimg.com/vi/fHI8X4OXluQ/hqdefault.jpg"),
+                        ), 0,
+                    )
+                    ps.pause()
+                }
                 // notint: marks the first song on Home "Not interested" and reports what happened.
                 // songmenu: opens the ••• menu for the first song on Home.
                 "notint", "songmenu" -> onUi {

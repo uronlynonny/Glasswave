@@ -35,6 +35,8 @@ class MainActivity : ComponentActivity() {
         )
         ps = PlayerState(applicationContext)
         ps.connect()
+        // Jam's location question and QR scanner need the open screen.
+        JamPlatform.activity = java.lang.ref.WeakReference(this)
         if (savedInstanceState == null) handleOpen(intent)
 
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -62,6 +64,14 @@ class MainActivity : ComponentActivity() {
         if (i?.action == OPEN_PLAYER && ::ps.isInitialized) ps.openFull = true
         // "Play this song" from another app (Cue, Google Assistant).
         if (i != null && PlayRequest.isOne(i) && ::ps.isInitialized) PlayRequest.handle(applicationContext, i, ps)
+        // A Jam invite (glasswave://jam/CODE): the Jam panel opens with the code in, ready to join.
+        val link = i?.data
+        if (i?.action == Intent.ACTION_VIEW && link?.scheme == "glasswave" && link.host == "jam") {
+            Jam.parseCode(link.toString())?.let { c ->
+                if (!Jam.inJam) Jam.joinCode = c.chunked(3).joinToString("-")
+                Jam.panelOpen = true
+            }
+        }
     }
 
     companion object {
@@ -110,6 +120,12 @@ class MainActivity : ComponentActivity() {
         } catch (e: ActivityNotFoundException) {
             Toast.makeText(this, "No web browser found", Toast.LENGTH_LONG).show()
         }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == JamPlatform.LOCATION_REQUEST) JamPlatform.locationAnswered()
     }
 
     override fun onDestroy() {

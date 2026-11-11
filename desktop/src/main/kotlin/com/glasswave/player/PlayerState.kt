@@ -221,6 +221,30 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         moveTo(i, play = true, auto = false)
     }
 
+    /**
+     * Replaces everything after the current song with [tracks] (a Jam keeps everyone's Up next the
+     * same). Songs already in the right place stay, so the next one stays loaded.
+     */
+    fun setUpcoming(tracks: List<Track>) {
+        val p = base.indexOf(cur)
+        if (p < 0) return
+        var same = 0
+        while (same < tracks.size && p + 1 + same < base.size && items[base[p + 1 + same]].url == tracks[same].url) same++
+        val nextBefore = nextIndex(cur, Player.REPEAT_MODE_OFF)
+        while (base.size > p + 1 + same) base.removeAt(base.size - 1)
+        for (t in tracks.drop(same)) { items += t; base += items.lastIndex }
+        // Shuffle plays the same order: in a Jam, the host's order is the one that plays.
+        shuf.clear(); shuf += base
+        if (nextIndex(cur, Player.REPEAT_MODE_OFF) != nextBefore) spare.stop()
+        changed()
+    }
+
+    /** Play is pressed (it may still be loading). */
+    val wantsToPlay: Boolean get() = playing
+
+    /** Sound is coming out right now: playing, and not loading or buffering. */
+    val sounding: Boolean get() = playing && !buffering && deck.ready
+
     /** Adds songs to the very end of the queue. */
     fun appendTracks(tracks: List<Track>) {
         for (t in tracks) {
@@ -706,8 +730,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
 
     /* ---- Getting the next song ready, crossfade and Automix ---- */
 
-    /** Automix is on (or Flow is playing, which always mixes), and nothing asks for songs to end on their own. */
-    private fun mixOn() = (Settings.automix || Flow.active || mixedPlaylist() != null) && repeat != Player.REPEAT_MODE_ONE && !SleepTimer.endOfSong
+    /** Automix is on (or Flow is playing, which always mixes), and nothing asks for songs to end on their own. Never in a Jam: everyone changes song at the same moment. */
+    private fun mixOn() = !Jam.inJam && (Settings.automix || Flow.active || mixedPlaylist() != null) && repeat != Player.REPEAT_MODE_ONE && !SleepTimer.endOfSong
 
     /** The playlist with Mix on that's playing now, if the queue is one (see [PlaylistMix]). */
     private fun mixedPlaylist(): String? = if (Flow.active) null else PlaylistMix.forQueue(items.map { it.url })
@@ -1077,6 +1101,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
     private var autoplayFor: String? = null
 
     private fun maybeAutoplay() {
+        // In someone's Jam, the host's Autoplay picks for everyone.
+        if (Jam.following) return
         if (!Settings.autoplay) {
             if (Autoplay.added.isNotEmpty()) {
                 val now = order.indexOf(cur)

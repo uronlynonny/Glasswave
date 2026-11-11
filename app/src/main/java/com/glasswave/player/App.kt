@@ -120,6 +120,20 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
     // Phone and PC on the same YouTube Music account (see Sync): let them control this player,
     // and tell them when the song or play/pause changes.
     LaunchedEffect(ps) { Sync.remote = syncRemote(ps); Sync.start() }
+    // Listen together (see Jam).
+    LaunchedEffect(ps) { Jam.player = jamPlayer(ps) }
+    // Jams nearby (see JamNearby): on this Wi-Fi and around you, whenever Glasswave is on screen
+    // and you're not in a Jam yourself.
+    var jamOnScreen by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
+    androidx.compose.runtime.DisposableEffect(lifecycle) {
+        val o = androidx.lifecycle.LifecycleEventObserver { _, _ -> jamOnScreen = lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED) }
+        lifecycle.addObserver(o)
+        onDispose { lifecycle.removeObserver(o) }
+    }
+    LaunchedEffect(jamOnScreen, Jam.inJam) {
+        val look = jamOnScreen && !Jam.inJam
+        JamNearby.listen(wifi = look, area = look)
+    }
     LaunchedEffect(ps.currentId, ps.playing) {
         kotlinx.coroutines.delay(1200)
         Sync.publishState()
@@ -199,6 +213,7 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
         }
 
         Column(Modifier.align(Alignment.BottomCenter).drawWithContent { if (!covered) drawContent() }.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).widthIn(max = 560.dp)) {
+            NearbyJamBanner(Modifier.padding(bottom = 10.dp))
             RemoteStrip(ps.playing, Modifier.padding(bottom = 10.dp))
             AnimatedVisibility(
                 visible = ps.hasItem,
@@ -229,6 +244,8 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
 
         // Your other devices on this YouTube Music account.
         DevicesPanel(ps.currentTrack(), ps.playing)
+        // Listen together.
+        JamPanel(ps, page)
 
         if (vm.voiceOpen) {
             VoiceSearch(

@@ -139,6 +139,11 @@ object Updater {
     }
 
     fun check(tell: Boolean = false) {
+        // Test copies (started with -Dgw.noUpdate) never update or install anything.
+        if (System.getProperty("gw.noUpdate") != null) {
+            if (tell) status = "This is a test copy, so it doesn't update."
+            return
+        }
         if (Os.isMac) {
             if (tell) status = "On a Mac, new versions come from the Glasswave website for now."
             return
@@ -304,7 +309,7 @@ object Updater {
 
     /** Called as the app closes: a downloaded update installs silently, ready for next time. */
     fun installOnExit() {
-        if (fromStore || !Os.isWindows) return
+        if (fromStore || !Os.isWindows || System.getProperty("gw.noUpdate") != null) return
         ready?.let { runInstaller(it, reopen = false) }
     }
 

@@ -35,6 +35,8 @@ class GlassApp : Application(), ImageLoaderFactory {
         Badges.init(this)
         Sync.init(this)
         SyncPlatform.init(this)
+        Jam.init(this)
+        JamPlatform.init(this)
         Updater.init(this)
         Active.init(this)
         Profile.init(this)

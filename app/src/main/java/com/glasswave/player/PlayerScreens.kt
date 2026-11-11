@@ -692,6 +692,7 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
                 Ico(Icons.AutoMirrored.Rounded.QueueMusic, Color.White.copy(alpha = 0.85f), 24.dp)
             }
             DevicesButton()
+            JamButton()
 
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.pressable(0.9f) { if (!Settings.savingData) nextQuality() }) {

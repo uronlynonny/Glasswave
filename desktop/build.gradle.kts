@@ -40,6 +40,8 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.3.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.json:json:20240303")
+    // QR codes for Jam invites.
+    implementation("com.google.zxing:core:3.5.3")
 
     // The YouTube source.
     implementation("com.github.TeamNewPipe:NewPipeExtractor:$newPipe")
@@ -334,6 +336,8 @@ tasks.register<JavaExec>("screenCheck") {
     (project.findProperty("extraJvm") as String?)?.let { jvmArgs(it.split(" ")) }
     (project.findProperty("voiceWav") as String?)?.let { systemProperty("gw.voiceTestWav", it) }
     if (project.hasProperty("testDrop")) systemProperty("gw.testDrop", "1")
+    // -PdataDir=<folder>: its own data folder, so your own Glasswave data is left alone.
+    (project.findProperty("dataDir") as String?)?.let { environment("APPDATA", "$it/roaming"); environment("LOCALAPPDATA", "$it/local") }
     // -Poffline: cuts the app off from the internet (everything goes to a proxy that isn't there).
     if (project.hasProperty("offline")) { systemProperty("socksProxyHost", "127.0.0.1"); systemProperty("socksProxyPort", "9") }
     // -PsyncTest: signed in to a made-up account as far as phone/PC sync goes (for pictures of Devices).
@@ -517,4 +521,14 @@ tasks.register("memCheckCommand") {
         File(out, "memcheck-jvm.txt").writeText(compose.desktop.application.jvmArgs.joinToString("\n"))
         println("memcheck command written to $out")
     }
+}
+
+// Listen together: two pretend devices in a Jam (host and guest, the guest's clock 7 s off) stay
+// in step through join, play, pause, seek, skip, queue add, leave, remove and end. Through the
+// real relay; -Plocal uses a stand-in relay on this computer instead (no messages sent out).
+tasks.register<JavaExec>("jamCheck") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.JamCheckKt")
+    systemProperty("gw.jamDir", layout.buildDirectory.dir("check-data/jam").get().asFile.absolutePath)
+    if (project.hasProperty("local")) systemProperty("gw.jamLocal", "1")
 }

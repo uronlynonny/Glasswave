@@ -908,6 +908,8 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun maybeAutoplay(p: Player) {
+        // In someone's Jam, the host's Autoplay picks for everyone.
+        if (Jam.following) return
         if (!Settings.autoplay) {
             if (Autoplay.added.isNotEmpty()) removeAutoplayed(p)
             return
@@ -1015,7 +1017,8 @@ class PlaybackService : MediaSessionService() {
 
     /** Automix is on (or Flow is playing, which always mixes), and nothing asks for songs to end on their own. */
     private fun mixOn(p: Player): Boolean {
-        return (Settings.automix || Flow.active || mixedPlaylist(p) != null) && p.repeatMode != Player.REPEAT_MODE_ONE && !SleepTimer.endOfSong
+        // Never in a Jam: everyone changes song at the same moment.
+        return !Jam.inJam && (Settings.automix || Flow.active || mixedPlaylist(p) != null) && p.repeatMode != Player.REPEAT_MODE_ONE && !SleepTimer.endOfSong
     }
 
     /** The playlist with Mix on that's playing now, if the queue is one (see [PlaylistMix]). */

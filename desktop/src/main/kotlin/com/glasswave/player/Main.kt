@@ -272,6 +272,7 @@ internal fun startUp() {
     boot("Stats.init") { Stats.init(ctx) }
     boot("Badges.init") { Badges.init(ctx) }
     boot("Sync.init") { Sync.init(ctx) }
+    boot("Jam.init") { Jam.init(ctx) }
     boot("Updater.init") { Updater.init(ctx) }
     boot("Profile.init") { Profile.init(ctx) }
     boot("Profile.refresh") { Profile.refresh() }
@@ -341,6 +342,8 @@ fun main(args: Array<String>) {
         val quitAll = {
             // Tell your phone this computer stopped playing (a second at most).
             Thread { Sync.goodbye() }.apply { isDaemon = true; start() }.join(1500)
+            // And anyone in a Jam with you: you've left (or, the host, it's over).
+            Thread { Jam.goodbye() }.apply { isDaemon = true; start() }.join(1500)
             Active.liveBye()
             // A downloaded update installs quietly as the app closes.
             Discord.shutdown()

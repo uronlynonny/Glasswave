@@ -54,6 +54,11 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.3")
 
     implementation("androidx.core:core-ktx:1.15.0")
+    // Jam invites: QR codes (drawn with ZXing; scanned with Google's scanner, no camera permission).
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    // The scanner brings an old Fragment library; the app needs a current one (permission requests).
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
     // Lets the sign-in page leave out the header that tells Google it's inside an app.
     implementation("androidx.webkit:webkit:1.12.1")
     implementation("androidx.activity:activity-compose:1.9.3")

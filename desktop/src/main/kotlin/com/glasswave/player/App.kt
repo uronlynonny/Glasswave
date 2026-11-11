@@ -112,6 +112,13 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
     // Phone and PC on the same YouTube Music account (see Sync): let them control this player,
     // and tell them when the song or play/pause changes.
     LaunchedEffect(ps) { Sync.remote = syncRemote(ps); Sync.start() }
+    // Listen together (see Jam).
+    LaunchedEffect(ps) { Jam.player = jamPlayer(ps) }
+    // Jams nearby (see JamNearby): on this network and around you, while you're not in a Jam yourself.
+    LaunchedEffect(Jam.inJam) {
+        val look = !Jam.inJam
+        JamNearby.listen(wifi = look, area = look)
+    }
     LaunchedEffect(ps.currentId, ps.playing) {
         kotlinx.coroutines.delay(1200)
         Sync.publishState()
@@ -225,11 +232,13 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
             ) {
                 PlayerBar(ps, page, onOpen = { full = true })
             }
-            RemoteStrip(
-                ps.playing,
+            Column(
                 Modifier.align(Alignment.BottomCenter).padding(bottom = if (ps.hasItem) PlayerBarSpace - 4.dp else 16.dp)
                     .widthIn(max = 520.dp).padding(horizontal = 16.dp),
-            )
+            ) {
+                NearbyJamBanner(Modifier.padding(bottom = 8.dp))
+                RemoteStrip(ps.playing)
+            }
             // The icon rail, floating over the page as glass (it opens over it on hover).
             Sidebar(
                 vm, ps, page,
@@ -237,6 +246,7 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
                     .padding(bottom = if (ps.hasItem) PlayerBarSpace - 12.dp else 0.dp),
             )
         } else Column(Modifier.align(Alignment.BottomCenter).drawWithContent { if (!covered) drawContent() }.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).widthIn(max = 560.dp)) {
+            NearbyJamBanner(Modifier.padding(bottom = 10.dp))
             RemoteStrip(ps.playing, Modifier.padding(bottom = 10.dp))
             AnimatedVisibility(
                 visible = ps.hasItem,
@@ -271,6 +281,8 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
 
         // Your other devices on this YouTube Music account.
         DevicesPanel(ps.currentTrack(), ps.playing)
+        // Listen together.
+        JamPanel(ps, page)
 
         // Voice search: sing or say some lyrics.
         if (vm.voiceOpen) {

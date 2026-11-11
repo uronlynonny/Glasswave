@@ -190,8 +190,8 @@ object Sound {
     /** Your own pitch setting: 1 = unchanged, 2 = an octave up. */
     fun pitchFactor(): Float = Math.pow(2.0, pitch / 12.0).toFloat()
 
-    /** The speed the player should play at (from [speedPreset]): 1 = as recorded. */
-    fun tempo(): Float = speedPreset.speed
+    /** The speed the player should play at (from [speedPreset]): 1 = as recorded. Always 1 in a Jam, so everyone stays together. */
+    fun tempo(): Float = if (Jam.inJam) 1f else speedPreset.speed
 
     /** The pitch the player should play at: your own pitch, moved with the speed when the speed preset says so. */
     fun playPitch(): Float = pitchFactor() * (if (speedPreset.pitchFollows) speedPreset.speed else 1f)
