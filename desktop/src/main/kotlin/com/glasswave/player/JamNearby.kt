@@ -46,8 +46,13 @@ object JamNearby {
     private const val PORT = 47811
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "Glasswave jam nearby").apply { isDaemon = true } }
+    /** "It's over" goes out on its own thread, so it never waits behind the regular announcements. */
+    private val urgent = Executors.newSingleThreadExecutor { r -> Thread(r, "Glasswave jam nearby (goodbye)").apply { isDaemon = true } }
     private val onWifi = LinkedHashMap<String, Found>()
     private val inArea = LinkedHashMap<String, Found>()
+    /** The newest message heard for each Jam: an older copy arriving late (another network adapter) is ignored. */
+    private val newest = HashMap<String, Long>()
+    private var lastSent = 0L
 
     private fun elapsed() = SystemClock.elapsedRealtime()
 
@@ -68,6 +73,11 @@ object JamNearby {
         val id = o.optString("id")
         if (id.isEmpty() || id == Jam.deviceId) return
         val code = Jam.parseCode(o.optString("c")) ?: return
+        val t = o.optLong("t")
+        if (t > 0) {
+            if (t < (newest[code] ?: 0L)) return
+            newest[code] = t
+        }
         val map = if (wifi) onWifi else inArea
         if (o.optBoolean("gone")) { onWifi.remove(code); inArea.remove(code) }
         else map[code] = Found(code, o.optString("n").ifEmpty { "Someone" }.take(40), o.optString("k"), o.optString("s").ifEmpty { null }?.take(80), id, elapsed(), wifi)
@@ -81,7 +91,9 @@ object JamNearby {
 
     private fun message(gone: Boolean): JSONObject? {
         val c = Jam.code ?: return null
-        return JSONObject().put("gw", "jam").put("v", 1).put("id", Jam.deviceId).put("c", c.replace("-", ""))
+        // Numbered (always rising), so the newest word wins whatever order copies arrive in.
+        lastSent = maxOf(lastSent + 1, System.currentTimeMillis())
+        return JSONObject().put("gw", "jam").put("v", 1).put("t", lastSent).put("id", Jam.deviceId).put("c", c.replace("-", ""))
             .put("n", Jam.myDisplayName()).put("k", SyncPlatform.kind).put("s", Jam.player?.current()?.title ?: "").put("gone", gone)
     }
 
@@ -142,7 +154,13 @@ object JamNearby {
         if (on == wifiAnnouncing) return
         wifiAnnouncing = on
         main.removeCallbacks(wifiAnnouncer)
-        if (on) main.post(wifiAnnouncer) else message(gone = true)?.let { sendWifi(it.toString()) }
+        if (on) main.post(wifiAnnouncer)
+        else message(gone = true)?.toString()?.let { gone ->
+            // Said three times: a single message on a busy network can go missing.
+            sendWifi(gone, now = true)
+            main.postDelayed({ sendWifi(gone, now = true) }, 400)
+            main.postDelayed({ sendWifi(gone, now = true) }, 1_000)
+        }
     }
 
     private val wifiAnnouncer = object : Runnable {
@@ -154,24 +172,39 @@ object JamNearby {
     }
 
     /** To every Wi-Fi/Ethernet network this device is on (each one's broadcast address). */
-    private fun sendWifi(text: String) {
+    private fun sendWifi(text: String, now: Boolean = false) {
         val bytes = text.toByteArray(Charsets.UTF_8)
-        io.execute {
-            val targets = LinkedHashSet<InetAddress>()
-            runCatching {
-                for (ni in NetworkInterface.getNetworkInterfaces()) {
-                    if (!ni.isUp || ni.isLoopback || ni.isVirtual) continue
-                    ni.interfaceAddresses.mapNotNullTo(targets) { it.broadcast }
-                }
-            }
-            runCatching { targets += InetAddress.getByName("255.255.255.255") }
+        (if (now) urgent else io).execute {
             runCatching {
                 DatagramSocket().use { s ->
                     s.broadcast = true
-                    for (t in targets) runCatching { s.send(DatagramPacket(bytes, bytes.size, t, PORT)) }
+                    for (t in broadcastTargets()) runCatching { s.send(DatagramPacket(bytes, bytes.size, t, PORT)) }
                 }
             }
         }
+    }
+
+    @Volatile private var targets: List<InetAddress> = emptyList()
+    @Volatile private var targetsAt = 0L
+
+    /**
+     * Where to send: each network's broadcast address. Asking Windows for its networks can take
+     * seconds, so the answer is kept for a minute (else announcements pile up behind it).
+     */
+    @Synchronized
+    private fun broadcastTargets(): List<InetAddress> {
+        if (targets.isNotEmpty() && elapsed() - targetsAt < 60_000) return targets
+        val found = LinkedHashSet<InetAddress>()
+        runCatching {
+            for (ni in NetworkInterface.getNetworkInterfaces()) {
+                if (!ni.isUp || ni.isLoopback || ni.isVirtual) continue
+                ni.interfaceAddresses.mapNotNullTo(found) { it.broadcast }
+            }
+        }
+        runCatching { found += InetAddress.getByName("255.255.255.255") }
+        targets = found.toList()
+        targetsAt = elapsed()
+        return targets
     }
 
     // ---------------------------------------------------------------- in this area
@@ -287,7 +320,7 @@ object JamNearby {
         else {
             val c = myCell ?: return
             val msg = message(gone = true) ?: return
-            io.execute { runCatching { val (t, k) = channel(c); Jam.post(t, k, msg) } }
+            urgent.execute { runCatching { val (t, k) = channel(c); Jam.post(t, k, msg) } }
         }
     }
 

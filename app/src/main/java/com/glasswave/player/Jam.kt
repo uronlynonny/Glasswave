@@ -906,14 +906,14 @@ object Jam {
         }
     }
 
-    /** Keeps this player within a third of a second of the host. */
+    /** Keeps this player within a fifth of a second of the host. */
     private fun fixDrift(p: Player, s: State, now: Long) {
         val expected = s.expected()
         val pos = p.positionMs()
         val drift = pos - expected
         lastDrift = if (s.playing && p.sounding()) drift else if (!s.playing) drift else null
         if (!s.playing) {
-            if (!p.wantsToPlay() && kotlin.math.abs(drift) > 300 && now - lastFix > 1_000) {
+            if (!p.wantsToPlay() && kotlin.math.abs(drift) > 200 && now - lastFix > 1_000) {
                 p.seekTo(expected); lastFix = now; selfUntil = now + 800
             }
             return
@@ -924,7 +924,7 @@ object Jam {
             checkLagAt = 0
             if (kotlin.math.abs(drift) < 1_500) seekLead = (seekLead - drift * 2 / 3).coerceIn(0, 1_500)
         }
-        if (kotlin.math.abs(drift) > 300 && now - lastFix > 3_000) {
+        if (kotlin.math.abs(drift) > 200 && now - lastFix > 3_000) {
             p.seekTo(expected + seekLead)
             lastFix = now
             checkLagAt = now + 1_200
