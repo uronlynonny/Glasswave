@@ -70,7 +70,11 @@ fun VoiceSearch(onResult: (String) -> Unit, onClose: () -> Unit) {
         }.apply { isDaemon = true }.start()
     }
 
-    if (ready) {
+    // Already known not to work on this PC (see Voice.Unavailable): say so instead of listening.
+    val unsupported = remember { Voice.unsupportedReason }
+    if (unsupported != null) {
+        androidx.compose.runtime.LaunchedEffect(Unit) { status = unsupported }
+    } else if (ready) {
         DisposableEffect(attempt) {
             stop.set(false)
             heard = ""
@@ -88,6 +92,7 @@ fun VoiceSearch(onResult: (String) -> Unit, onClose: () -> Unit) {
                     }
                     ui { listening = false; level = 0f; status = "Finding it…" }
                     if (!rec.heardSomething) {
+                        Voice.cancel()
                         ui { busy = false; status = "Didn't hear anything. Check your microphone, then click the mic to try again." }
                         return@Thread
                     }
@@ -99,11 +104,13 @@ fun VoiceSearch(onResult: (String) -> Unit, onClose: () -> Unit) {
                     }
                 } catch (e: Exception) {
                     android.util.Log.w("Glasswave", "Voice search failed", e)
+                    Voice.cancel()
                     ui {
                         listening = false
                         busy = false
                         level = 0f
-                        status = if (e is IllegalArgumentException || e is javax.sound.sampled.LineUnavailableException)
+                        status = if (e is Voice.Unavailable) e.message.orEmpty()
+                        else if (e is IllegalArgumentException || e is javax.sound.sampled.LineUnavailableException)
                             if (Os.isWindows) "No microphone found. Plug one in, or allow apps to use it in Windows Settings › Privacy › Microphone."
                             else "No microphone found. Plug one in, or check your system's sound settings."
                         else "Something went wrong. Click the mic to try again."
@@ -111,7 +118,7 @@ fun VoiceSearch(onResult: (String) -> Unit, onClose: () -> Unit) {
                 }
             }.apply { isDaemon = true }
             t.start()
-            onDispose { stop.set(true) }
+            onDispose { stop.set(true); Voice.cancel() }
         }
     }
 

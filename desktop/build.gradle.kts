@@ -119,6 +119,8 @@ tasks.register<JavaExec>("voiceCheck") {
     mainClass.set("com.glasswave.player.VoiceCheckKt")
     (project.findProperty("wav") as String?)?.let { args(it) }
     (project.findProperty("voiceModel") as String?)?.let { systemProperty("gw.voiceModel", it) }
+    (project.findProperty("voiceFail") as String?)?.let { systemProperty("gw.voiceWorkerFail", it) }
+    (project.findProperty("compare") as String?)?.let { systemProperty("gw.voiceCompare", it) }
 }
 
 kotlin {

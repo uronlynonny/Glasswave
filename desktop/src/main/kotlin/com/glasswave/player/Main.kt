@@ -310,7 +310,9 @@ private fun startSize(): DpSize {
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
-fun main() {
+fun main(args: Array<String>) {
+    // A second copy started only to turn a voice search into text (see Voice): no window, then quits.
+    if (args.firstOrNull() == "--voice-worker") { Voice.worker(File(args[1])); return }
     // Draw with OpenGL: on Windows' default (Direct3D 12) the graphics driver takes memory in
     // 64 MB blocks and keeps them, which alone pushed the app well past 300 MB. If OpenGL doesn't
     // work on a PC, the drawing library moves on to another way by itself.

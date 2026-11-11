@@ -68,24 +68,129 @@ object Voice {
         return j to c
     }
 
-    private val idle = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "voice-idle").apply { isDaemon = true } }
-    private var unload: java.util.concurrent.ScheduledFuture<*>? = null
+    /* ---------------- The recogniser runs in a helper process ----------------
+     * Whisper is native code built for processors with AVX2, FMA and F16C (most PCs since about 2013).
+     * On an older processor, or without Microsoft's C++ runtime, it doesn't throw an error: it takes
+     * the whole program down with it. So it runs in a second copy of Glasswave started just for this
+     * ("Glasswave.exe --voice-worker <folder>"): if that one fails, Glasswave stays open and says why. */
 
-    /** Frees the recogniser's memory a few minutes after the last voice search. */
-    @Synchronized
-    private fun unloadLater() {
-        unload?.cancel(false)
-        unload = idle.schedule({
-            synchronized(this) {
-                ctx?.let { c -> runCatching { jni?.free(c) } }
-                ctx = null
-            }
-        }, 3, java.util.concurrent.TimeUnit.MINUTES)
+    /** Voice search can't run on this PC; the message says why. */
+    class Unavailable(message: String) : IOException(message)
+
+    private class Job(val dir: File, val process: Process)
+    private var pending: Job? = null
+
+    /** Remembered once the recogniser has failed for a reason that won't go away (this PC's processor). */
+    private val unsupportedFile get() = File(dir, "unsupported.txt")
+
+    /** Why voice search can't run here, if it's known that it can't. */
+    val unsupportedReason: String? get() = unsupportedFile.takeIf { it.isFile }?.readText()?.trim()?.ifEmpty { null }
+
+    private fun workerCommand(jobDir: File): List<String> {
+        val self = ProcessHandle.current().info().command().orElse("")
+        // Installed: Glasswave.exe itself. Running from the build (checks): Java with the same class path.
+        return if (self.isNotEmpty() && !File(self).name.lowercase().startsWith("java")) {
+            listOf(self, "--voice-worker", jobDir.path)
+        } else {
+            val java = File(System.getProperty("java.home"), "bin/" + if (Os.isWindows) "java.exe" else "java").path
+            listOfNotNull(java, "-Xmx128m", System.getProperty("gw.voiceModel")?.let { "-Dgw.voiceModel=$it" }, System.getProperty("gw.voiceWorkerFail")?.let { "-Dgw.voiceWorkerFail=$it" }, "-cp", System.getProperty("java.class.path"), "com.glasswave.player.MainKt", "--voice-worker", jobDir.path)
+        }
     }
 
-    /** Loads the recogniser in the background, so the first search is quicker. */
+    @Synchronized
+    private fun startJob(): Job {
+        pending?.let { if (it.process.isAlive) return it }
+        val jobDir = File(dir, "job-" + System.nanoTime()).apply { mkdirs() }
+        File(jobDir, "parent.txt").writeText(ProcessHandle.current().pid().toString())
+        val p = ProcessBuilder(workerCommand(jobDir))
+            .directory(jobDir)
+            .redirectErrorStream(true)
+            .redirectOutput(File(jobDir, "log.txt"))
+            .start()
+        return Job(jobDir, p).also { pending = it }
+    }
+
+    @Synchronized
+    private fun takeJob(): Job = startJob().also { pending = null }
+
+    /** Starts the recogniser in the background while you sing, so the answer comes quicker. */
     fun warmUp() {
-        if (ready) Thread { runCatching { load() } }.apply { isDaemon = true }.start()
+        if (ready && unsupportedReason == null) runCatching { startJob() }
+    }
+
+    /** Stops a recogniser that was started but isn't needed (nothing was heard, or the window closed). */
+    @Synchronized
+    fun cancel() {
+        pending?.let { it.process.destroy(); it.dir.deleteRecursively() }
+        pending = null
+    }
+
+    /** Turns recorded audio (16 kHz mono) into text, in the helper process. Blank if nothing was understood. */
+    fun transcribe(samples: FloatArray): String {
+        unsupportedReason?.let { throw Unavailable(it) }
+        val job = takeJob()
+        try {
+            val buf = java.nio.ByteBuffer.allocate(samples.size * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            buf.asFloatBuffer().put(samples)
+            File(job.dir, "in.part").writeBytes(buf.array())
+            File(job.dir, "in.part").renameTo(File(job.dir, "in.raw"))
+            if (!job.process.waitFor(90, java.util.concurrent.TimeUnit.SECONDS)) {
+                job.process.destroyForcibly()
+                throw IOException("Voice search took too long")
+            }
+            val out = File(job.dir, "out.txt")
+            if (job.process.exitValue() == 0 && out.isFile) return out.readText()
+            throw failure(job)
+        } finally {
+            job.dir.deleteRecursively()
+        }
+    }
+
+    /** Why the helper stopped without an answer. */
+    private fun failure(job: Job): IOException {
+        val said = (job.dir.listFiles().orEmpty().filter { it.name.startsWith("hs_err") || it.name == "err.txt" || it.name == "log.txt" })
+            .joinToString("\n") { runCatching { it.readText().take(20_000) }.getOrDefault("") }
+        android.util.Log.w("Glasswave", "Voice recogniser stopped (exit ${job.process.exitValue()}): ${said.lines().firstOrNull { it.isNotBlank() }.orEmpty().take(300)}")
+        return when {
+            // The processor doesn't have the instructions it was built for. That won't change, so remember it.
+            "ILLEGAL_INSTRUCTION" in said || job.process.exitValue() == 0xC000001D.toInt() -> {
+                val why = "Voice search needs a newer processor than this PC has (one with AVX2). Everything else in Glasswave works as normal."
+                runCatching { unsupportedFile.writeText(why) }
+                Unavailable(why)
+            }
+            "VCOMP140" in said.uppercase() || "MSVCP140" in said.uppercase() || "UnsatisfiedLinkError" in said ->
+                Unavailable("Voice search needs Microsoft's Visual C++ Redistributable. Install it from Microsoft's website (search \"Visual C++ Redistributable x64\"), then try again.")
+            else -> IOException("Voice recogniser stopped (exit ${job.process.exitValue()})")
+        }
+    }
+
+    /**
+     * The helper process: loads the recogniser, waits for the recording ("in.raw" in [jobDir]),
+     * writes what it heard to "out.txt" and quits. Gives up if Glasswave closes or nothing comes.
+     */
+    fun worker(jobDir: File) {
+        try {
+            val parent = File(jobDir, "parent.txt").readText().trim().toLongOrNull()?.let { ProcessHandle.of(it).orElse(null) }
+            load()
+            // Checks only: stop the way a processor without AVX2 does.
+            if (System.getProperty("gw.voiceWorkerFail") == "cpu") Runtime.getRuntime().halt(0xC000001D.toInt())
+            val input = File(jobDir, "in.raw")
+            val giveUp = System.currentTimeMillis() + 120_000
+            while (!input.isFile) {
+                if (System.currentTimeMillis() > giveUp || (parent != null && !parent.isAlive)) kotlin.system.exitProcess(2)
+                Thread.sleep(40)
+            }
+            val bytes = input.readBytes()
+            val samples = FloatArray(bytes.size / 4)
+            java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(samples)
+            val text = transcribeHere(samples)
+            File(jobDir, "out.part").writeText(text)
+            File(jobDir, "out.part").renameTo(File(jobDir, "out.txt"))
+            kotlin.system.exitProcess(0)
+        } catch (t: Throwable) {
+            runCatching { File(jobDir, "err.txt").writeText(t.toString() + "\n" + t.stackTraceToString().take(4000)) }
+            kotlin.system.exitProcess(1)
+        }
     }
 
     class Recording(val samples: FloatArray, val heardSomething: Boolean)
@@ -141,11 +246,10 @@ object Voice {
         return Recording(samples, spoke)
     }
 
-    /** Turns recorded audio (16 kHz mono) into text. Blank if nothing was understood. */
+    /** Turns recorded audio (16 kHz mono) into text, in this process (the helper). Blank if nothing was understood. */
     @Synchronized
-    fun transcribe(samples: FloatArray): String {
+    internal fun transcribeHere(samples: FloatArray): String {
         val (j, c) = load()
-        unloadLater()
         // Whisper wants at least a second of audio.
         val audio = if (samples.size < 16_000) samples.copyOf(16_000) else samples
         val p = WhisperFullParams(WhisperSamplingStrategy.GREEDY).apply {
