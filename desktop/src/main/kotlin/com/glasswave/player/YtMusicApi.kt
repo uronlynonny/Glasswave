@@ -403,9 +403,16 @@ object YtMusicApi {
     /**
      * The "All" search, made fuller: YouTube Music's mixed results plus its Songs search (asked at the
      * same time), arranged as Top result, the best songs, artists, albums, videos and playlists, then a
-     * long list of more songs that keeps loading as you scroll. Songs you've played before move up.
+     * long list of more songs that keeps loading as you scroll. Songs you know ([known]: played or
+     * picked before) move up; one you know well comes first once what's typed is the start of its
+     * name, and is added from your own plays when YouTube Music's results don't have it. Likewise an
+     * artist you know well ([artists]: opened or played) becomes the top result after a few letters.
      */
-    suspend fun searchAll(query: String, played: Set<String>): SearchPage = kotlinx.coroutines.coroutineScope {
+    suspend fun searchAll(
+        query: String,
+        known: Map<String, SearchPicks.Known>,
+        artists: Map<String, SearchPicks.KnownArtist> = emptyMap(),
+    ): SearchPage = kotlinx.coroutines.coroutineScope {
         fun body(params: String?) = JSONObject().put("query", query).also { b ->
             params?.let { b.put("params", java.net.URLDecoder.decode(it, "UTF-8")) }
         }
@@ -418,7 +425,7 @@ object YtMusicApi {
         val ytTop = mixed.firstOrNull { it.title == "Top result" }?.items?.firstOrNull()
         // Typed a line from a song: YouTube Music finds the song from its lyrics, so trust its picks.
         val lyrics = ytTop is SongItem && SearchRank.looksLikeLyrics(query, ytTop)
-        val rank = SearchRank(query, popularJob.await(), played, lyrics)
+        val rank = SearchRank(query, popularJob.await(), known, lyrics, artists)
 
         val songs = LinkedHashMap<String, SongItem>()
         val shelf = mixed.filter { it.title.equals("Songs", true) || (lyrics && it.title == "Top result") }.flatMap { it.items }.filterIsInstance<SongItem>()
@@ -428,11 +435,15 @@ object YtMusicApi {
         shelf.forEach { songs.putIfAbsent(it.track.url, it) }
         // Best match first: how well it matches the words, how popular it is, and whether you've
         // played it. Songs hardly anyone has played go to the bottom.
-        val ordered = rank.sort(preferExplicit(songs.values.toList()).filterIsInstance<SongItem>())
+        // Songs you know well that start like what's typed are added when YouTube Music's results
+        // for just a word or two don't have them.
+        val ordered = rank.sort(rank.withMine(preferExplicit(songs.values.toList()).filterIsInstance<SongItem>()))
         // The top result is the best song, unless YouTube's top is an artist, album or playlist the
         // search names, or a song that scores better.
         val best = ordered.firstOrNull()
-        val top = when {
+        // An artist you know well whose name starts like what's typed.
+        val artist = rank.artistFor(mixed.flatMap { it.items })
+        val usual = when {
             ytTop !is SongItem && ytTop != null -> ytTop
             // The song the lyrics are from (its song version rather than the music video, if there is one).
             lyrics -> ordered.firstOrNull { SearchRank.same(it, ytTop as SongItem) } ?: ytTop
@@ -442,6 +453,8 @@ object YtMusicApi {
             ytTop is SongItem && rank.score(ytTop, 0) >= rank.score(best, 0) -> ytTop
             else -> best
         }
+        // A song or artist you know well whose name starts like what's typed comes first.
+        val top = rank.top(best, artist, usual)
         // The top result doesn't show again right under it (nor its song/video twin).
         val rest = (top as? SongItem)?.let { t -> ordered.filterNot { SearchRank.same(it, t) } } ?: ordered
         
@@ -449,7 +462,8 @@ object YtMusicApi {
         if (top != null) out += Section("Top result", listOf(top))
         if (rest.isNotEmpty()) out += Section("Songs", rest.take(8))
         val order = listOf("artist", "album", "featured playlist", "community playlist", "playlist")
-        mixed.filter { s ->
+        // Whatever was YouTube Music's top result goes back on its shelf if it's no longer the top.
+        SearchRank.shelves(mixed.filter { it.title != "Top result" }, ytTop, top, artist).filter { s ->
             val t = s.title.lowercase()
             s.title != "Top result" && !t.equals("songs") && skipInAll.none { t.contains(it) } && s.items.isNotEmpty()
         }.sortedBy { s ->

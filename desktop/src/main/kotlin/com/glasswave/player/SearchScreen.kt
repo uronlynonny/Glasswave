@@ -144,9 +144,18 @@ fun SearchScreen(c: ScreenCtx) {
 private fun YourUsual(c: ScreenCtx) {
     val q = c.vm.query
     val usual = androidx.compose.runtime.remember(q) { SearchPicks.match(q) }
-    if (usual.isEmpty()) return
+    // And the artist you usually go to when you type the start of their name.
+    val artists = androidx.compose.runtime.remember(q) { SearchPicks.matchArtists(q) }
+    if (usual.isEmpty() && artists.isEmpty()) return
     Column(Modifier.padding(horizontal = 8.dp).padding(bottom = 6.dp)) {
         GText("You usually play", 13, Faint, FontWeight.SemiBold, modifier = Modifier.padding(start = 12.dp, top = 2.dp, bottom = 2.dp))
+        artists.forEach { a ->
+            ItemRow(a) {
+                SearchPicks.searchedArtist(q, a)
+                c.vm.rememberQuery()
+                c.tap(a, listOf(a))
+            }
+        }
         usual.forEach { t ->
             TrackRow(t, t.url == c.ps.currentId, c.ps.playing) {
                 SearchPicks.record(q, t)
@@ -426,6 +435,7 @@ private fun TopResult(c: ScreenCtx, item: MusicItem, all: List<MusicItem>) {
 /** Opening a result also saves the search in Recent (results appear while typing, without pressing search). */
 private fun tapAndRemember(c: ScreenCtx, item: MusicItem, all: List<MusicItem>) {
     if (item is SongItem) SearchPicks.record(c.vm.query, item.track)
+    if (item is ArtistItem) SearchPicks.searchedArtist(c.vm.query, item)
     c.vm.rememberQuery()
     c.tap(item, all)
 }

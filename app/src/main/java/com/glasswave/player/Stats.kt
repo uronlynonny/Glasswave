@@ -75,16 +75,26 @@ object Stats {
 
     fun init(context: Context) {
         file = File(context.filesDir, "plays.jsonl")
+        recount()
+    }
+
+    /** Hands every play to search, so the songs you play most come first when you type their name. */
+    private fun recount() = writer.execute {
+        // Plays from other devices too, once syncing has started (it calls bump when they arrive).
+        val synced = runCatching { Sync.syncedPlaysFile()?.let { readFile(it) } }.getOrNull().orEmpty()
+        runCatching { SearchPicks.usePlays(readFile(file) + synced) }
     }
 
     /** Called by the player when a song has been listened to. One short line per play. */
     fun record(t: Track, ms: Long) {
         if (!Settings.keepHistory || t.title.isBlank()) return
+        val at = System.currentTimeMillis()
         val line = JSONObject()
             .put("u", t.url).put("t", t.title).put("a", t.artist).put("i", t.thumb ?: "")
-            .put("at", System.currentTimeMillis()).put("ms", ms)
+            .put("at", at).put("ms", ms)
             .toString()
         writer.execute {
+            SearchPicks.addPlay(t, at)
             runCatching {
                 file.appendText(line + "\n")
                 // Keep the log a sensible size (about the last 30,000 plays).
@@ -115,15 +125,19 @@ object Stats {
             }
             android.os.Handler(android.os.Looper.getMainLooper()).post { version++ }
         }
+        recount()
     }
 
     fun clear() {
-        writer.execute { runCatching { file.delete(); Sync.syncedPlaysFile()?.delete() } }
+        writer.execute { runCatching { file.delete(); Sync.syncedPlaysFile()?.delete() }; SearchPicks.usePlays(emptyList()) }
         version++
     }
 
     /** Refresh open stats (plays arrived from another device). */
-    fun bump() { android.os.Handler(android.os.Looper.getMainLooper()).post { version++ } }
+    fun bump() {
+        recount()
+        android.os.Handler(android.os.Looper.getMainLooper()).post { version++ }
+    }
 
     /** This device's own plays after [after] (ms), oldest first: what gets shared with other devices. */
     fun ownPlaysAfter(after: Long): List<Play> = readFile(file).filter { it.at > after }.sortedBy { it.at }

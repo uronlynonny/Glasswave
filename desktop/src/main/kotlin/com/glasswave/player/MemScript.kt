@@ -451,7 +451,7 @@ object MemScript {
                         "search" -> onUi { vm.selectTab(Tab.SEARCH); vm.onQuery(arg); vm.submitSearch() }
                         // rank query: what the All search shows, in order, with play counts.
                         "rank" -> {
-                            val page = kotlinx.coroutines.runBlocking { YtMusicApi.searchAll(arg, History.tracks.map { it.url }.toSet()) }
+                            val page = kotlinx.coroutines.runBlocking { YtMusicApi.searchAll(arg, SearchPicks.known(), SearchPicks.knownArtists()) }
                             for (s in page.sections) {
                                 System.err.println("GW rank [$arg] == ${s.title}")
                                 for (i in s.items.take(14)) System.err.println("GW rank [$arg]    " + when (i) {
@@ -489,7 +489,7 @@ object MemScript {
                         "explicitcheck" -> {
                             val seen = HashSet<String>()
                             for (f in listOf(YtMusicApi.Filter.SONGS, null)) {
-                                val page = kotlinx.coroutines.runBlocking { if (f == null) YtMusicApi.searchAll(arg, emptySet()) else YtMusicApi.search(arg, f) }
+                                val page = kotlinx.coroutines.runBlocking { if (f == null) YtMusicApi.searchAll(arg, emptyMap()) else YtMusicApi.search(arg, f) }
                                 for (i in page.sections.flatMap { it.items }.filterIsInstance<SongItem>()) {
                                     if (!seen.add(i.track.url)) continue
                                     val plays = if (i.explicit) "same" else YtRepo.uncensored(i.track.url).let { if (it == i.track.url) "CLEAN STAYS" else "-> $it" }

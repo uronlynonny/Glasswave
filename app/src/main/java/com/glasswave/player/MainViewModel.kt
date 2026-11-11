@@ -95,6 +95,8 @@ class MainViewModel : ViewModel() {
     }
 
     fun open(route: Route) {
+        // Artists you open often come first when you search the start of their name.
+        if (route is Route.Online && route.item is ArtistItem) SearchPicks.openedArtist(route.item)
         stack.add(route)
         if (route is Route.Saved) loadSaved(route.info)
     }
@@ -358,7 +360,7 @@ class MainViewModel : ViewModel() {
         searching = true
         val f = filter
         val fresh = try {
-            val page = if (f == YtMusicApi.Filter.ALL) YtMusicApi.searchAll(q, History.tracks.map { it.url }.toSet())
+            val page = if (f == YtMusicApi.Filter.ALL) YtMusicApi.searchAll(q, SearchPicks.known(), SearchPicks.knownArtists())
             else YtMusicApi.search(q, f)
             moreToken = page.next
             if (page.sections.isNotEmpty()) searchCache[key] = page.sections to page.next

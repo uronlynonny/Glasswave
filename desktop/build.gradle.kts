@@ -98,6 +98,13 @@ tasks.register<JavaExec>("lyricsCheck") {
     args(listOfNotNull(project.findProperty("songs") as String?, (project.findProperty("report") as String?)?.let { "report" }))
 }
 
+// Checks search order with made-up results (no internet): a song you've played a lot comes first
+// as soon as you type the start of its name. ./gradlew -p desktop searchCheck
+tasks.register<JavaExec>("searchCheck") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.SearchCheckKt")
+}
+
 // ./gradlew -p desktop fxCheck -Pfile=path/to/song.wav
 tasks.register<JavaExec>("fxCheck") {
     classpath = sourceSets.main.get().runtimeClasspath
