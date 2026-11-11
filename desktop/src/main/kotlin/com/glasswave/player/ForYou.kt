@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
  *  - "Your top songs": what you've played most this month, to jump back in.
  *  - "New from your artists": this year's albums and singles from the artists you play most.
  *  - "Forgotten favourites": songs you played a lot but haven't heard for a month or more.
+ *  - "Playlists for you": playlists people made around a couple of your top artists.
  * Plus "Your mixes" for Made for you: two mixes around groups of your top artists and a Discover
  * mix of artists you haven't played. All of it works without signing in to YouTube Music.
  * Songs you played in the last few plays are left out, so it never just repeats your history.
@@ -59,6 +60,7 @@ object ForYou {
         }
         val fresh = async { newFromArtists(topArtists.take(4)) }
         val forgotten = async { forgottenFavourites(justHeard) }
+        val peoples = async { CommunityPlaylists.forArtists(topArtists.take(4).shuffled().take(2)) }
 
         val picked = (radios.awaitAll().flatMap { it.drop(1).shuffled().take(9) } + favourites.shuffled().take(4))
             .distinctBy { YtRepo.songKey(it.title, it.artist) }
@@ -70,6 +72,7 @@ object ForYou {
         val byArtist = artistRadio.await().filter { it.url !in justHeard }.distinctBy { YtRepo.songKey(it.title, it.artist) }.shuffled().take(16)
         if (artist != null && byArtist.size >= 4) out += Section("Because you like $artist", byArtist.map { SongItem(it, it.artist) })
         fresh.await().takeIf { it.size >= 2 }?.let { out += Section("New from your artists", it) }
+        peoples.await().takeIf { it.size >= 4 }?.let { out += Section("Playlists for you", it) }
         forgotten.await().takeIf { it.size >= 4 }?.let { f -> out += Section("Forgotten favourites", f.map { SongItem(it, it.artist) }) }
         val top = month.topSongs.take(16).map { it.track }
         if (top.size >= 4) out += Section("Your top songs this month", top.map { SongItem(it, it.artist) })

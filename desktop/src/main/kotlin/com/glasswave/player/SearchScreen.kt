@@ -9,6 +9,7 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -368,6 +369,11 @@ private fun Results(c: ScreenCtx, sections: List<Section>) {
     LaunchedEffect(nearEnd, c.vm.canLoadMore) { if (nearEnd && c.vm.canLoadMore) c.vm.loadMoreResults() }
 
     val allSongs = sections.filter { it.title == "Songs" || it.title == "More songs" }.flatMap { it.items }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    // Playlist searches: a grid of covers, as many across as fit (at least 2).
+    val gap = 16.dp
+    val cols = ((maxWidth - 40.dp + gap) / (170.dp + gap)).toInt().coerceAtLeast(2)
+    val cardW = (maxWidth - 40.dp - gap * (cols - 1)) / cols
     LazyColumn(state = list, contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = c.bottom)) {
         sections.forEachIndexed { si, s ->
             if (s.title == "Top result" && s.items.isNotEmpty()) {
@@ -375,6 +381,16 @@ private fun Results(c: ScreenCtx, sections: List<Section>) {
                 return@forEachIndexed
             }
             if (s.title.isNotEmpty()) item(key = "t$si") { SectionTitle(s.title, Modifier.padding(start = 0.dp)) }
+            if (c.vm.filter != YtMusicApi.Filter.ALL && s.items.isNotEmpty() && s.items.all { it is PlaylistItem }) {
+                s.items.chunked(cols).forEachIndexed { ri, row ->
+                    item(key = "g$si-$ri") {
+                        Row(Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 18.dp), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                            row.forEach { entry -> ShapeCard(entry, cardW, titleLines = 2) { tapAndRemember(c, entry, s.items) } }
+                        }
+                    }
+                }
+                return@forEachIndexed
+            }
             // Albums, artists and playlists in the mixed results: a row of cards you swipe.
             if (c.vm.filter == YtMusicApi.Filter.ALL && s.items.none { it is SongItem }) {
                 item(key = "row$si") {
@@ -397,6 +413,7 @@ private fun Results(c: ScreenCtx, sections: List<Section>) {
             }
         }
         if (c.vm.loadingMore) item(key = "more") { SkeletonRow() }
+    }
     }
 }
 

@@ -368,7 +368,7 @@ fun TrackRow(
  * out, playlists and mixes a little stack of sleeves, artists a circle.
  */
 @Composable
-fun ShapeCard(item: MusicItem, width: Dp, onClick: () -> Unit) {
+fun ShapeCard(item: MusicItem, width: Dp, titleLines: Int = 1, onClick: () -> Unit) {
     Column(Modifier.width(width).pressable(onClick = onClick)) {
         when (item) {
             is AlbumItem -> Box(Modifier.fillMaxWidth().aspectRatio(1.12f)) {
@@ -402,7 +402,7 @@ fun ShapeCard(item: MusicItem, width: Dp, onClick: () -> Unit) {
             else -> Cover(item.thumb, Modifier.fillMaxWidth().aspectRatio(1f), 12.dp, circle = item is ArtistItem, fallback = item.fallbackIcon())
         }
         Spacer(Modifier.height(8.dp))
-        GText(item.title, 14, Color.White, FontWeight.Medium, 1, if (item is ArtistItem) Modifier.align(Alignment.CenterHorizontally) else Modifier)
+        GText(item.title, 14, Color.White, FontWeight.Medium, titleLines, if (item is ArtistItem) Modifier.align(Alignment.CenterHorizontally) else Modifier)
         if (item !is ArtistItem) GText(item.subtitle, 12, Dim, maxLines = 1)
     }
 }

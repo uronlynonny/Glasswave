@@ -387,6 +387,11 @@ object YtMusicApi {
     suspend fun search(query: String, filter: Filter): SearchPage = withContext(Dispatchers.IO) {
         val body = JSONObject().put("query", query)
         filter.params?.let { body.put("params", java.net.URLDecoder.decode(it, "UTF-8")) }
+        // People's playlists: YouTube Music's own list cleaned up and joined with regular YouTube's
+        // (see CommunityPlaylists), all on one page.
+        if (filter == Filter.COMMUNITY) {
+            return@withContext SearchPage(CommunityPlaylists.search(query) { sections(call("search", body)).flatMap { it.items } }, null)
+        }
         val json = call("search", body)
         // Only a single-type search (Songs, Albums...) can keep scrolling.
         SearchPage(sections(json), if (filter != Filter.ALL) nextPage(json) else null)
@@ -615,7 +620,10 @@ object YtMusicApi {
             val json = browse(JSONObject().put("browseId", id))
             val h = header(json)
             val tracks = tracksFrom(json)
-            return@withContext Page(h.title.ifEmpty { item.title }, h.subtitle.ifEmpty { item.subtitle }, h.thumb ?: item.thumb, tracks, emptyList())
+            // Someone's playlist (from Community playlists, "Name · 35 songs"): say who made it.
+            val maker = item.subtitle.substringBefore(" · ", "").trim().takeIf { it.isNotEmpty() && !h.subtitle.contains(it) }
+            val sub = listOfNotNull(h.subtitle.ifEmpty { null }, maker?.let { "by $it" }).joinToString(" · ").ifEmpty { item.subtitle }
+            return@withContext Page(h.title.ifEmpty { item.title }, sub, h.thumb ?: item.thumb, tracks, emptyList())
         }
         val json = browse(JSONObject().put("browseId", id))
         val h = header(json)

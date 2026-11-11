@@ -323,6 +323,8 @@ object MemScript {
                         "artistnamed" -> onUi { Menus.artistNamed = arg }
                         // fakeplays N: records the song playing as played N times in a row (to see Recently played group them).
                         "fakeplays" -> { var t: Track? = null; onUi { t = ps.currentTrack() }; t?.let { tr -> repeat(arg.toInt()) { Stats.record(tr, 60_000); Thread.sleep(30) } } }
+                        // homerefresh: Home loads again (its shelves are made anew).
+                        "homerefresh" -> onUi { vm.selectTab(Tab.HOME); vm.refreshHome() }
                         // pcfolder path: adds a music folder on this PC. pcplay title: plays one of its songs.
                         "pcfolder" -> {
                             onUi { PcMusic.addFolder(File(arg)); PcMusic.refresh() }
@@ -449,6 +451,14 @@ object MemScript {
                         "eqpreset" -> onUi { Sound.updateEqOn(true); Sound.applyPreset(EqPreset.valueOf(arg)) }
                         "accent" -> onUi { Settings.updateAccentColor(if (arg == "song") null else arg.toLong(16).toInt()) }
                         "search" -> onUi { vm.selectTab(Tab.SEARCH); vm.onQuery(arg); vm.submitSearch() }
+                        // searchfilter COMMUNITY: picks a search filter chip. openresult 2: opens the 2nd result (playlist, album or artist).
+                        "searchfilter" -> onUi { vm.setSearchFilter(YtMusicApi.Filter.valueOf(arg)) }
+                        "openresult" -> onUi {
+                            val items = ((vm.results as? Load.Done)?.value ?: emptyList()).flatMap { it.items }
+                            val it = items.getOrNull(arg.toInt() - 1)
+                            System.err.println("GW openresult: ${it?.javaClass?.simpleName} '${it?.title}' (${items.size} results)")
+                            if (it != null && it !is SongItem) vm.open(Route.Online(it))
+                        }
                         // rank query: what the All search shows, in order, with play counts.
                         "rank" -> {
                             val page = kotlinx.coroutines.runBlocking { YtMusicApi.searchAll(arg, SearchPicks.known(), SearchPicks.knownArtists()) }

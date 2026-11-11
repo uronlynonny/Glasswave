@@ -399,7 +399,7 @@ fun TrackRow(
  * out, playlists and mixes a little stack of sleeves, artists a circle.
  */
 @Composable
-fun ShapeCard(item: MusicItem, width: Dp, onClick: () -> Unit) {
+fun ShapeCard(item: MusicItem, width: Dp, titleLines: Int = 1, onClick: () -> Unit) {
     val hover = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
     // Hovering lifts the card a touch and shows a play button on it, like Apple Music on a computer.
@@ -452,7 +452,7 @@ fun ShapeCard(item: MusicItem, width: Dp, onClick: () -> Unit) {
         }
         }
         Spacer(Modifier.height(8.dp))
-        GText(item.title, 14, Color.White, FontWeight.Medium, 1, if (item is ArtistItem) Modifier.align(Alignment.CenterHorizontally) else Modifier)
+        GText(item.title, 14, Color.White, FontWeight.Medium, titleLines, if (item is ArtistItem) Modifier.align(Alignment.CenterHorizontally) else Modifier)
         if (item !is ArtistItem) GText(item.subtitle, 12, Dim, maxLines = 1)
     }
 }
