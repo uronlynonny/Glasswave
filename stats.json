@@ -1,11 +1,11 @@
 {
-  "lastTime": 1794463058,
+  "lastTime": 1794468601,
   "totals": {
-    "visits": 142,
+    "visits": 143,
     "siteDownloads": 45,
-    "apk": 403
+    "apk": 407
   },
-  "apkTotal": 366,
+  "apkTotal": 370,
   "hours": [
     {
       "t": 1792763089,
@@ -2742,9 +2742,15 @@
       "v": 0,
       "d": 0,
       "a": 0
+    },
+    {
+      "t": 1794473758,
+      "v": 1,
+      "d": 0,
+      "a": 4
     }
   ],
-  "updated": 1794467300,
+  "updated": 1794473758,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -2991,7 +2997,7 @@
       "m": "\"One More Time (12 Mix)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.58\nhttps://music.youtube.com/watch?v=bmjsUsS8QuM"
     }
   ],
-  "lastActiveTime": 1794455384,
+  "lastActiveTime": 1794472636,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -3398,26 +3404,31 @@
     "2026-11-12": {
       "a": [
         "140af2c1-5ebf-48a0-89c3-e50146370235",
+        "36d58cc1-c393-490b-9440-241580552d0a",
+        "5429ab51-c54a-4d18-b15e-3230a6a724b2",
         "564eab64-238a-40d0-a0ee-869efc244f9c",
         "56ac766d-f68b-4768-b718-576a801a4e32",
         "6aa14a07-a460-4e54-900f-18e240388c76",
         "6ce16e7b-e680-44af-8dda-4211206548d5",
+        "b3c18f03-67ed-409c-9931-01e1d40f1be6",
+        "b40577e8-17f8-4460-839e-0cef28e7acc4",
         "f7c66feb-e1f0-4ad2-a3a3-b5ee965c3749"
       ],
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
+        "492df51f-8bc9-42f9-8665-21ceb3f4b2ef",
         "ed231edb-5cff-47a4-b2b3-7a9b3b6c8355"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 6,
-      "w": 2
+      "a": 10,
+      "w": 3
     },
     "week": {
       "a": 42,
-      "w": 17
+      "w": 18
     },
     "month": {
       "a": 99,
@@ -3521,8 +3532,8 @@
       },
       {
         "d": "2026-11-12",
-        "a": 6,
-        "w": 2
+        "a": 10,
+        "w": 3
       }
     ]
   },
