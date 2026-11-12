@@ -1,11 +1,11 @@
 {
-  "lastTime": 1794511976,
+  "lastTime": 1794515383,
   "totals": {
     "visits": 146,
     "siteDownloads": 46,
-    "apk": 420
+    "apk": 422
   },
-  "apkTotal": 383,
+  "apkTotal": 385,
   "hours": [
     {
       "t": 1792763089,
@@ -2808,9 +2808,15 @@
       "v": 0,
       "d": 0,
       "a": 2
+    },
+    {
+      "t": 1794516401,
+      "v": 0,
+      "d": 0,
+      "a": 2
     }
   ],
-  "updated": 1794513112,
+  "updated": 1794516401,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -3079,9 +3085,21 @@
     {
       "t": 1794511976,
       "m": "\"One More Time (12 Mix)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.60\nhttps://music.youtube.com/watch?v=bmjsUsS8QuM"
+    },
+    {
+      "t": 1794515372,
+      "m": "\"Get Lucky (feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.61\nhttps://music.youtube.com/watch?v=4D7u5KF7SP8"
+    },
+    {
+      "t": 1794515377,
+      "m": "\"Get Lucky (Radio Edit - feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.61\nhttps://music.youtube.com/watch?v=Rgrt_8mXrK8"
+    },
+    {
+      "t": 1794515383,
+      "m": "\"Harder, Better, Faster, Stronger\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.61\nhttps://music.youtube.com/watch?v=JhulBGMA7G4"
     }
   ],
-  "lastActiveTime": 1794511882,
+  "lastActiveTime": 1794515288,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -3507,6 +3525,7 @@
         "492df51f-8bc9-42f9-8665-21ceb3f4b2ef",
         "6b51cb03-7457-42c6-9876-3b224faf9157",
         "b73d817b-b306-4652-8062-d92e335c6dd2",
+        "d42f1c91-c745-45a4-aad1-03bbe0a1bdab",
         "d8dfbeea-6046-4a55-beb1-39a0e683240f",
         "ed231edb-5cff-47a4-b2b3-7a9b3b6c8355",
         "ff5e4c03-6f4b-4aaf-9481-52797777d6ff"
@@ -3516,15 +3535,15 @@
   "active": {
     "today": {
       "a": 13,
-      "w": 8
+      "w": 9
     },
     "week": {
       "a": 43,
-      "w": 20
+      "w": 21
     },
     "month": {
       "a": 100,
-      "w": 26
+      "w": 27
     },
     "daily": [
       {
@@ -3625,7 +3644,7 @@
       {
         "d": "2026-11-12",
         "a": 13,
-        "w": 8
+        "w": 9
       }
     ]
   },
