@@ -272,8 +272,8 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
                 }, onPeek = { peeking = it })
         }
 
-        // "Ada is in a Jam nearby": drops in at the top, clear of the player and the "Playing on…" bar.
-        NearbyJamPrompt(ps.playing, Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 16.dp, vertical = if (desk) 18.dp else 10.dp))
+        // "Ada is in a Jam nearby": in the middle, over the dimmed app (clear of the "Playing on…" bar).
+        NearbyJamPrompt(ps.playing)
 
         // Your account, from the picture on the top right of Home.
         ProfileSheet(ctx, page, vm.profileOpen) { vm.profileOpen = false }

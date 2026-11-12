@@ -123,8 +123,8 @@ fun main(args: Array<String>) {
                 "jamstart" -> onUi { Jam.start() }
                 // jamnearby: a pretend Jam nearby (in the area), for the banner and the panel's list.
                 "jamnearby" -> onUi {
-                    JamNearby.testFound(JamNearby.Found("K7QF2XD9P", "Ada", "phone", "Calm Down", "pretend-host", 0, onWifi = false))
-                    JamNearby.testFound(JamNearby.Found("M4RT8VWQX", "Tobi", "pc", "Blinding Lights", "pretend-host-2", 0, onWifi = true))
+                    JamNearby.testFound(JamNearby.Found("K7QF2XD9P", "Ada", "phone", "Calm Down", "pretend-host", 0, onWifi = false, artist = "Rema"))
+                    JamNearby.testFound(JamNearby.Found("M4RT8VWQX", "Tobi", "pc", "Blinding Lights", "pretend-host-2", 0, onWifi = true, artist = "The Weeknd"))
                 }
                 "jampeople" -> onUi {
                     Jam.testPeople(

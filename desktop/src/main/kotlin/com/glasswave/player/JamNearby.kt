@@ -34,7 +34,7 @@ object JamNearby {
      */
     data class Found(
         val code: String, val host: String, val kind: String, val song: String?, val hostId: String, val seenAt: Long, val onWifi: Boolean,
-        val photo: String? = null, val ownTag: String? = null, val firstSeen: Long = seenAt,
+        val photo: String? = null, val ownTag: String? = null, val firstSeen: Long = seenAt, val artist: String? = null,
     )
 
     /** Jams nearby, those on this Wi-Fi first, each in the order it turned up (so nothing jumps about). */
@@ -119,7 +119,8 @@ object JamNearby {
         val c = Jam.code
         if (public && c != null) {
             o.put("c", c.replace("-", "")).put("n", Jam.myDisplayName()).put("k", SyncPlatform.kind)
-                .put("s", Jam.player?.current()?.title ?: "").put("ph", Profile.photo ?: "").put("o", Sync.ownTag() ?: "")
+                .put("s", Jam.player?.current()?.title ?: "").put("a", Jam.player?.current()?.artist ?: "")
+                .put("ph", Profile.photo ?: "").put("o", Sync.ownTag() ?: "")
         }
         if (active) Jam.lanFields(o)
         return o
@@ -159,6 +160,7 @@ object JamNearby {
         map[code] = Found(
             code, o.optString("n").ifEmpty { "Someone" }.take(40), o.optString("k"), o.optString("s").ifEmpty { null }?.take(80), id,
             elapsed(), wifi, o.optString("ph").ifEmpty { null }?.take(500), o.optString("o").ifEmpty { null }, old?.firstSeen ?: elapsed(),
+            o.optString("a").ifEmpty { null }?.take(80),
         )
         publish()
     }

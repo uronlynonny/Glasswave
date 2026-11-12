@@ -4,6 +4,8 @@ package com.glasswave.player
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
@@ -250,55 +252,89 @@ private fun promptFor(localPlaying: Boolean, now: Long): JamNearby.Found? {
 }
 
 /**
- * "Ada is in a Jam nearby": a card that drops in at the top when someone near you (on this Wi-Fi, or in
- * this area) is hosting a Jam and you're not in one. Their picture, Join or Cancel. Cancel means that
- * Jam doesn't ask again. When the Jam is your own other device's and the "Playing on…" bar already shows
- * it, that bar gets the Join button instead (see [RemoteStrip]), so the two never stack up.
+ * "Ada is in a Jam nearby": shows in the middle of the screen over a dimmed app when someone near you
+ * (on this Wi-Fi, or in this area) is hosting a Jam and you're not in one. Their picture in a big
+ * circle, the song, and two small buttons: Join or Cancel. Cancel, a tap outside, Esc or Back all mean
+ * Cancel: that Jam doesn't ask again. When the Jam is your own other device's and the "Playing on…"
+ * bar already shows it, that bar gets the Join button instead (see [RemoteStrip]).
  */
 @Composable
 fun NearbyJamPrompt(localPlaying: Boolean, modifier: Modifier = Modifier) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { delay(2_000); now = System.currentTimeMillis() } }
     val f = promptFor(localPlaying, now)
-    // Keeps the last one while it slides away.
+    // Keeps the last one while it shrinks away.
     val last = remember { arrayOfNulls<JamNearby.Found>(1) }
     if (f != null) last[0] = f
-    AnimatedVisibility(
-        visible = f != null,
-        modifier = modifier,
-        enter = slideInVertically(smooth(260)) { -it } + fadeIn(smooth(200)),
-        exit = slideOutVertically(smooth(220)) { -it } + fadeOut(smooth(180)),
-    ) {
-        val x = f ?: last[0] ?: return@AnimatedVisibility
-        Column(
-            Modifier.widthIn(max = 420.dp).fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color(0xF2121519))
-                .pressable(1f) { } // taps on it don't reach the page underneath
-                .padding(16.dp),
+    if (f != null) androidx.activity.compose.BackHandler { JamNearby.dismiss(f.code) }
+    val phone = SyncPlatform.kind == "phone"
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        // The dimmed app behind it; a tap on it is Cancel.
+        AnimatedVisibility(visible = f != null, enter = fadeIn(smooth(200)), exit = fadeOut(smooth(180))) {
+            Box(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f))
+                    .pressable(1f) { (f ?: last[0])?.let { JamNearby.dismiss(it.code) } },
+            )
+        }
+        AnimatedVisibility(
+            visible = f != null,
+            enter = scaleIn(smooth(220), initialScale = 0.85f) + fadeIn(smooth(200)),
+            exit = scaleOut(smooth(180), targetScale = 0.85f) + fadeOut(smooth(160)),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                HostPicture(x, 48.dp)
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    GText("${x.host} is in a Jam nearby", 16, Color.White, FontWeight.Bold, 2)
-                    GText(
-                        listOfNotNull(x.song?.let { "Playing $it" }, if (x.onWifi) "on your Wi-Fi" else "near you").joinToString(" · "),
-                        13, CoverTint.accent, maxLines = 1,
-                    )
-                }
-            }
-            Spacer(Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    Modifier.weight(1f).height(42.dp).clip(RoundedCornerShape(21.dp)).background(Color.White.copy(alpha = 0.08f))
-                        .pressable(0.95f) { JamNearby.dismiss(x.code) },
-                    contentAlignment = Alignment.Center,
-                ) { GText("Cancel", 14, Color.White, FontWeight.SemiBold, 1) }
-                Box(
-                    Modifier.weight(1f).height(42.dp).clip(RoundedCornerShape(21.dp)).background(Color.White)
-                        .pressable(0.95f) { Jam.join(x.code); Jam.panelOpen = true },
-                    contentAlignment = Alignment.Center,
-                ) { GText("Join", 14, Color(0xFF111111), FontWeight.Bold, 1) }
-            }
+            val x = f ?: last[0] ?: return@AnimatedVisibility
+            JamInvite(x, phone)
+        }
+    }
+}
+
+@Composable
+private fun JamInvite(x: JamNearby.Found, phone: Boolean) {
+    val circle = if (phone) 104.dp else 120.dp
+    val ring = 5.dp
+    val gap = 3.dp
+    Column(
+        Modifier.padding(horizontal = 24.dp).widthIn(max = 360.dp).pressable(1f) { }, // taps on it aren't a tap outside
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // The host's picture (or first letter), in an accent ring with a thin dark gap.
+        Box(
+            Modifier.size(circle).clip(CircleShape).background(CoverTint.accent).padding(ring)
+                .clip(CircleShape).background(Color(0xFF0B0D10)).padding(gap),
+            contentAlignment = Alignment.Center,
+        ) {
+            val inner = circle - (ring + gap) * 2
+            if (x.photo != null) Cover(x.photo, Modifier.size(inner), inner / 2, circle = true)
+            else Box(
+                Modifier.size(inner).clip(CircleShape).background(CoverTint.accent.copy(alpha = 0.32f)),
+                contentAlignment = Alignment.Center,
+            ) { GText(x.host.take(1).uppercase(), (inner.value * 0.42f).toInt(), Color.White, FontWeight.Bold, 1) }
+        }
+        Spacer(Modifier.height(if (phone) 16.dp else 18.dp))
+        GText(
+            "${x.host} is in a Jam nearby", if (phone) 16 else 18, Color.White, FontWeight.Bold, 2,
+            align = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+        val playing = listOfNotNull(x.song, x.artist).joinToString(" · ")
+        if (playing.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            GText(
+                "Playing $playing", if (phone) 12 else 13, Color.White.copy(alpha = 0.6f), maxLines = 2,
+                align = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
+        Spacer(Modifier.height(if (phone) 16.dp else 18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val w = if (phone) 72.dp else 80.dp
+            Box(
+                Modifier.width(w).clip(RoundedCornerShape(50)).background(CoverTint.accent)
+                    .pressable(0.94f) { Jam.join(x.code); Jam.panelOpen = true }.padding(vertical = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) { GText("Join", 13, Color(0xFF111111), FontWeight.Bold, 1) }
+            Box(
+                Modifier.width(w).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.16f))
+                    .pressable(0.94f) { JamNearby.dismiss(x.code) }.padding(vertical = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) { GText("Cancel", 13, Color.White, FontWeight.SemiBold, 1) }
         }
     }
 }
