@@ -372,15 +372,15 @@ fun PlayerBar(ps: PlayerState, page: Backdrop, onOpen: () -> Unit, modifier: Mod
         // Lyrics, queue, volume, full screen
         Row(Modifier.weight(0.3f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
             DevicesButton(36.dp, 20.dp, Dim)
-            JamButton(36.dp, 20.dp, Dim)
-            BarButton(Icons.Rounded.Lyrics, if (PlayerView.lyrics) accent else Dim, 20.dp) {
-                PlayerView.lyrics = true
-                onOpen()
-            }
             BarButton(Icons.AutoMirrored.Rounded.QueueMusic, Dim, 21.dp) {
                 PlayerView.queue = true
                 onOpen()
             }
+            BarButton(Icons.Rounded.Lyrics, if (PlayerView.lyrics) accent else Dim, 20.dp) {
+                PlayerView.lyrics = true
+                onOpen()
+            }
+            JamButton(36.dp, 20.dp, Dim)
             // Which speaker or headset plays it.
             OutputButton(36.dp, 20.dp, Dim)
             Spacer(Modifier.width(2.dp))

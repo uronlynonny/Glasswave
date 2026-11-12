@@ -485,13 +485,13 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
         Controls(ui, compact)
         Spacer(Modifier.height(if (compact) 2.dp else 6.dp))
         VolumeBar()
-        // Bottom row: queue on the left, status in the middle, the ••• menu on the right.
+        // Bottom row: Jam, devices and queue on the left, status in the middle, the ••• menu on the right.
         Row(Modifier.fillMaxWidth().padding(top = if (compact) 0.dp else 4.dp, bottom = if (compact) 6.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            JamButton()
+            DevicesButton()
             Box(Modifier.size(44.dp).pressable(0.85f, onClick = ui.onQueue), contentAlignment = Alignment.Center) {
                 Ico(Icons.AutoMirrored.Rounded.QueueMusic, Color.White.copy(alpha = 0.85f), 24.dp)
             }
-            DevicesButton()
-            JamButton()
 
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.pressable(0.9f) { nextQuality() }) { Badge(Settings.quality.label.uppercase()) }

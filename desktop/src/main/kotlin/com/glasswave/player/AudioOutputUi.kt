@@ -14,7 +14,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.BluetoothAudio
 import androidx.compose.material.icons.rounded.Speaker
+import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,9 +37,25 @@ import androidx.compose.ui.window.PopupProperties
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Headphones for a headset, a speaker for everything else (by the name Windows gives it). */
-private fun iconFor(name: String?) =
-    if (name != null && Regex("(?i)head|ear|buds|airpods|arctis|hyperx|wh-|wf-").containsMatchIn(name)) Icons.Rounded.Headphones else Icons.Rounded.Speaker
+/**
+ * An icon for an output, from the name Windows gives it. Windows puts what it is first
+ * ("Speakers (Realtek…)", "Headphones (…)", "Speakers/Headphones (…)" for a shared jack), so that
+ * part decides first: speakers stay speakers even when the jack also takes headphones.
+ */
+private fun iconFor(name: String?): ImageVector {
+    if (name == null) return Icons.Rounded.Speaker
+    val kind = name.substringBefore('(').lowercase()
+    val all = name.lowercase()
+    return when {
+        "speaker" in kind -> Icons.Rounded.Speaker
+        Regex("head|ear|buds|airpods|hands-free|handsfree").containsMatchIn(kind) -> Icons.Rounded.Headphones
+        Regex("""\btv\b|monitor|display|hdmi|displayport""").containsMatchIn(all) ||
+            Regex("""nvidia|amd high definition|intel\(r\) display""").containsMatchIn(all) -> Icons.Rounded.Tv
+        Regex("""headphone|headset|earbuds|airpods|arctis|hyperx|\bwh-|\bwf-|buds""").containsMatchIn(all) -> Icons.Rounded.Headphones
+        "bluetooth" in all -> Icons.Rounded.BluetoothAudio
+        else -> Icons.Rounded.Speaker
+    }
+}
 
 /**
  * The player bar's output button: which speaker or headset plays the music. Lit up when it isn't the
