@@ -429,8 +429,9 @@ class AudioDeck(private val name: String) {
             if (startMs > 0) grabber.setTimestamp(startMs * 1000)
             durationMs = (grabber.lengthInTime / 1000).coerceAtLeast(0)
 
-            val l = AudioSystem.getSourceDataLine(FORMAT)
-            l.open(FORMAT, BUFFER_BYTES)
+            // Your picked speaker or headset (Settings > Playback, or the player's output button).
+            var outputGen = AudioOutput.generation
+            var l = AudioOutput.openLine(FORMAT, BUFFER_BYTES)
             out = l
             line = l
             ready = true
@@ -441,7 +442,7 @@ class AudioDeck(private val name: String) {
             // Your volume is applied at the speaker when it can be, so the slider still reacts at
             // once even with a deeper queue of sound ahead. The deck's own level (crossfades,
             // Automix) stays in the samples, where both decks line up.
-            val master = runCatching { l.getControl(FloatControl.Type.MASTER_GAIN) as FloatControl }.getOrNull()
+            var master = runCatching { l.getControl(FloatControl.Type.MASTER_GAIN) as FloatControl }.getOrNull()
             var lastApp = -1f
             // A smooth limiter: when volume leveling lifts a quiet song, loud peaks are eased
             // under the ceiling instead of being clipped (which sounds harsh and crunchy).
@@ -503,14 +504,15 @@ class AudioDeck(private val name: String) {
                 if (eq != null) { eq.bass = bass; eq.sweepHz = sweepHz; eq.process(src, 0, n / 2) }
                 // Volume, gliding from the last value to the new one across this piece of audio.
                 val app = AppVolume.gain
-                if (master != null && app != lastApp) {
+                val m = master
+                if (m != null && app != lastApp) {
                     lastApp = app
                     runCatching {
-                        master.value = if (app <= 0.0001f) master.minimum
-                        else (20f * kotlin.math.log10(app)).coerceIn(master.minimum, master.maximum)
+                        m.value = if (app <= 0.0001f) m.minimum
+                        else (20f * kotlin.math.log10(app)).coerceIn(m.minimum, m.maximum)
                     }
                 }
-                val target = volume * autoGain * (if (master != null) 1f else app)
+                val target = volume * autoGain * (if (m != null) 1f else app)
                 fx.update()
                 val watch = Spectrum.wanted && current === this
                 var i = 0
@@ -565,6 +567,20 @@ class AudioDeck(private val name: String) {
             }
 
             while (gen == generation) {
+                if (outputGen != AudioOutput.generation) {
+                    // Another output was picked: carry on there from the moment being heard now.
+                    outputGen = AudioOutput.generation
+                    val at = positionMs
+                    val moved = runCatching { AudioOutput.openLine(FORMAT, BUFFER_BYTES) }.getOrNull()
+                    if (moved != null) {
+                        val old = l
+                        l = moved; out = moved; line = moved
+                        runCatching { old.stop(); old.flush(); old.close() }
+                        master = runCatching { moved.getControl(FloatControl.Type.MASTER_GAIN) as FloatControl }.getOrNull()
+                        lastApp = -1f
+                        if (seekUs < 0) seekUs = at * 1000
+                    }
+                }
                 if (!playWhenReady) {
                     if (l.isRunning) l.stop()
                     synchronized(lock) { if (!playWhenReady && gen == generation) lock.wait(100) }
@@ -701,6 +717,7 @@ class AudioDeck(private val name: String) {
         fun warmUp() {
             quietLogs
             runCatching { AudioSystem.getSourceDataLine(FORMAT) }
+            runCatching { AudioOutput.refresh() }
         }
     }
 }

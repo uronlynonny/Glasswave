@@ -90,6 +90,9 @@ fun main(args: Array<String>) {
                 }
                 "search" -> onUi { vm.selectTab(Tab.SEARCH); vm.onQuery(arg); vm.submitSearch() }
                 "tab" -> onUi { vm.selectTab(Tab.valueOf(arg)) }
+                // outputs: lists the speakers and headsets. output 2: plays through the second one (output default: the system's).
+                "outputs" -> { AudioOutput.refresh(); println("GW: outputs " + AudioOutput.devices.mapIndexed { i, d -> "${i + 1}=${d.name}" }) }
+                "output" -> onUi { AudioOutput.pick(if (arg == "default") null else AudioOutput.devices.getOrNull(arg.toInt() - 1)?.name) }
                 // automix on|off. seekend 40: jumps to 40 seconds before the end of the song.
                 "automix" -> onUi { Settings.updateAutomix(arg == "on") }
                 "seekend" -> onUi { if (ps.durationMs > 0) ps.seekTo(ps.durationMs - arg.toLong() * 1000) }

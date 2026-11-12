@@ -273,6 +273,7 @@ internal fun startUp() {
     boot("Badges.init") { Badges.init(ctx) }
     boot("Sync.init") { Sync.init(ctx) }
     boot("Jam.init") { Jam.init(ctx) }
+    boot("AudioOutput.init") { AudioOutput.init(ctx) }
     boot("Updater.init") { Updater.init(ctx) }
     boot("Profile.init") { Profile.init(ctx) }
     boot("Profile.refresh") { Profile.refresh() }

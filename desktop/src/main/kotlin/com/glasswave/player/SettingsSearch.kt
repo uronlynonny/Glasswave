@@ -49,6 +49,7 @@ internal object SettingsIndex {
         // Player & audio
         SettingEntry("Audio quality", "AUDIO", "Audio quality", "bitrate high low normal sound quality streaming"),
         SettingEntry("Automix", "AUDIO", "Automix", "crossfade dj transitions mix blend fade"),
+        SettingEntry("Sound output", "AUDIO", "Sound output", "speaker headset headphones device output play through bluetooth monitor"),
         SettingEntry("Autoplay", "AUDIO", "Playback", "keep playing similar songs radio"),
         SettingEntry("Skip silence", "AUDIO", "Playback", "silence quiet gaps"),
         SettingEntry("Volume leveling", "SOUND", "Volume leveling", "loudness normalize normalise even out volume replaygain"),

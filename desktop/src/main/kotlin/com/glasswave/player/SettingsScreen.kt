@@ -126,7 +126,7 @@ import kotlinx.coroutines.withContext
 private enum class SettingsPage(val title: String, val subtitle: String, val icon: ImageVector, val color: Color, val motion: IconMotion) {
     GENERAL("General", "Updates, helping out", Icons.Rounded.Settings, Color(0xFF8E8E93), IconMotion.SPIN),
     LOOK("Appearance", "Colours, wallpaper, layout, visualizer, fonts", Icons.Rounded.Palette, Color(0xFFAF52DE), IconMotion.WIGGLE),
-    AUDIO("Playback", "Quality, Automix, autoplay", Icons.Rounded.MusicNote, Color(0xFFFF375F), IconMotion.BOUNCE),
+    AUDIO("Playback", "Quality, output, Automix, autoplay", Icons.Rounded.MusicNote, Color(0xFFFF375F), IconMotion.BOUNCE),
     SOUND("Audio Lab", "Equalizer, spatial audio, speed, effects", Icons.Rounded.GraphicEq, Color(0xFFFF9F0A), IconMotion.BARS),
     ACCOUNTS("Accounts & sync", "YouTube Music, Spotify, Discord, your devices", Icons.Rounded.AccountCircle, Color(0xFF0A84FF), IconMotion.POP),
     STORAGE("Storage & privacy", "Downloads, saved songs, history", Icons.Rounded.Storage, Color(0xFFFF9F0A), IconMotion.DROP),
@@ -953,6 +953,10 @@ private fun Audio(c: ScreenCtx) {
         Choices(Quality.entries, Settings.quality, { it.label }, { it.detail }) { Settings.updateQuality(it) }
     }
     Note("Streaming quality. Applies from the next song; higher quality uses more data. Download quality is under Storage.")
+    Group("Sound output") {
+        OutputSettings { options, selected, title, detail, onPick -> Choices(options, selected, title, detail, onPick) }
+    }
+    Note("Which speaker or headset plays the music. Changing it moves the song that's on straight away. Also from the speaker button in the player bar.")
     Group("Automix") {
         Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { AutomixArt(c.ps.playing, Settings.automix) }
         SwitchRow("Automix", "Mixes each song into the next like a DJ: on the beat, tempos matched. Also in the player's ••• menu.", Settings.automix) { Settings.updateAutomix(it) }

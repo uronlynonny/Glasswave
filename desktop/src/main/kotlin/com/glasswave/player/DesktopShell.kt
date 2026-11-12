@@ -381,7 +381,9 @@ fun PlayerBar(ps: PlayerState, page: Backdrop, onOpen: () -> Unit, modifier: Mod
                 PlayerView.queue = true
                 onOpen()
             }
-            Spacer(Modifier.width(6.dp))
+            // Which speaker or headset plays it.
+            OutputButton(36.dp, 20.dp, Dim)
+            Spacer(Modifier.width(2.dp))
             BarButton(if (AppVolume.level <= 0.001f) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, Dim, 20.dp) {
                 AppVolume.set(if (AppVolume.level > 0.001f) 0f else 0.7f)
             }

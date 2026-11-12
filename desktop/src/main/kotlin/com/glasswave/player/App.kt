@@ -132,6 +132,14 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
         }
     }
 
+    // Speakers and headsets coming and going: the music moves to (or back to) the picked one.
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { AudioOutput.refresh() } }
+            delay(5_000)
+        }
+    }
+
     // Full speed while music plays, even minimized (see WinPower).
     LaunchedEffect(ps.playing) { WinPower.fullSpeed(ps.playing) }
 
