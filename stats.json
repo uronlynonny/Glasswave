@@ -1,11 +1,11 @@
 {
-  "lastTime": 1794449557,
+  "lastTime": 1794455752,
   "totals": {
     "visits": 142,
     "siteDownloads": 45,
-    "apk": 402
+    "apk": 403
   },
-  "apkTotal": 365,
+  "apkTotal": 366,
   "hours": [
     {
       "t": 1792763089,
@@ -2724,9 +2724,15 @@
       "v": 0,
       "d": 0,
       "a": 0
+    },
+    {
+      "t": 1794459336,
+      "v": 0,
+      "d": 0,
+      "a": 1
     }
   ],
-  "updated": 1794455500,
+  "updated": 1794459336,
   "failedSongs": [
     {
       "t": 1792854647,
