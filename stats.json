@@ -1,11 +1,11 @@
 {
-  "lastTime": 1794498904,
+  "lastTime": 1794498995,
   "totals": {
     "visits": 146,
     "siteDownloads": 46,
-    "apk": 416
+    "apk": 418
   },
-  "apkTotal": 379,
+  "apkTotal": 381,
   "hours": [
     {
       "t": 1792763089,
@@ -2784,9 +2784,15 @@
       "v": 1,
       "d": 1,
       "a": 0
+    },
+    {
+      "t": 1794502642,
+      "v": 0,
+      "d": 0,
+      "a": 2
     }
   ],
-  "updated": 1794498994,
+  "updated": 1794502642,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -3045,7 +3051,7 @@
       "m": "\"One More Time (12 Mix)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.59\nhttps://music.youtube.com/watch?v=bmjsUsS8QuM"
     }
   ],
-  "lastActiveTime": 1794498656,
+  "lastActiveTime": 1794500351,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -3452,6 +3458,7 @@
     "2026-11-12": {
       "a": [
         "140af2c1-5ebf-48a0-89c3-e50146370235",
+        "1432f961-bccd-4d76-b6ec-e81d74f7783a",
         "1b697a4b-8989-45c1-b384-47c543c1e598",
         "36d58cc1-c393-490b-9440-241580552d0a",
         "5429ab51-c54a-4d18-b15e-3230a6a724b2",
@@ -3466,24 +3473,26 @@
       ],
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
+        "2cde5f08-41b5-47f3-8920-6cc59cb3c0a8",
         "492df51f-8bc9-42f9-8665-21ceb3f4b2ef",
         "b73d817b-b306-4652-8062-d92e335c6dd2",
         "d8dfbeea-6046-4a55-beb1-39a0e683240f",
-        "ed231edb-5cff-47a4-b2b3-7a9b3b6c8355"
+        "ed231edb-5cff-47a4-b2b3-7a9b3b6c8355",
+        "ff5e4c03-6f4b-4aaf-9481-52797777d6ff"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 12,
-      "w": 5
+      "a": 13,
+      "w": 7
     },
     "week": {
-      "a": 42,
+      "a": 43,
       "w": 19
     },
     "month": {
-      "a": 99,
+      "a": 100,
       "w": 25
     },
     "daily": [
@@ -3584,8 +3593,8 @@
       },
       {
         "d": "2026-11-12",
-        "a": 12,
-        "w": 5
+        "a": 13,
+        "w": 7
       }
     ]
   },
