@@ -1,11 +1,11 @@
 {
-  "lastTime": 1794574752,
+  "lastTime": 1794579039,
   "totals": {
     "visits": 146,
     "siteDownloads": 46,
-    "apk": 437
+    "apk": 438
   },
-  "apkTotal": 400,
+  "apkTotal": 401,
   "hours": [
     {
       "t": 1792763089,
@@ -2910,9 +2910,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1794584705,
+      "v": 0,
+      "d": 0,
+      "a": 1
     }
   ],
-  "updated": 1794579038,
+  "updated": 1794584705,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -3235,7 +3241,7 @@
       "m": "\"GET LUCKY!\" by YdBB wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (15.7.9), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=4-D_Xos8frA"
     }
   ],
-  "lastActiveTime": 1794576804,
+  "lastActiveTime": 1794580494,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -3677,6 +3683,7 @@
         "8eb14b0a-8f47-4f63-80a1-1060f19d5c8a",
         "9d8a5a6b-4704-42f5-ba7b-8b8d23c5369f",
         "b40577e8-17f8-4460-839e-0cef28e7acc4",
+        "e21a3c44-819f-49c0-9e9e-6ef79de0d09f",
         "f26e3a11-ef03-4fea-a5bd-bda93da47da3",
         "f7c66feb-e1f0-4ad2-a3a3-b5ee965c3749",
         "fabc8a6a-2215-4ed6-8d18-725b7ac168ce"
@@ -3692,15 +3699,15 @@
   },
   "active": {
     "today": {
-      "a": 11,
+      "a": 12,
       "w": 5
     },
     "week": {
-      "a": 44,
+      "a": 45,
       "w": 23
     },
     "month": {
-      "a": 103,
+      "a": 104,
       "w": 29
     },
     "daily": [
@@ -3806,7 +3813,7 @@
       },
       {
         "d": "2026-11-13",
-        "a": 11,
+        "a": 12,
         "w": 5
       }
     ]
