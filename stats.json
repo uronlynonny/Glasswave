@@ -1,11 +1,11 @@
 {
-  "lastTime": 1794549414,
+  "lastTime": 1794559057,
   "totals": {
     "visits": 146,
     "siteDownloads": 46,
-    "apk": 431
+    "apk": 434
   },
-  "apkTotal": 394,
+  "apkTotal": 397,
   "hours": [
     {
       "t": 1792763089,
@@ -2874,9 +2874,15 @@
       "v": 0,
       "d": 0,
       "a": 1
+    },
+    {
+      "t": 1794560024,
+      "v": 0,
+      "d": 0,
+      "a": 3
     }
   ],
-  "updated": 1794553624,
+  "updated": 1794560024,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -3157,9 +3163,49 @@
     {
       "t": 1794515383,
       "m": "\"Harder, Better, Faster, Stronger\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nLinux (7.0.0-1019-azure), Glasswave for Linux 1.2.61\nhttps://music.youtube.com/watch?v=JhulBGMA7G4"
+    },
+    {
+      "t": 1794558853,
+      "m": "\"Get Lucky (feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (26.7.2), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=4D7u5KF7SP8"
+    },
+    {
+      "t": 1794558858,
+      "m": "\"Get Lucky (Radio Edit - feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (26.7.2), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=Rgrt_8mXrK8"
+    },
+    {
+      "t": 1794558863,
+      "m": "\"One More Time (12 Mix)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (26.7.2), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=bmjsUsS8QuM"
+    },
+    {
+      "t": 1794558868,
+      "m": "\"GET LUCKY!\" by YdBB wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (26.7.2), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=4-D_Xos8frA"
+    },
+    {
+      "t": 1794558874,
+      "m": "\"Harder, Better, Faster, Stronger\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (26.7.2), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=JhulBGMA7G4"
+    },
+    {
+      "t": 1794559037,
+      "m": "\"Get Lucky (feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (15.7.9), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=4D7u5KF7SP8"
+    },
+    {
+      "t": 1794559042,
+      "m": "\"Get Lucky (Radio Edit - feat. Pharrell Williams and Nile Rodgers)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (15.7.9), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=Rgrt_8mXrK8"
+    },
+    {
+      "t": 1794559047,
+      "m": "\"Harder, Better, Faster, Stronger\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (15.7.9), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=JhulBGMA7G4"
+    },
+    {
+      "t": 1794559052,
+      "m": "\"One More Time (12 Mix)\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (15.7.9), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=bmjsUsS8QuM"
+    },
+    {
+      "t": 1794559057,
+      "m": "\"GET LUCKY!\" by YdBB wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (15.7.9), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=4-D_Xos8frA"
     }
   ],
-  "lastActiveTime": 1794553326,
+  "lastActiveTime": 1794559167,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -3594,11 +3640,16 @@
     "2026-11-13": {
       "a": [
         "1432f961-bccd-4d76-b6ec-e81d74f7783a",
+        "36d58cc1-c393-490b-9440-241580552d0a",
         "7755badf-6ec2-495c-b6e3-bed2f9771817",
         "b40577e8-17f8-4460-839e-0cef28e7acc4",
-        "f7c66feb-e1f0-4ad2-a3a3-b5ee965c3749"
+        "f7c66feb-e1f0-4ad2-a3a3-b5ee965c3749",
+        "fabc8a6a-2215-4ed6-8d18-725b7ac168ce"
       ],
       "w": [
+        "1acf6e0b-6faa-44ef-aab2-085f9b135094",
+        "590bd8da-289d-44d1-85a9-157da40c51c1",
+        "82de3e97-5f29-4996-b544-4bf03dd09245",
         "ed231edb-5cff-47a4-b2b3-7a9b3b6c8355",
         "ff5e4c03-6f4b-4aaf-9481-52797777d6ff"
       ]
@@ -3606,16 +3657,16 @@
   },
   "active": {
     "today": {
-      "a": 4,
-      "w": 2
+      "a": 6,
+      "w": 5
     },
     "week": {
-      "a": 40,
-      "w": 21
+      "a": 41,
+      "w": 23
     },
     "month": {
-      "a": 101,
-      "w": 27
+      "a": 102,
+      "w": 29
     },
     "daily": [
       {
@@ -3720,8 +3771,8 @@
       },
       {
         "d": "2026-11-13",
-        "a": 4,
-        "w": 2
+        "a": 6,
+        "w": 5
       }
     ]
   },
