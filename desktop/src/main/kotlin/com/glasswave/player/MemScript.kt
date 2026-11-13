@@ -89,6 +89,8 @@ object MemScript {
 
     /** Working set and private memory, in MB. */
     fun usage(): Pair<Long, Long> {
+        // Windows only (kernel32); a Mac or Linux check reports 0 here and keeps going.
+        if (!Os.isWindows) return 0L to 0L
         val m = Memory(80)
         m.setInt(0, 80)
         k.K32GetProcessMemoryInfo(k.GetCurrentProcess(), m, 80)

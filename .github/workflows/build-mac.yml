@@ -1,8 +1,11 @@
 name: Build Glasswave for Mac
 
-# A Mac installer has to be made on a Mac, so GitHub's own Macs (Apple Silicon) build it whenever
-# the desktop app changes on main. The .dmg goes up to the rolling "mac" release, which the
-# website's Mac button links to (releases/download/mac/Glasswave-Mac.dmg).
+# A Mac installer has to be made on a Mac, so GitHub's own Macs build it whenever the desktop app
+# changes on main: one on an Apple Silicon Mac (M1 and later) and one on an Intel Mac. Before
+# anything is uploaded, each Mac opens the app and plays a song; pictures and a short screen
+# recording of it are kept with the run ("mac-checks-…"), along with both .dmg files.
+# Only the Apple Silicon .dmg goes up to the rolling "mac" release
+# (releases/download/mac/Glasswave-Mac.dmg), and only from main.
 on:
   push:
     branches: [main]
@@ -13,12 +16,21 @@ permissions:
   contents: write
 
 concurrency:
-  group: mac-build
+  group: mac-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   dmg:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            chip: apple-silicon
+          - runner: macos-15-intel
+            chip: intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -30,7 +42,114 @@ jobs:
       - name: Build the Mac installer
         run: sh ./gradlew -p desktop packageDmg --no-daemon --stacktrace
 
+      # GitHub's Macs have no speakers. BlackHole is a pretend sound card, so Java has somewhere to
+      # play to (the check plays into it silently).
+      - name: Set up a sound output for the checks
+        run: |
+          brew install --cask blackhole-2ch || true
+          sudo killall -9 coreaudiod || true
+          sleep 5
+          system_profiler SPAudioDataType | head -30 || true
+
+      - name: Check the installed app starts
+        run: |
+          set -e
+          DMG=$(find desktop -path '*binaries/main/dmg/*.dmg' | head -1)
+          echo "Built $DMG ($(du -h "$DMG" | cut -f1))"
+          mkdir -p check/data check/apps
+          # Install it the way a person would: open the .dmg and copy Glasswave out of it.
+          MNT=$(mktemp -d)
+          hdiutil attach "$DMG" -nobrowse -readonly -mountpoint "$MNT"
+          ls "$MNT"
+          cp -R "$MNT/Glasswave.app" check/apps/
+          hdiutil detach "$MNT"
+          APP="$PWD/check/apps/Glasswave.app"
+          file "$APP/Contents/MacOS/Glasswave"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist"
+          # Its own data folders, apart from anything else.
+          export APPDATA="$PWD/check/data/roaming" LOCALAPPDATA="$PWD/check/data/local"
+          "$APP/Contents/MacOS/Glasswave" > check/launch.log 2>&1 &
+          PID=$!
+          sleep 45
+          screencapture -x check/launch.png || true
+          if kill -0 $PID 2>/dev/null; then echo "Glasswave is running"; kill $PID; else echo "Glasswave closed by itself"; cat check/launch.log; exit 1; fi
+          sleep 3
+          tail -40 check/launch.log
+
+      # A song file on "this Mac" is played through the real app: FFmpeg decoding and the sound card.
+      # (YouTube is tried too, but it often refuses GitHub's servers with "Sign in to confirm that
+      # you're not a bot", so that only warns.)
+      - name: Check a song plays
+        run: |
+          set -e
+          mkdir -p check/music
+          # A minute of a 440 Hz tone, made with what every Mac has (Python, then Apple's afconvert to AAC).
+          python3 - <<'EOF'
+          import math, struct, wave
+          w = wave.open("check/music/tone.wav", "wb")
+          w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100)
+          w.writeframes(b"".join(struct.pack("<hh", s, s) for s in (int(8000 * math.sin(2 * math.pi * 440 * i / 44100)) for i in range(44100 * 60))))
+          w.close()
+          EOF
+          afconvert -f m4af -d aac check/music/tone.wav "check/music/Mac Check.m4a"
+          rm check/music/tone.wav
+          cat > check/play.txt <<EOF
+          wait 20
+          shot home
+          pcfolder $PWD/check/music
+          pcplay Mac Check
+          wait 10
+          state
+          full
+          wait 3
+          shot player
+          wait 15
+          state
+          play daft punk get lucky
+          wait 25
+          state
+          shot youtube
+          quit
+          EOF
+          sh ./gradlew -p desktop memCheck -Pgwscript="$PWD/check/play.txt" -PdataDir="$PWD/check/data2" --no-daemon > check/play.log 2>&1 &
+          GRADLE=$!
+          # Pictures of the whole Mac screen while it plays, and a short screen recording.
+          # The song starts right after "GW pcfolder"; the big player opens 10 s later for 18 s.
+          until grep -q "GW pcfolder" check/play.log 2>/dev/null || ! kill -0 $GRADLE 2>/dev/null; do sleep 1; done
+          sleep 6
+          screencapture -x check/screen-playing.png || true
+          sleep 10
+          screencapture -x check/screen-big-player.png || true
+          screencapture -x -V 10 check/playing.mov || true
+          wait $GRADLE || true
+          cat check/play.log | grep -v "^\s*at " | tail -60
+          if grep -q "GW CRASH" check/play.log; then echo "The app crashed"; exit 1; fi
+          LOCAL=$(grep "GW state 'Mac Check'" check/play.log | tail -1)
+          echo "$LOCAL"
+          SECS=$(echo "$LOCAL" | sed -n 's/.* at \([0-9]*\)s playing=true.*/\1/p')
+          if [ -z "$SECS" ] || [ "$SECS" -lt 3 ]; then echo "The song file didn't play"; exit 1; fi
+          echo "The song file played for $SECS s"
+          YT=$(grep "GW state" check/play.log | tail -1)
+          if echo "$YT" | grep -q "Mac Check" || echo "$YT" | grep -q " at 0s "; then
+            echo "::warning::YouTube didn't play here (it often refuses GitHub's servers): $YT"
+          else echo "YouTube played: $YT"; fi
+
+      - name: Keep the check pictures, logs and installer
+        if: always()
+        run: |
+          mkdir -p check
+          cp $(find desktop -path '*binaries/main/dmg/*.dmg' | head -1) "check/Glasswave-Mac-${{ matrix.chip }}.dmg" 2>/dev/null || true
+          rm -rf check/apps check/data check/data2
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-checks-${{ matrix.chip }}
+          path: check/
+          if-no-files-found: ignore
+
       - name: Put it on the "mac" release
+        if: github.ref == 'refs/heads/main' && matrix.chip == 'apple-silicon'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
