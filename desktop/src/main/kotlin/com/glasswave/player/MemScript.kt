@@ -448,6 +448,13 @@ object MemScript {
                         "wallpaper" -> onUi { Settings.updateWallpaper(arg.takeIf { it != "none" }) }
                         "tab" -> onUi { vm.selectTab(Tab.valueOf(arg)) }
                         "settings" -> onUi { vm.openSettings(arg) }
+                        // outputs: lists the speakers and headsets it can play through. output NAME: plays
+                        // through that one from now on (output default: the system's own).
+                        "outputs" -> onUi {
+                            AudioOutput.refresh()
+                            System.err.println("GW outputs: " + AudioOutput.devices.joinToString(" | ") { it.name } + " (playing through ${AudioOutput.chosen ?: "the default"})")
+                        }
+                        "output" -> onUi { AudioOutput.pick(arg.takeIf { it != "default" }) }
                         // sscroll PX: scrolls the open settings page to PX pixels from the top.
                         "sscroll" -> onUi { kotlinx.coroutines.runBlocking { SettingsScrollTest.state?.scrollTo(arg.toInt()) } }
                         "eqpreset" -> onUi { Sound.updateEqOn(true); Sound.applyPreset(EqPreset.valueOf(arg)) }

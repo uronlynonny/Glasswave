@@ -62,8 +62,9 @@ object AudioOutput {
 
     private fun list(): List<Device> = AudioSystem.getMixerInfo().filter { info ->
         val n = info.name
-        // "Primary Sound Driver" is the system default (offered on its own), "Port ..." are volume controls.
-        !n.startsWith("Port ") && !n.contains("Primary Sound Driver") &&
+        // "Primary Sound Driver" (Windows) and "Default Audio Device" (Mac) are the system default,
+        // offered on its own; "Port ..." are volume controls.
+        !n.startsWith("Port ") && !n.contains("Primary Sound Driver") && n != "Default Audio Device" &&
             runCatching { AudioSystem.getMixer(info).isLineSupported(wanted) }.getOrDefault(false)
     }.map { Device(it.name.trim(), it) }.distinctBy { it.name }
 

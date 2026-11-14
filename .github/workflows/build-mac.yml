@@ -3,7 +3,8 @@ name: Build Glasswave for Mac
 # A Mac installer has to be made on a Mac, so GitHub's own Macs build it whenever the desktop app
 # changes on main: one on an Apple Silicon Mac (M1 and later) and one on an Intel Mac. Before
 # anything is uploaded, each Mac opens the app and plays a song; pictures and a short screen
-# recording of it are kept with the run ("mac-checks-…"), along with both .dmg files.
+# recording of it are kept with the run ("mac-checks-…"), and both .dmg files ("mac-installer-…").
+# Jam (listen together) is checked between two copies on the same Mac too.
 # Only the Apple Silicon .dmg goes up to the rolling "mac" release
 # (releases/download/mac/Glasswave-Mac.dmg), and only from main.
 on:
@@ -103,8 +104,20 @@ jobs:
           full
           wait 3
           shot player
-          wait 15
+          outputs
+          output BlackHole 2ch
+          wait 6
           state
+          back
+          settings AUDIO
+          wait 4
+          shot settings-playback
+          sscroll 700
+          wait 2
+          shot settings-sound-output
+          state
+          back
+          wait 2
           play daft punk get lucky
           wait 25
           state
@@ -123,7 +136,12 @@ jobs:
           screencapture -x -V 10 check/playing.mov || true
           wait $GRADLE || true
           cat check/play.log | grep -v "^\s*at " | tail -60
+          grep "GW outputs" check/play.log || true
           if grep -q "GW CRASH" check/play.log; then echo "The app crashed"; exit 1; fi
+          # Still playing after it was moved to another output (Settings > Playback > Sound output).
+          AFTER=$(grep "GW state 'Mac Check'" check/play.log | sed -n 2p)
+          echo "After switching output: $AFTER"
+          if ! echo "$AFTER" | grep -q "playing=true"; then echo "It stopped when the sound output changed"; exit 1; fi
           LOCAL=$(grep "GW state 'Mac Check'" check/play.log | tail -1)
           echo "$LOCAL"
           SECS=$(echo "$LOCAL" | sed -n 's/.* at \([0-9]*\)s playing=true.*/\1/p')
@@ -134,18 +152,31 @@ jobs:
             echo "::warning::YouTube didn't play here (it often refuses GitHub's servers): $YT"
           else echo "YouTube played: $YT"; fi
 
-      - name: Keep the check pictures, logs and installer
+      # Listen together (Jam) between two copies on this Mac: finding each other on the same network
+      # and staying in step, with a stand-in relay (nothing is sent out).
+      - name: Check Jam (listen together)
+        run: sh ./gradlew -p desktop jamCheck -Plocal --no-daemon 2>&1 | tee check/jam.log | grep -E "PASS|FAIL|JAM CHECK|relay:|STOPPED"; grep -q "JAM CHECK PASSED" check/jam.log
+
+      - name: Tidy the check folder
         if: always()
         run: |
-          mkdir -p check
-          cp $(find desktop -path '*binaries/main/dmg/*.dmg' | head -1) "check/Glasswave-Mac-${{ matrix.chip }}.dmg" 2>/dev/null || true
+          mkdir -p check installer
+          cp $(find desktop -path '*binaries/main/dmg/*.dmg' | head -1) "installer/Glasswave-Mac-${{ matrix.chip }}.dmg" 2>/dev/null || true
           rm -rf check/apps check/data check/data2
 
+      # Pictures, the screen recording and logs on their own (a small download), the installer apart.
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: mac-checks-${{ matrix.chip }}
           path: check/
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-installer-${{ matrix.chip }}
+          path: installer/
           if-no-files-found: ignore
 
       - name: Put it on the "mac" release
