@@ -24,7 +24,7 @@ object Active {
 
     /** Checks in if it hasn't yet today (UTC). Safe to call often. */
     fun checkIn() {
-        if (!Settings.countMe || System.getProperty("gw.noCheckIn") != null) return
+        if (!Settings.countMe || Os.isTestRun || System.getProperty("gw.noCheckIn") != null) return
         val day = today()
         if (prefs.getString("day", null) == day) return
         Thread {
@@ -54,7 +54,7 @@ object Active {
 
     /** Called now and then with whether the app is in use ([on]) and playing. Safe to call often. */
     fun live(on: Boolean, playing: Boolean) {
-        if (!Settings.countMe || System.getProperty("gw.noCheckIn") != null) return
+        if (!Settings.countMe || Os.isTestRun || System.getProperty("gw.noCheckIn") != null) return
         val now = System.currentTimeMillis()
         when {
             on && (!liveOn || playing != livePlaying || now - liveAt >= 120_000) -> {

@@ -103,6 +103,7 @@ object SongReports {
     }
 
     private fun send(w: Waiting): Boolean {
+        if (Os.isTestRun) return false
         val device = "${System.getProperty("os.name")} (${System.getProperty("os.version")}), Glasswave for ${Os.system} ${Updater.currentVersion()}"
         val msg = "\"${w.title}\"" + (if (w.artist.isNotBlank()) " by ${w.artist}" else "") +
             " won't play for someone. They reported it.\n\n$device\n${w.url}\n\nTap Mark fixed once it plays again: they'll be told."
