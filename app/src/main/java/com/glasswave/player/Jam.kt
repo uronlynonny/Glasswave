@@ -1297,6 +1297,8 @@ internal object JamClock {
     /** Blocking: the best of a few answers (the quickest round trip is the most exact). */
     fun refresh() {
         checkedAt = SystemClock.elapsedRealtime()
+        // Automated checks only: as if no time server answered (as on GitHub's Macs).
+        if (System.getProperty("gw.jamNoTimeServers") != null) return
         var best: Pair<Long, Long>? = null
         for (host in listOf("time.google.com", "time.cloudflare.com", "pool.ntp.org")) {
             repeat(2) { sample(host)?.let { s -> if (best == null || s.first < best!!.first) best = s } }
