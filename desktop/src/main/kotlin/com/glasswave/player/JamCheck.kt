@@ -37,6 +37,7 @@ fun main(args: Array<String>) {
         val props = mutableListOf("-Dgw.noCheckIn=1", "-Dgw.jamName=${role.replaceFirstChar { it.uppercase() }}", "-Dgw.jamClockSkew=${skew[role]}", "-Dgw.jamLocation=${place[role]}")
         relay?.let { props += "-Dgw.jamRelay=$it" }
         if (noLan) props += "-Dgw.jamNoLan=1"
+        if (System.getProperty("gw.jamNoTimeServers") != null) props += "-Dgw.jamNoTimeServers=1"
         ProcessBuilder(listOf(java) + props + listOf("-cp", System.getProperty("java.class.path"), "com.glasswave.player.JamCheckKt", "device", role))
             .apply { environment()["APPDATA"] = dir.absolutePath; environment()["LOCALAPPDATA"] = dir.absolutePath }
             .redirectErrorStream(true).start()

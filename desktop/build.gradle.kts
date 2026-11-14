@@ -533,4 +533,6 @@ tasks.register<JavaExec>("jamCheck") {
     if (project.hasProperty("local")) systemProperty("gw.jamLocal", "1")
     // -PnoLan: as if the two were in different places (everything through the relay).
     if (project.hasProperty("noLan")) systemProperty("gw.jamNoLan", "1")
+    // -PnoTimeServers: as if no internet time server answered, so the clocks are matched across the Wi-Fi only.
+    if (project.hasProperty("noTimeServers")) systemProperty("gw.jamNoTimeServers", "1")
 }
