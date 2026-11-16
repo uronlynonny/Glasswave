@@ -22,6 +22,10 @@ import org.json.JSONObject
  *  3. The Update button then says "Restart to update": one click installs it and reopens Glasswave.
  *     Or just close the app: the update installs silently on the way out, ready for next time.
  * The app installs for your user only, so updating never needs admin permission.
+ *
+ * On a Mac it's the same, from the "mac" release: the new .dmg downloads in the background, and
+ * "Restart to update" (or quitting) swaps the new Glasswave.app in where the old one was and opens
+ * it again. If that folder can't be written to, the .dmg opens so it can be dragged across by hand.
  */
 object Updater {
     private const val REPO = "uronlynonny/Glasswave"
@@ -30,7 +34,14 @@ object Updater {
      * the phone app's releases. Its title says the version ("Glasswave for Windows 1.0.1") and it
      * holds Glasswave-Windows.msi. The website's download button points at the same file.
      */
-    private const val RELEASE = "https://api.github.com/repos/$REPO/releases/tags/windows"
+    private val RELEASE = "https://api.github.com/repos/$REPO/releases/tags/" + if (Os.isMac) "mac" else "windows"
+
+    /** An Apple Silicon Mac (M1 and later); others are Intel. */
+    private val appleSilicon = System.getProperty("os.arch") == "aarch64"
+    /** The Mac release's .dmg for this kind of Mac (Intel copies are only made by the checks for now). */
+    private val macDmg = if (appleSilicon) "Glasswave-Mac.dmg" else "Glasswave-Mac-Intel.dmg"
+    /** What the installer files are: .dmg on a Mac, .msi on Windows. */
+    private val ext = if (Os.isMac) ".dmg" else ".msi"
     private val versionIn = Regex("""\d+\.\d+(\.\d+)?""")
 
     class Release(val version: String, val notes: String, val apkUrl: String, val size: Long)
@@ -79,13 +90,14 @@ object Updater {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val prefs by lazy { android.content.AppContext.getSharedPreferences("updater", Context.MODE_PRIVATE) }
     private val dir by lazy { File(android.content.AppDirs.cache, "updates").apply { mkdirs() } }
-    private fun fileFor(r: Release) = File(dir, "Glasswave-${r.version}.msi")
+    private fun fileFor(r: Release) = File(dir, "Glasswave-${r.version}$ext")
 
     fun init(@Suppress("UNUSED_PARAMETER") context: Context) {
         lastChecked = prefs.getLong("last", 0L)
         // Installers for this version or older aren't needed any more.
         dir.listFiles()?.forEach { f ->
-            val v = f.name.removePrefix("Glasswave-").removeSuffix(".msi").removeSuffix(".part")
+            if (f.name.endsWith(".sh") || f.name.endsWith(".log")) return@forEach
+            val v = f.name.removePrefix("Glasswave-").removeSuffix(".part").removeSuffix(".msi").removeSuffix(".dmg")
             if (!newer(v)) f.delete()
         }
     }
@@ -144,11 +156,7 @@ object Updater {
             if (tell) status = "This is a test copy, so it doesn't update."
             return
         }
-        if (Os.isMac) {
-            if (tell) status = "On a Mac, new versions come from the Glasswave website for now."
-            return
-        }
-        if (!Os.isWindows) {
+        if (!Os.isWindows && !Os.isMac) {
             if (tell) status = "On Linux, get new versions from Glasswave's releases on GitHub."
             return
         }
@@ -172,7 +180,8 @@ object Updater {
                     download(r)
                 } else {
                     available = null
-                    if (tell) status = "You're on the latest version (${currentVersion()})."
+                    if (tell) status = if (r == null && Os.isMac && !appleSilicon) "New versions for Intel Macs aren't on GitHub yet: for now they're made for Apple Silicon Macs (M1 and later)."
+                        else "You're on the latest version (${currentVersion()})."
                 }
             } catch (e: Exception) {
                 if (tell) status = "Couldn't check for updates. Check your internet."
@@ -183,7 +192,7 @@ object Updater {
     }
 
     fun checkIfDue() {
-        if (fromStore || !Os.isWindows) return
+        if (fromStore || !(Os.isWindows || Os.isMac)) return
         if (System.currentTimeMillis() - lastChecked > 3600_000L) check()
     }
 
@@ -197,7 +206,8 @@ object Updater {
         val assets = json.optJSONArray("assets") ?: return null
         for (i in 0 until assets.length()) {
             val a = assets.optJSONObject(i) ?: continue
-            if (a.optString("name").lowercase().endsWith(".msi")) {
+            val name = a.optString("name")
+            if (if (Os.isMac) name == macDmg else name.lowercase().endsWith(".msi")) {
                 val version = versionIn.find(json.optString("name"))?.value ?: return null
                 return Release(version, json.optString("body"), a.optString("browser_download_url"), a.optLong("size"))
             }
@@ -248,6 +258,8 @@ object Updater {
                 }
                 ready = final
                 status = null
+                // Automated checks only: install it straight away, as if "Restart to update" was clicked.
+                if (System.getProperty("gw.testUpdateNow") != null) restartToUpdate()
             } catch (e: Exception) {
                 android.util.Log.w("Glasswave", "Update download failed", e)
                 status = "Couldn't finish downloading the update. It'll carry on from where it stopped."
@@ -304,13 +316,16 @@ object Updater {
     /** Installs the downloaded update and opens Glasswave again. */
     fun restartToUpdate() {
         val msi = ready ?: return
+        if (Os.isMac && macApp()?.let { canReplace(it) } != true) return openDmgByHand(msi)
         if (runInstaller(msi, reopen = true)) exitApp()
     }
 
     /** Called as the app closes: a downloaded update installs silently, ready for next time. */
     fun installOnExit() {
-        if (fromStore || !Os.isWindows || System.getProperty("gw.noUpdate") != null) return
-        ready?.let { runInstaller(it, reopen = false) }
+        if (fromStore || !(Os.isWindows || Os.isMac) || System.getProperty("gw.noUpdate") != null) return
+        val f = ready ?: return
+        if (Os.isMac && macApp()?.let { canReplace(it) } != true) return
+        runInstaller(f, reopen = false)
     }
 
     /**
@@ -343,7 +358,79 @@ object Updater {
      * when you just close the app), then reopens it only after "Restart to update".
      */
     private fun runInstaller(msi: File, reopen: Boolean): Boolean =
-        (reopen && runSetupWindow(msi, System.getProperty("jpackage.app-path"))) || runScript(msi, reopen)
+        if (Os.isMac) runMacScript(msi, reopen)
+        else (reopen && runSetupWindow(msi, System.getProperty("jpackage.app-path"))) || runScript(msi, reopen)
+
+    /** This copy's Glasswave.app (from its launcher, .../Glasswave.app/Contents/MacOS/Glasswave), if it is one. */
+    private fun macApp(): File? = System.getProperty("jpackage.app-path")
+        ?.let { File(it).parentFile?.parentFile?.parentFile }
+        ?.takeIf { it.name.endsWith(".app") && it.isDirectory }
+
+    /** The app can be swapped for the new one: its folder (usually Applications) can be written to. */
+    private fun canReplace(app: File) = app.parentFile?.canWrite() == true && app.canWrite()
+
+    /**
+     * When the app can't replace itself (it's running from the .dmg, or this user can't write to
+     * Applications): the new .dmg opens in Finder, to drag Glasswave into Applications as the first time.
+     */
+    private fun openDmgByHand(dmg: File) {
+        runCatching { ProcessBuilder("open", dmg.absolutePath).start() }
+        status = "The new version is open in Finder: drag Glasswave into Applications and choose Replace, then open it again."
+    }
+
+    /** A shell word: [s] in single quotes. */
+    private fun q(s: String) = "'" + s.replace("'", "'\\''") + "'"
+
+    /**
+     * The Mac's update: a small script that outlives the app waits for it to close, copies the new
+     * Glasswave.app out of the .dmg next to the old one, swaps the two, and opens it again (only
+     * after "Restart to update"). If anything goes wrong the old app stays where it was.
+     */
+    private fun runMacScript(dmg: File, reopen: Boolean): Boolean = try {
+        val app = macApp() ?: throw IOException("Not running from Glasswave.app")
+        val script = File(dir, "install-update.sh")
+        val log = File(dir, "install-update.log")
+        script.writeText(
+            """
+            |#!/bin/bash
+            |APP=${q(app.absolutePath)}
+            |DMG=${q(dmg.absolutePath)}
+            |PID=${ProcessHandle.current().pid()}
+            |echo "Updating ${'$'}APP from ${'$'}DMG"
+            |# Wait (up to a minute) for Glasswave to close.
+            |for i in ${'$'}(seq 1 60); do kill -0 ${'$'}PID 2>/dev/null || break; sleep 1; done
+            |MNT=${'$'}(mktemp -d /tmp/glasswave-update.XXXXXX)
+            |if hdiutil attach "${'$'}DMG" -nobrowse -readonly -noautoopen -mountpoint "${'$'}MNT" >/dev/null; then
+            |  DIR=${'$'}(dirname "${'$'}APP")
+            |  NEW="${'$'}DIR/.Glasswave-update.app"; OLD="${'$'}DIR/.Glasswave-old.app"
+            |  rm -rf "${'$'}NEW" "${'$'}OLD"
+            |  if ditto "${'$'}MNT/Glasswave.app" "${'$'}NEW"; then
+            |    if mv "${'$'}APP" "${'$'}OLD"; then
+            |      if mv "${'$'}NEW" "${'$'}APP"; then rm -rf "${'$'}OLD"; rm -f "${'$'}DMG"; echo "Updated"
+            |      else mv "${'$'}OLD" "${'$'}APP"; echo "Could not put the new app in place"; fi
+            |    fi
+            |    xattr -dr com.apple.quarantine "${'$'}APP" 2>/dev/null
+            |  else echo "Could not copy the new app"; fi
+            |  rm -rf "${'$'}NEW"
+            |  hdiutil detach "${'$'}MNT" -quiet || hdiutil detach "${'$'}MNT" -force -quiet
+            |else echo "Could not open the update"; fi
+            |rmdir "${'$'}MNT" 2>/dev/null
+            |${if (reopen) "open \"\$APP\"" else ""}
+            |rm -f "${'$'}0"
+            |""".trimMargin(),
+        )
+        ProcessBuilder("/usr/bin/nohup", "/bin/bash", script.absolutePath)
+            .redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
+            .redirectOutput(log)
+            .redirectErrorStream(true)
+            .start()
+        ready = null
+        true
+    } catch (e: Exception) {
+        android.util.Log.e("Glasswave", "Couldn't start the update", e)
+        status = "Couldn't start the update."
+        false
+    }
 
     private fun runScript(msi: File, reopen: Boolean): Boolean = try {
         val app = System.getProperty("jpackage.app-path")

@@ -273,11 +273,16 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
             enter = slideInVertically(smooth(250)) { it } + fadeIn(smooth(150)),
             exit = slideOutVertically(smooth(220)) { it } + fadeOut(smooth(220)),
         ) {
-            FullPlayer(ps, colors, onClose = { full = false; peeking = false; PlayerView.lyrics = false }, openEqualizer = {
-                    // The player's Equalizer button opens Settings > Sound & effects.
-                    full = false; peeking = false; PlayerView.lyrics = false
-                    vm.openSettings("SOUND")
-                }, onPeek = { peeking = it })
+            // Two fingers swiped down on a trackpad close it, like swiping it down on a phone (not
+            // while the lyrics are up: there that scrolls the lyrics).
+            LaunchedEffect(Unit) { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { SwipeDown.sign } }
+            Box(Modifier.swipeDownToClose(enabled = { !PlayerView.lyrics }) { full = false; peeking = false; PlayerView.lyrics = false }) {
+                FullPlayer(ps, colors, onClose = { full = false; peeking = false; PlayerView.lyrics = false }, openEqualizer = {
+                        // The player's Equalizer button opens Settings > Sound & effects.
+                        full = false; peeking = false; PlayerView.lyrics = false
+                        vm.openSettings("SOUND")
+                    }, onPeek = { peeking = it })
+            }
         }
 
         // "Ada is in a Jam nearby": in the middle, over the dimmed app (clear of the "Playing on…" bar).

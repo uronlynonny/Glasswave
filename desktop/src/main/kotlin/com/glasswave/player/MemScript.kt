@@ -455,6 +455,34 @@ object MemScript {
                             System.err.println("GW outputs: " + AudioOutput.devices.joinToString(" | ") { it.name } + " (playing through ${AudioOutput.chosen ?: "the default"})")
                         }
                         "output" -> onUi { AudioOutput.pick(arg.takeIf { it != "default" }) }
+                        // swipe down|up|wheel: a pretend two-finger trackpad swipe (fingers moving down or
+                        // up) over the middle of the window, or a mouse wheel spun up six notches.
+                        "swipe" -> {
+                            var target: java.awt.Component? = null
+                            var at: java.awt.Point? = null
+                            onUi {
+                                val f = java.awt.Window.getWindows().first { it is javax.swing.JFrame && it.isDisplayable } as javax.swing.JFrame
+                                val root = f.contentPane
+                                val mid = java.awt.Point(root.width / 2, root.height / 2)
+                                val c = javax.swing.SwingUtilities.getDeepestComponentAt(root, mid.x, mid.y) ?: root
+                                target = c; at = javax.swing.SwingUtilities.convertPoint(root, mid, c)
+                            }
+                            // Fingers moving down scroll up when scrolling is "natural" (see SwipeDown.sign).
+                            val (rot, n) = when (arg) {
+                                "down" -> -0.45 * SwipeDown.sign to 14
+                                "up" -> 0.45 * SwipeDown.sign to 14
+                                else -> -1.0 to 6
+                            }
+                            repeat(n) {
+                                onUi {
+                                    val c = target!!
+                                    c.dispatchEvent(java.awt.event.MouseWheelEvent(c, java.awt.event.MouseEvent.MOUSE_WHEEL, System.currentTimeMillis(), 0,
+                                        at!!.x, at!!.y, 0, 0, 0, false, java.awt.event.MouseWheelEvent.WHEEL_UNIT_SCROLL, 1, if (rot == Math.rint(rot)) rot.toInt() else 0, rot))
+                                }
+                                Thread.sleep(if (arg == "wheel") 60 else 16)
+                            }
+                            System.err.println("GW swipe $arg sent")
+                        }
                         // sscroll PX: scrolls the open settings page to PX pixels from the top.
                         "sscroll" -> onUi { kotlinx.coroutines.runBlocking { SettingsScrollTest.state?.scrollTo(arg.toInt()) } }
                         "eqpreset" -> onUi { Sound.updateEqOn(true); Sound.applyPreset(EqPreset.valueOf(arg)) }
@@ -704,6 +732,13 @@ object MemScript {
                             }
                         }
                         "quit" -> { onUi { ps.release() }; System.exit(0) }
+                        // print text: writes "GW text" in the log.
+                        "print" -> System.err.println("GW $arg")
+                        // close: the window's close button (the red one on a Mac), as if clicked.
+                        "close" -> onUi {
+                            java.awt.Window.getWindows().firstOrNull { it is javax.swing.JFrame && it.isShowing }
+                                ?.let { w -> w.dispatchEvent(java.awt.event.WindowEvent(w, java.awt.event.WindowEvent.WINDOW_CLOSING)) }
+                        }
                         // The visualizer's size, colour and feel (vissize LARGE, viscolor WHITE, visfeel SNAPPY).
                         "vissize" -> onUi { Settings.updateVisualizerSize(VisualizerSize.valueOf(arg)) }
                         "viscolor" -> onUi { Settings.updateVisualizerColor(VisualizerColor.valueOf(arg)) }
