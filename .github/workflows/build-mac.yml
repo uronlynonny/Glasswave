@@ -190,7 +190,7 @@ jobs:
           echo "Built $DMG ($VERSION)"
           if ! gh release view mac >/dev/null 2>&1; then
             gh release create mac --title "Glasswave for Mac $VERSION" --latest=false \
-              --notes "Glasswave for Mac (Apple Silicon). Open the .dmg and drag Glasswave to Applications. The first time, right-click Glasswave and choose Open."
+              --notes "Glasswave for Mac (Apple Silicon). Open the .dmg and drag Glasswave to Applications. The app is not signed by Apple yet, so the first time macOS says it \"could not verify\" Glasswave: click Done, then go to System Settings > Privacy & Security, scroll down and click \"Open Anyway\" next to Glasswave. If there is no button, run this in Terminal, then open Glasswave again: xattr -dr com.apple.quarantine /Applications/Glasswave.app"
           fi
           # Upload under a new name first, then swap, so the download link never breaks.
           cp "$DMG" "Glasswave-Mac-$VERSION.dmg"
