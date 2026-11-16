@@ -12,6 +12,10 @@ on:
     branches: [main]
     paths: ['desktop/**', 'app/build.gradle.kts', '.github/workflows/build-mac.yml']
   workflow_dispatch:
+    inputs:
+      arm_runner:
+        description: "Which of GitHub's Apple Silicon Macs to use (when macos-latest has none free)"
+        default: macos-latest
 
 permissions:
   contents: write
@@ -26,7 +30,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-latest
+          - runner: ${{ inputs.arm_runner || 'macos-latest' }}
             chip: apple-silicon
           - runner: macos-15-intel
             chip: intel
@@ -118,10 +122,24 @@ jobs:
           state
           back
           wait 2
+          full
+          wait 3
+          swipe wheel
+          wait 1
+          swipe up
+          wait 1
+          shot before-swipe
+          swipe down
+          wait 2
+          shot after-swipe
+          state
           play daft punk get lucky
           wait 25
           state
           shot youtube
+          close
+          wait 20
+          print still running after close
           quit
           EOF
           sh ./gradlew -p desktop memCheck -Pgwscript="$PWD/check/play.txt" -PdataDir="$PWD/check/data2" --no-daemon > check/play.log 2>&1 &
@@ -138,6 +156,18 @@ jobs:
           cat check/play.log | grep -v "^\s*at " | tail -60
           grep "GW outputs" check/play.log || true
           if grep -q "GW CRASH" check/play.log; then echo "The app crashed"; exit 1; fi
+          # Two fingers swiped down close the big player; a mouse wheel and a swipe up don't.
+          grep -n "GW swipe\|closed by a swipe" check/play.log || true
+          CLOSES=$(grep -c "closed by a swipe" check/play.log || true)
+          UP=$(grep -n "GW swipe up sent" check/play.log | head -1 | cut -d: -f1)
+          FIRST=$(grep -n "closed by a swipe" check/play.log | head -1 | cut -d: -f1)
+          if [ "$CLOSES" != "1" ] || [ -z "$UP" ] || [ -z "$FIRST" ] || [ "$FIRST" -lt "$UP" ]; then
+            echo "The swipe down didn't close the big player just once, after the swipe down ($CLOSES closes)"; exit 1
+          fi
+          echo "Swipe down closed the big player; the mouse wheel and the swipe up left it open"
+          # The red close button quits Glasswave on a Mac (only minimizing keeps it going).
+          if grep -q "still running after close" check/play.log; then echo "The close button didn't quit Glasswave"; exit 1; fi
+          echo "The close button quit Glasswave"
           # Still playing after it was moved to another output (Settings > Playback > Sound output).
           AFTER=$(grep "GW state 'Mac Check'" check/play.log | sed -n 2p)
           echo "After switching output: $AFTER"
@@ -152,6 +182,46 @@ jobs:
             echo "::warning::YouTube didn't play here (it often refuses GitHub's servers): $YT"
           else echo "YouTube played: $YT"; fi
 
+      # An older copy updates itself: it's told it is 1.0.0 and finds a newer release (a pretend one,
+      # served on this Mac with the .dmg just built, so nothing real is touched), downloads the
+      # .dmg, swaps the new Glasswave.app in where it was and opens it again, as "Restart to update" does.
+      # (Apple Silicon only: there's no Intel download, and on GitHub's Intel Macs macOS stops the
+      # pretend release's server with a "find devices on local networks" question.)
+      - name: Check the app updates itself
+        if: matrix.chip == 'apple-silicon'
+        run: |
+          set -e
+          mkdir -p check/upd srv
+          NAME=$([ "${{ matrix.chip }}" = intel ] && echo Glasswave-Mac-Intel.dmg || echo Glasswave-Mac.dmg)
+          cp "$(find desktop -path '*binaries/main/dmg/*.dmg' | head -1)" "srv/$NAME"
+          SIZE=$(stat -f%z "srv/$NAME")
+          printf '{"name":"Glasswave for Mac 9.9.9","body":"A pretend update for the check","assets":[{"name":"%s","size":%s,"browser_download_url":"http://127.0.0.1:8765/%s"}]}' "$NAME" "$SIZE" "$NAME" > srv/release.json
+          cat srv/release.json; echo
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory srv > check/update-server.log 2>&1 &
+          cp -R check/apps/Glasswave.app check/upd/
+          APP="$PWD/check/upd/Glasswave.app"
+          CFG="$APP/Contents/app/Glasswave.cfg"
+          perl -0pi -e 's/\[JavaOptions\]\n/[JavaOptions]\njava-options=-Dgw.testAppVersion=1.0.0\njava-options=-Dgw.testUpdateNow=1\njava-options=-Dgw.testUpdateRelease=http:\/\/127.0.0.1:8765\/release.json\n/' "$CFG"
+          grep -n "testUpdateNow" "$CFG"
+          export APPDATA="$PWD/check/data3/roaming" LOCALAPPDATA="$PWD/check/data3/local"
+          "$APP/Contents/MacOS/Glasswave" > check/update-old.log 2>&1 &
+          OLD=$!
+          # Swapped (the new app has its own settings file, without the test lines) and opened again.
+          for i in $(seq 1 120); do
+            if ! grep -q "testUpdateNow" "$CFG" 2>/dev/null && pgrep -f "check/upd/Glasswave.app/Contents/MacOS/Glasswave" >/dev/null; then break; fi
+            sleep 2
+          done
+          sleep 20
+          screencapture -x check/after-update.png || true
+          find check/data3 -name 'install-update.log' -exec cat {} \; || true
+          kill -0 $OLD 2>/dev/null && echo "The old copy is still running" || echo "The old copy closed"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist"
+          if grep -q "testUpdateNow" "$CFG"; then echo "The app wasn't replaced"; tail -30 check/update-old.log; exit 1; fi
+          if ! pgrep -f "check/upd/Glasswave.app/Contents/MacOS/Glasswave" >/dev/null; then echo "The updated app didn't open again"; exit 1; fi
+          grep "GET /" check/update-server.log || true
+          echo "Updated itself and opened again"
+          pkill -f "check/upd/Glasswave.app/Contents/MacOS/Glasswave" || true
+
       # Listen together (Jam) between two copies on this Mac: finding each other on the same network
       # and staying in step, with a stand-in relay (nothing is sent out).
       - name: Check Jam (listen together)
@@ -162,7 +232,7 @@ jobs:
         run: |
           mkdir -p check installer
           cp $(find desktop -path '*binaries/main/dmg/*.dmg' | head -1) "installer/Glasswave-Mac-${{ matrix.chip }}.dmg" 2>/dev/null || true
-          rm -rf check/apps check/data check/data2
+          rm -rf check/apps check/upd check/data check/data2 check/data3
 
       # Pictures, the screen recording and logs on their own (a small download), the installer apart.
       - uses: actions/upload-artifact@v4
