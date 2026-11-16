@@ -1,11 +1,11 @@
 {
-  "lastTime": 1794827896,
+  "lastTime": 1794832463,
   "totals": {
-    "visits": 153,
+    "visits": 154,
     "siteDownloads": 49,
-    "apk": 458
+    "apk": 467
   },
-  "apkTotal": 421,
+  "apkTotal": 430,
   "hours": [
     {
       "t": 1792763089,
@@ -3294,9 +3294,15 @@
       "v": 1,
       "d": 0,
       "a": 0
+    },
+    {
+      "t": 1794841294,
+      "v": 1,
+      "d": 0,
+      "a": 9
     }
   ],
-  "updated": 1794830554,
+  "updated": 1794841294,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -3699,7 +3705,7 @@
       "m": "\"Harder, Better, Faster, Stronger\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (26.7.2), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=JhulBGMA7G4"
     }
   ],
-  "lastActiveTime": 1794821070,
+  "lastActiveTime": 1794839539,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -4205,29 +4211,34 @@
     },
     "2026-11-16": {
       "a": [
+        "0781cb68-6bbb-4118-bf96-987353fc022d",
         "1432f961-bccd-4d76-b6ec-e81d74f7783a",
         "36d58cc1-c393-490b-9440-241580552d0a",
         "5429ab51-c54a-4d18-b15e-3230a6a724b2",
+        "6ce16e7b-e680-44af-8dda-4211206548d5",
         "894fe25c-89c6-4597-96a5-c84b9051d013",
         "9eca4f31-9444-4f04-9efb-ef119d06f154",
+        "c4a40f9b-00f4-4911-8d80-a71c36a1ea6e",
+        "dc31ecd0-296d-4ab2-bec3-c44146ffebd2",
         "f26e3a11-ef03-4fea-a5bd-bda93da47da3"
       ],
       "w": [
+        "5314926c-62ca-4c50-98d6-e2455e0df570",
         "605bc803-fdae-4a29-a0fe-e44314568a78"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 6,
-      "w": 1
+      "a": 10,
+      "w": 2
     },
     "week": {
-      "a": 41,
+      "a": 43,
       "w": 25
     },
     "month": {
-      "a": 109,
+      "a": 110,
       "w": 35
     },
     "daily": [
@@ -4348,8 +4359,8 @@
       },
       {
         "d": "2026-11-16",
-        "a": 6,
-        "w": 1
+        "a": 10,
+        "w": 2
       }
     ]
   },
