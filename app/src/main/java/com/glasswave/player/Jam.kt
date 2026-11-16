@@ -333,6 +333,8 @@ object Jam {
         connected = false
         status = null
         addedBy = emptyMap()
+        forWhom = emptyMap()
+        tastes.clear()
         val snap = snapshot
         snapshot = null
         state = null
@@ -494,7 +496,7 @@ object Jam {
         val local = JamPlatform.isLocalSong(t.url)
         val url = if (local) matchUrl(t.title, t.artist, t.seconds) else t.url
         return JSONArray().put(url).put(t.title).put(t.artist).put(t.seconds).put(if (local || !thumb) "" else t.thumb ?: "")
-            .put(addedBy[t.url] ?: "")
+            .put(addedBy[t.url] ?: "").put(forWhom[t.url] ?: "")
     }
 
     private fun trackOf(a: JSONArray?): Track? = a?.optString(0)?.takeIf { it.isNotEmpty() }?.let {
@@ -565,7 +567,7 @@ object Jam {
         // Back on the relay after a while, and not connected straight: say hello again (the first
         // hello waits a moment for the Wi-Fi, see memberTick).
         if (role == Role.MEMBER && hostLink == null && relayJoinSent && (awayMs > 30_000 || state == null)) {
-            sendLater({ JSONObject().put("ty", "join") }, essential = true, relay = true)
+            sendLater({ joinMessage() }, essential = true, relay = true)
         }
         everConnected = true
     }
@@ -625,11 +627,17 @@ object Jam {
             } else if (known.name != name) publishMembers()
         }
         when (ty) {
-            "join" -> { if (age > 15 * 60_000) return; heard(); markHostDirty(0) }
+            "join" -> {
+                if (age > 15 * 60_000) return
+                heard()
+                o.optJSONObject("tz")?.let { tasteOf(it, name)?.let { t -> tastes[from] = t } }
+                markHostDirty(0)
+            }
             "here" -> { if (age > 15 * 60_000) return; heard() }
             // How far apart the clocks are (straight across the Wi-Fi): the answer goes straight back.
             "tq" -> links[from]?.let { l -> sendOn(l, JSONObject().put("ty", "ta").put("to", from).put("t0", o.optLong("t0")).put("t1", JamClock.now())) }
             "bye" -> {
+                tastes.remove(from)
                 members0.remove(from)?.let { if (age < 120_000) Menus.say("${it.name} left the Jam") }
                 dropLink(from)
                 publishMembers()
@@ -836,6 +844,12 @@ object Jam {
                 }
                 o.optJSONArray("tr")?.optString(5)?.takeIf { it.isNotEmpty() }?.let { by[o.optJSONArray("tr")!!.optString(0)] = it }
                 addedBy = by
+                val picked = HashMap<String, String>()
+                for (i in 0 until (o.optJSONArray("up")?.length() ?: 0)) {
+                    val a = o.optJSONArray("up")!!.optJSONArray(i) ?: continue
+                    a.optString(6).takeIf { it.isNotEmpty() }?.let { picked[a.optString(0)] = it }
+                }
+                forWhom = picked
                 val list = o.optJSONArray("m")
                 val now = elapsed()
                 val ms = (0 until (list?.length() ?: 0)).mapNotNull { i ->
@@ -898,7 +912,7 @@ object Jam {
             val since = maxOf(joinStarted, lanLostAt)
             if (!relayJoinSent && connected && now - since > (if (JamLan.off) 0 else 3_000)) {
                 relayJoinSent = true
-                sendLater({ JSONObject().put("ty", "join") }, essential = true, relay = true)
+                sendLater({ joinMessage() }, essential = true, relay = true)
             }
         } else {
             // Gone quiet (the host checks in every 10 seconds): the connection has dropped.
@@ -1067,6 +1081,109 @@ object Jam {
         }
     }
 
+    // ---------------------------------------------------------------- taste blending
+
+    /** What someone listens to most: a few artists and songs, from their own listening stats. */
+    private class Taste(val name: String, val artists: List<String>, val songs: List<Track>)
+
+    /** The host: each member's taste, by who they are (sent with their hello, so once per join). */
+    private val tastes = java.util.concurrent.ConcurrentHashMap<String, Taste>()
+
+    /** Songs Autoplay picked for someone's taste, by address: who for (their id). "For Ada" in Up next. */
+    var forWhom by mutableStateOf<Map<String, String>>(emptyMap())
+        private set
+
+    /** "Ada" (or "you") for a song Autoplay picked for someone's taste, else null. */
+    fun pickedFor(url: String): String? {
+        val id = forWhom[url] ?: return null
+        if (id == myId) return "you"
+        return members.firstOrNull { it.id == id }?.name
+    }
+
+    @Volatile private var tasteCache: Pair<Long, Taste?>? = null
+
+    /** This device's taste: its top artists and songs of the last 3 months (blocking: reads the stats). */
+    private fun myTaste(): Taste? {
+        tasteCache?.takeIf { elapsed() - it.first < 10 * 60_000 }?.let { return it.second }
+        val since = System.currentTimeMillis() - 90L * 86_400_000
+        val plays = runCatching { Stats.allPlays() }.getOrDefault(emptyList()).filter { it.at > since && it.ms >= 30_000 }
+        val t = if (plays.isEmpty()) null else {
+            val songs = plays.groupBy { it.track.url }.entries.sortedByDescending { it.value.size }.take(5).map { it.value.last().track }
+            val artists = plays.flatMap { p -> p.track.artist.split(',', '&').map { it.trim() }.filter { it.isNotEmpty() } }
+                .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(5).map { it.key }
+            Taste(myName(), artists, songs)
+        }
+        tasteCache = elapsed() to t
+        return t
+    }
+
+    /** A hello, with this device's taste (blocking: reads the stats; call it on the Jam's thread). */
+    private fun joinMessage(): JSONObject {
+        val o = JSONObject().put("ty", "join")
+        myTaste()?.let { t ->
+            o.put("tz", JSONObject().put("ar", JSONArray(t.artists)).put("so", JSONArray().apply { t.songs.forEach { put(trackJson(it, thumb = false)) } }))
+        }
+        return o
+    }
+
+    /** A hello on one connection only (before it's known to be the host's). */
+    private fun sendJoinOn(l: JamLan.Link) {
+        io.execute { val k = key ?: return@execute; runCatching { l.send(seal(stamp(joinMessage()), k)) } }
+    }
+
+    private fun tasteOf(o: JSONObject, name: String): Taste? {
+        val artists = o.optJSONArray("ar")?.let { a -> (0 until minOf(a.length(), 5)).map { a.optString(it).take(60) } }.orEmpty()
+        val songs = o.optJSONArray("so")?.let { a -> (0 until minOf(a.length(), 5)).mapNotNull { trackOf(a.optJSONArray(it)) } }.orEmpty()
+        return if (artists.isEmpty() && songs.isEmpty()) null else Taste(name, artists, songs)
+    }
+
+    /** Whose taste goes first next time, and which of each person's songs is next as a starting point. */
+    private var blendTurn = 0
+    private val seedTurn = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    /**
+     * The host's Autoplay is about to top up Up next with [radio] (songs like the one playing). With
+     * others in the Jam it becomes a blend, like Spotify's: those songs, taken in turn with songs for
+     * each person's taste. For each person (a different one first each time, three at most), one of
+     * their favourites and two songs like it. Called on Autoplay's own thread (it looks songs up).
+     * Not hosting, or nobody else has shared a taste: [radio] as it is.
+     */
+    fun blendTastes(radio: List<Track>): List<Track> {
+        if (!isHost) return radio
+        val others = members.filter { !it.host }.mapNotNull { m -> tastes[m.id]?.let { m.id to it } }
+        if (others.isEmpty()) return radio
+        val people = (listOfNotNull(myTaste()?.let { myId to it }) + others).toMutableList()
+        val start = blendTurn++ % people.size
+        val turn = (people.drop(start) + people.take(start)).take(3)
+        val seen = HashSet<String>().apply { radio.forEach { add(it.url); add(YtRepo.songKey(it.title, it.artist)) } }
+        val labels = HashMap<String, String>()
+        val lists = mutableListOf(radio)
+        for ((id, taste) in turn) {
+            val picks = mutableListOf<Track>()
+            fun take(t: Track): Boolean {
+                if (!seen.add(t.url) || !seen.add(YtRepo.songKey(t.title, t.artist))) return false
+                picks += t
+                labels[t.url] = id
+                return true
+            }
+            // One of their favourites to start from (a different one each time), then songs like it.
+            if (taste.songs.isNotEmpty()) {
+                val n = seedTurn.merge(id, 1, Int::plus)!! - 1
+                val seed = taste.songs[n % taste.songs.size]
+                take(seed)
+                val like = runCatching { YtRepo.videoIdFor(seed.url)?.let { NotInterested.thin(YtMusicApi.radio(it)) } }.getOrNull().orEmpty()
+                like.filter { it.url != seed.url }.take(8).forEach { if (picks.size < 3) take(it) }
+            }
+            if (picks.isNotEmpty()) lists += picks
+        }
+        if (labels.isNotEmpty()) main.post { if (isHost) forWhom = forWhom + labels }
+        // In turn: one like the song playing, then one for each person, and round again.
+        val out = mutableListOf<Track>()
+        var i = 0
+        while (lists.any { i < it.size }) { lists.forEach { l -> l.getOrNull(i)?.let { out += it } }; i++ }
+        return out
+    }
+
     // ---------------------------------------------------------------- straight across the Wi-Fi
 
     /** Names this Jam on the local network (worked out from the code; says nothing about it). */
@@ -1168,7 +1285,7 @@ object Jam {
             if (l != null) {
                 candidates += l
                 candidateAt = elapsed()
-                sendOn(l, JSONObject().put("ty", "join"))
+                sendJoinOn(l)
             } else {
                 // Couldn't reach it (usually a PC's firewall): ask it to connect to this device instead.
                 val mine = server?.localPort ?: return@connect
@@ -1180,7 +1297,7 @@ object Jam {
     private fun onAccepted(l: JamLan.Link) {
         when (role) {
             // The host connecting here (see "jamm"): say hello on it.
-            Role.MEMBER -> if (hostLink == null) { candidates += l; candidateAt = elapsed(); sendOn(l, JSONObject().put("ty", "join")) } else l.close()
+            Role.MEMBER -> if (hostLink == null) { candidates += l; candidateAt = elapsed(); sendJoinOn(l) } else l.close()
             Role.HOST -> {} // members say who they are in their first message
             Role.NONE -> l.close()
         }
