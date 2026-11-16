@@ -185,7 +185,10 @@ jobs:
       # An older copy updates itself: it's told it is 1.0.0 and finds a newer release (a pretend one,
       # served on this Mac with the .dmg just built, so nothing real is touched), downloads the
       # .dmg, swaps the new Glasswave.app in where it was and opens it again, as "Restart to update" does.
+      # (Apple Silicon only: there's no Intel download, and on GitHub's Intel Macs macOS stops the
+      # pretend release's server with a "find devices on local networks" question.)
       - name: Check the app updates itself
+        if: matrix.chip == 'apple-silicon'
         run: |
           set -e
           mkdir -p check/upd srv
