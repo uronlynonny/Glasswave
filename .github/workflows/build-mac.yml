@@ -12,6 +12,10 @@ on:
     branches: [main]
     paths: ['desktop/**', 'app/build.gradle.kts', '.github/workflows/build-mac.yml']
   workflow_dispatch:
+    inputs:
+      arm_runner:
+        description: "Which of GitHub's Apple Silicon Macs to use (when macos-latest has none free)"
+        default: macos-latest
 
 permissions:
   contents: write
@@ -26,7 +30,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-latest
+          - runner: ${{ inputs.arm_runner || 'macos-latest' }}
             chip: apple-silicon
           - runner: macos-15-intel
             chip: intel
