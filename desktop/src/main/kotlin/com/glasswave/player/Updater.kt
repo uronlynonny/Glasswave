@@ -34,7 +34,8 @@ object Updater {
      * the phone app's releases. Its title says the version ("Glasswave for Windows 1.0.1") and it
      * holds Glasswave-Windows.msi. The website's download button points at the same file.
      */
-    private val RELEASE = "https://api.github.com/repos/$REPO/releases/tags/" + if (Os.isMac) "mac" else "windows"
+    private val RELEASE = System.getProperty("gw.testUpdateRelease") // automated checks only: a pretend release
+        ?: ("https://api.github.com/repos/$REPO/releases/tags/" + if (Os.isMac) "mac" else "windows")
 
     /** An Apple Silicon Mac (M1 and later); others are Intel. */
     private val appleSilicon = System.getProperty("os.arch") == "aarch64"

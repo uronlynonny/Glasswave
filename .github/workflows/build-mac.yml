@@ -182,18 +182,23 @@ jobs:
             echo "::warning::YouTube didn't play here (it often refuses GitHub's servers): $YT"
           else echo "YouTube played: $YT"; fi
 
-      # An older copy updates itself: it's told it is 1.0.0, finds the "mac" release, downloads its
-      # .dmg, swaps the new Glasswave.app in where it was and opens it again (as "Restart to update"
-      # does). Only on Apple Silicon: the release has no Intel .dmg yet.
+      # An older copy updates itself: it's told it is 1.0.0 and finds a newer release (a pretend one,
+      # served on this Mac with the .dmg just built, so nothing real is touched), downloads the
+      # .dmg, swaps the new Glasswave.app in where it was and opens it again, as "Restart to update" does.
       - name: Check the app updates itself
-        if: matrix.chip == 'apple-silicon'
         run: |
           set -e
-          mkdir -p check/upd
+          mkdir -p check/upd srv
+          NAME=$([ "${{ matrix.chip }}" = intel ] && echo Glasswave-Mac-Intel.dmg || echo Glasswave-Mac.dmg)
+          cp "$(find desktop -path '*binaries/main/dmg/*.dmg' | head -1)" "srv/$NAME"
+          SIZE=$(stat -f%z "srv/$NAME")
+          printf '{"name":"Glasswave for Mac 9.9.9","body":"A pretend update for the check","assets":[{"name":"%s","size":%s,"browser_download_url":"http://127.0.0.1:8765/%s"}]}' "$NAME" "$SIZE" "$NAME" > srv/release.json
+          cat srv/release.json; echo
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory srv > check/update-server.log 2>&1 &
           cp -R check/apps/Glasswave.app check/upd/
           APP="$PWD/check/upd/Glasswave.app"
           CFG="$APP/Contents/app/Glasswave.cfg"
-          perl -0pi -e 's/\[JavaOptions\]\n/[JavaOptions]\njava-options=-Dgw.testAppVersion=1.0.0\njava-options=-Dgw.testUpdateNow=1\n/' "$CFG"
+          perl -0pi -e 's/\[JavaOptions\]\n/[JavaOptions]\njava-options=-Dgw.testAppVersion=1.0.0\njava-options=-Dgw.testUpdateNow=1\njava-options=-Dgw.testUpdateRelease=http:\/\/127.0.0.1:8765\/release.json\n/' "$CFG"
           grep -n "testUpdateNow" "$CFG"
           export APPDATA="$PWD/check/data3/roaming" LOCALAPPDATA="$PWD/check/data3/local"
           "$APP/Contents/MacOS/Glasswave" > check/update-old.log 2>&1 &
@@ -210,7 +215,8 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist"
           if grep -q "testUpdateNow" "$CFG"; then echo "The app wasn't replaced"; tail -30 check/update-old.log; exit 1; fi
           if ! pgrep -f "check/upd/Glasswave.app/Contents/MacOS/Glasswave" >/dev/null; then echo "The updated app didn't open again"; exit 1; fi
-          echo "Updated itself from the mac release and opened again"
+          grep "GET /" check/update-server.log || true
+          echo "Updated itself and opened again"
           pkill -f "check/upd/Glasswave.app/Contents/MacOS/Glasswave" || true
 
       # Listen together (Jam) between two copies on this Mac: finding each other on the same network
