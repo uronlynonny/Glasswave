@@ -1,11 +1,11 @@
 {
-  "lastTime": 1795175671,
+  "lastTime": 1795179739,
   "totals": {
     "visits": 165,
     "siteDownloads": 55,
-    "apk": 507
+    "apk": 508
   },
-  "apkTotal": 470,
+  "apkTotal": 471,
   "hours": [
     {
       "t": 1792763089,
@@ -3792,9 +3792,15 @@
       "v": 0,
       "d": 0,
       "a": 2
+    },
+    {
+      "t": 1795184345,
+      "v": 0,
+      "d": 0,
+      "a": 1
     }
   ],
-  "updated": 1795179738,
+  "updated": 1795184345,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -4197,7 +4203,7 @@
       "m": "\"Harder, Better, Faster, Stronger\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (26.7.2), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=JhulBGMA7G4"
     }
   ],
-  "lastActiveTime": 1795179689,
+  "lastActiveTime": 1795182715,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -4798,6 +4804,7 @@
         "184148ec-8bf5-4b8c-b520-34b852ae7a56",
         "36d58cc1-c393-490b-9440-241580552d0a",
         "5429ab51-c54a-4d18-b15e-3230a6a724b2",
+        "867dafdb-7380-46b2-b3c1-053fc99ac409",
         "9be0a00e-16c3-4cc1-9d83-2556ce916616",
         "9eca4f31-9444-4f04-9efb-ef119d06f154",
         "a5ff1731-9c61-48f1-932d-44fda8027eb1",
@@ -4805,21 +4812,22 @@
         "b40577e8-17f8-4460-839e-0cef28e7acc4",
         "b819ac77-120f-40ea-a123-8e5a91cce8cf",
         "c4626300-15d6-4cc6-91b5-beaa11b615ee",
+        "c4b9e5f5-2762-409c-a124-51e11200371d",
         "f26e3a11-ef03-4fea-a5bd-bda93da47da3"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 12,
+      "a": 14,
       "w": 3
     },
     "week": {
-      "a": 37,
+      "a": 38,
       "w": 14
     },
     "month": {
-      "a": 128,
+      "a": 129,
       "w": 35
     },
     "daily": [
@@ -4960,7 +4968,7 @@
       },
       {
         "d": "2026-11-20",
-        "a": 12,
+        "a": 14,
         "w": 3
       }
     ]
