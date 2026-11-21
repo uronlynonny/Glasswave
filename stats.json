@@ -1,5 +1,5 @@
 {
-  "lastTime": 1795236783,
+  "lastTime": 1795240395,
   "totals": {
     "visits": 167,
     "siteDownloads": 56,
@@ -3882,9 +3882,15 @@
       "v": 0,
       "d": 0,
       "a": 0
+    },
+    {
+      "t": 1795244507,
+      "v": 0,
+      "d": 0,
+      "a": 0
     }
   ],
-  "updated": 1795240394,
+  "updated": 1795244507,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -4287,7 +4293,7 @@
       "m": "\"Harder, Better, Faster, Stronger\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (26.7.2), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=JhulBGMA7G4"
     }
   ],
-  "lastActiveTime": 1795234974,
+  "lastActiveTime": 1795243767,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -4906,6 +4912,7 @@
     },
     "2026-11-21": {
       "a": [
+        "564eab64-238a-40d0-a0ee-869efc244f9c",
         "c4626300-15d6-4cc6-91b5-beaa11b615ee",
         "f26e3a11-ef03-4fea-a5bd-bda93da47da3"
       ]
@@ -4913,7 +4920,7 @@
   },
   "active": {
     "today": {
-      "a": 2,
+      "a": 3,
       "w": 0
     },
     "week": {
@@ -5067,7 +5074,7 @@
       },
       {
         "d": "2026-11-21",
-        "a": 2,
+        "a": 3,
         "w": 0
       }
     ]
