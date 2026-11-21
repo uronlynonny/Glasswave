@@ -491,7 +491,13 @@ class PlaybackService : MediaSessionService() {
             .build()
         applySettings(player)
         applyTempo(player)
+        // The speaker or headset picked in the player (see PhoneOutput); the mixing player follows too.
+        PhoneOutput.init(this)
+        outputListener = { d -> player.setPreferredAudioDevice(d); mixer?.setPreferredAudioDevice(d) }
+        PhoneOutput.listeners += outputListener
+        player.setPreferredAudioDevice(PhoneOutput.preferred())
         Settings.listeners += settingsListener
+        getSystemService(android.media.AudioManager::class.java)?.registerAudioPlaybackCallback(otherAudio, main)
         loadedQuality = Settings.streamQuality()
         Library.likeListeners += likeListener
         Sound.listeners += soundListener
@@ -574,6 +580,10 @@ class PlaybackService : MediaSessionService() {
             // A song brought back from last time isn't loaded yet: load it when play is pressed.
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 if (playWhenReady && player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0 && player.playerError == null) player.prepare()
+                // Another app (a video, say) took the sound: remember, to carry on when it stops.
+                // Anything else (you pressed play or pause) means it's yours again.
+                pausedForOther = if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS && Settings.pauseForOthers) android.os.SystemClock.elapsedRealtime() else 0L
+                main.removeCallbacks(resumeCheck)
             }
         })
 
@@ -1038,6 +1048,40 @@ class PlaybackService : MediaSessionService() {
     private fun mixedPlaylist(p: Player): String? =
         if (Flow.active) null else PlaylistMix.forQueue((0 until p.mediaItemCount).map { p.getMediaItemAt(it).mediaId })
 
+    private var outputListener: (android.media.AudioDeviceInfo?) -> Unit = {}
+
+    /*
+     * Paused for another app (Settings.pauseForOthers): Android already pauses us when a video or
+     * another app takes the sound, but never says when it's done. So we watch what's playing on the
+     * phone, and once nothing else has played for a moment, carry on (within an hour; never after
+     * you've pressed play or pause yourself).
+     */
+    private var pausedForOther = 0L
+    private val otherAudio = object : android.media.AudioManager.AudioPlaybackCallback() {
+        override fun onPlaybackConfigChanged(configs: MutableList<android.media.AudioPlaybackConfiguration>?) {
+            if (pausedForOther == 0L) return
+            main.removeCallbacks(resumeCheck)
+            if (!othersPlaying(configs)) main.postDelayed(resumeCheck, 1_500)
+        }
+    }
+    private val resumeCheck = Runnable {
+        val p = session?.player ?: return@Runnable
+        val am = getSystemService(android.media.AudioManager::class.java) ?: return@Runnable
+        if (pausedForOther == 0L || !Settings.pauseForOthers) return@Runnable
+        if (android.os.SystemClock.elapsedRealtime() - pausedForOther > 60 * 60_000L) { pausedForOther = 0L; return@Runnable }
+        if (othersPlaying(am.activePlaybackConfigurations) || p.playWhenReady || p.mediaItemCount == 0) return@Runnable
+        pausedForOther = 0L
+        p.play()
+    }
+
+    /** Is something else playing sound (media or a game)? We're paused, so it isn't us. */
+    private fun othersPlaying(configs: List<android.media.AudioPlaybackConfiguration>?): Boolean =
+        configs.orEmpty().any { c ->
+            c.audioAttributes.usage == android.media.AudioAttributes.USAGE_MEDIA ||
+                c.audioAttributes.usage == android.media.AudioAttributes.USAGE_GAME ||
+                c.audioAttributes.usage == android.media.AudioAttributes.USAGE_UNKNOWN
+        }
+
     private fun mixerFor(): ExoPlayer? {
         mixer?.let { return it }
         val src = mediaSources ?: return null
@@ -1046,7 +1090,7 @@ class PlaybackService : MediaSessionService() {
             // Same sound settings as the main player, but it never takes audio focus of its own.
             .setAudioAttributes(musicAttributes(), false)
             .build()
-            .also { mixer = it }
+            .also { it.setPreferredAudioDevice(PhoneOutput.preferred()); mixer = it }
     }
 
     /** The plan from this song to the next, made again whenever more becomes known about either (until the second player is loaded for it). */
@@ -1333,6 +1377,9 @@ class PlaybackService : MediaSessionService() {
         }
         livePlayer = null
         Settings.listeners -= settingsListener
+        runCatching { getSystemService(android.media.AudioManager::class.java)?.unregisterAudioPlaybackCallback(otherAudio) }
+        main.removeCallbacks(resumeCheck)
+        PhoneOutput.listeners -= outputListener
         Library.likeListeners -= likeListener
         Sound.listeners -= soundListener
         main.removeCallbacks(fader)

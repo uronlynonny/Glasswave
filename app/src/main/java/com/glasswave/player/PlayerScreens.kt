@@ -690,6 +690,7 @@ private fun Details(ui: PlayerUi, modifier: Modifier = Modifier, showTitle: Bool
         Row(Modifier.fillMaxWidth().padding(top = if (compact) 0.dp else 4.dp, bottom = if (compact) 6.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
             JamButton()
             DevicesButton()
+            PhoneOutputButton()
             Box(Modifier.size(44.dp).pressable(0.85f, onClick = ui.onQueue), contentAlignment = Alignment.Center) {
                 Ico(Icons.AutoMirrored.Rounded.QueueMusic, Color.White.copy(alpha = 0.85f), 24.dp)
             }

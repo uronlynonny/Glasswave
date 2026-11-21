@@ -271,7 +271,17 @@ object LyricsRepo {
 
     private fun isCensored(text: String) = Regex("[A-Za-z][*#]+[A-Za-z]?").containsMatchIn(text)
 
+    /** Answers from the last few minutes, so looking again (another version of the same lyrics) costs nothing. */
+    private val recent = object : LinkedHashMap<String, Pair<Long, String>>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Long, String>>?) = size > 120
+    }
+
     private fun fetch(u: String): String? {
+        synchronized(recent) { recent[u]?.let { (at, body) -> if (System.currentTimeMillis() - at < 5 * 60_000) return body } }
+        return fetchNow(u)?.also { body -> synchronized(recent) { recent[u] = System.currentTimeMillis() to body } }
+    }
+
+    private fun fetchNow(u: String): String? {
         val req = Request.Builder().url(u).header("User-Agent", UA).build()
         // LRCLIB answers "busy" now and then; wait a moment and ask again rather than giving up.
         repeat(3) { attempt ->

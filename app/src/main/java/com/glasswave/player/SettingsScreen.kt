@@ -702,6 +702,10 @@ private fun Audio(c: ScreenCtx) {
         Choices(DataSaver.entries, Settings.dataSaver, { it.label }, { it.detail }) { Settings.updateDataSaver(it) }
     }
     Note("While saving data, songs stream at Low quality, music videos behind the cover are skipped and pictures load smaller. Songs you've downloaded play as they are.")
+    Group("Sound output") {
+        PhoneOutputSettings { options, selected, title, detail, onPick -> Choices(options, selected, title, detail, onPick) }
+    }
+    Note("Which speaker or headset plays the music: this phone, wired headphones, Bluetooth or USB. Changing it moves the song that's on straight away. Also from the speaker button in the player.")
     Group("Automix") {
         Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { AutomixArt(c.ps.playing, Settings.automix) }
         SwitchRow("Automix", "Mixes each song into the next like a DJ: on the beat, tempos matched. Also in the player's ••• menu.", Settings.automix) { Settings.updateAutomix(it) }
@@ -710,6 +714,7 @@ private fun Audio(c: ScreenCtx) {
     Group("Playback") {
         Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { PlaybackArt(c.ps.playing, Settings.autoplay) }
         SwitchRow("Autoplay", "When the queue ends, keep playing similar songs.", Settings.autoplay) { Settings.updateAutoplay(it) }
+        SwitchRow("Pause for other apps", "When a video or another app starts playing sound, Glasswave pauses, then carries on when it stops.", Settings.pauseForOthers) { Settings.updatePauseForOthers(it) }
         SwitchRow("Remember what was playing", "When you open Glasswave again, the last song is waiting where you left off. Just tap play.", Settings.rememberPlaying) {
             Settings.updateRememberPlaying(it)
         }

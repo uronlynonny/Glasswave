@@ -113,6 +113,8 @@ object Settings {
     var rememberPlaying by mutableStateOf(true); private set
     var coverMotion by mutableStateOf(CoverMotion.WIFI); private set
     var autoplay by mutableStateOf(true); private set
+    /** Pause while another app plays a video or sound, and carry on when it stops. */
+    var pauseForOthers by mutableStateOf(true); private set
     /** Seconds the song fades out at its end and in at its start. 0 = off. */
     /** Crossfade was taken out: only Flow (and Automix) blend songs, for as long as the songs call for. */
     const val crossfade = 0
@@ -223,6 +225,7 @@ object Settings {
         rememberPlaying = prefs.getBoolean("remember_playing", true)
         coverMotion = enumPref("cover_motion", CoverMotion.WIFI)
         autoplay = prefs.getBoolean("autoplay", true)
+        pauseForOthers = prefs.getBoolean("pause_for_others", true)
         downloadWifi = enumPref("dl_wifi", Quality.HIGH)
         downloadData = enumPref("dl_data", Quality.NORMAL)
         livingCover = prefs.getBoolean("living_cover", true)
@@ -344,6 +347,7 @@ object Settings {
     fun updateCoverMotion(m: CoverMotion) { coverMotion = m; prefs.edit { putString("cover_motion", m.name) } }
     fun updateKeepHistory(on: Boolean) { keepHistory = on; prefs.edit { putBoolean("history", on) } }
     fun updateRememberPlaying(on: Boolean) { rememberPlaying = on; prefs.edit { putBoolean("remember_playing", on) } }
+    fun updatePauseForOthers(on: Boolean) { pauseForOthers = on; prefs.edit { putBoolean("pause_for_others", on) } }
     fun updateAutoplay(on: Boolean) {
         autoplay = on
         prefs.edit { putBoolean("autoplay", on) }

@@ -186,6 +186,7 @@ fun HomeScreen(c: ScreenCtx) {
                     if (vm.homeChip == null && Badges.unseen != null) item(key = "badges") { BadgesRevealCard(c) }
                     if (vm.homeChip == null) item(key = "flow") {
                         FlowStrip(c, sections.flatMap { it.items }.filterIsInstance<SongItem>().map { it.track })
+                        FlowAsk(c.ps)
                     }
                     sections.forEachIndexed { i, s ->
                         item(key = "s$i-${s.title}") {

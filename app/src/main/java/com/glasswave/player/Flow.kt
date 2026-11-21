@@ -35,6 +35,10 @@ object Flow {
 
     val now: Segment? get() = segments.getOrNull(current)
 
+    /** What you asked Flow for ("chill afrobeats for the rain"), while a set made from it plays. */
+    var asked by mutableStateOf<String?>(null)
+        private set
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val segmentOf = HashMap<String, Int>()
     private var extending = false
@@ -47,6 +51,7 @@ object Flow {
         scope.launch {
             try {
                 heard.clear()
+                asked = null
                 val built = buildSegments(seeds(fallback), first = true)
                 if (built.isEmpty()) {
                     Menus.say("Play a few songs first, then try Flow")
@@ -70,6 +75,7 @@ object Flow {
 
     fun stop() {
         active = false
+        asked = null
         segments = emptyList()
         segmentOf.clear()
     }
@@ -100,7 +106,8 @@ object Flow {
         scope.launch {
             try {
                 val recent = segments.takeLast(2).flatMap { it.tracks }.shuffled().take(4)
-                val more = buildSegments(recent + History.tracks.take(10), first = false)
+                // A set you asked for keeps to that mood; otherwise your recent plays steer it too.
+                val more = if (asked != null) moreLike(recent) else buildSegments(recent + History.tracks.take(10), first = false)
                 if (!active || more.isEmpty()) return@launch
                 val base = segments.size
                 more.forEachIndexed { i, s -> s.tracks.forEach { segmentOf[it.url] = base + i; heard += it.url } }
@@ -112,6 +119,92 @@ object Flow {
                 extending = false
             }
         }
+    }
+
+    /**
+     * Like asking Spotify's DJ: type what you want ("chill afrobeats", "gym hype", "2000s R&B for a
+     * drive") and Flow plays it. YouTube Music is searched for songs and playlists that match; songs
+     * by artists you already play get a place in the opening set; then come sets of songs like those.
+     * It keeps going in that mood for as long as you listen. Ask again any time to change it.
+     */
+    fun request(ps: PlayerState, text: String) {
+        val q = text.trim().split(' ', '\t', '\n').filter { it.isNotEmpty() }.joinToString(" ").take(120)
+        if (q.length < 2 || building) return
+        building = true
+        scope.launch {
+            try {
+                heard.clear()
+                val built = requestSegments(q)
+                if (built.isEmpty()) {
+                    Menus.say("Couldn't find music for “$q”. Try other words.")
+                    return@launch
+                }
+                asked = q
+                segments = built
+                segmentOf.clear()
+                built.forEachIndexed { i, s -> s.tracks.forEach { segmentOf[it.url] = i; heard += it.url } }
+                current = 0
+                active = true
+                ps.playList(built.flatMap { it.tracks }, 0, fromFlow = true)
+                Menus.say("Flow · ${built[0].title}")
+            } catch (e: Exception) {
+                android.util.Log.w("Glasswave", "Flow request failed", e)
+                Menus.say("Couldn't start Flow. Check your internet.")
+            } finally {
+                building = false
+            }
+        }
+    }
+
+    /** Songs and playlists on YouTube Music matching [q]: songs first, then the playlists' songs. */
+    private suspend fun searchFor(q: String): List<Track> = coroutineScope {
+        val songs = async(Dispatchers.IO) {
+            runCatching { YtMusicApi.search(q, YtMusicApi.Filter.SONGS).sections.flatMap { it.items }.filterIsInstance<SongItem>().map { it.track } }.getOrDefault(emptyList())
+        }
+        val lists = async(Dispatchers.IO) {
+            runCatching {
+                val found = YtMusicApi.search(q, YtMusicApi.Filter.PLAYLISTS).sections.flatMap { it.items }.filterIsInstance<PlaylistItem>().take(2) +
+                    runCatching { YtMusicApi.search(q, YtMusicApi.Filter.COMMUNITY).sections.flatMap { it.items }.filterIsInstance<PlaylistItem>().take(1) }.getOrDefault(emptyList())
+                found.map { p -> async { runCatching { YtMusicApi.page(p).tracks.take(40) }.getOrDefault(emptyList()) } }.awaitAll().flatten()
+            }.getOrDefault(emptyList())
+        }
+        NotInterested.thin((songs.await() + lists.await()).filter { it.url.contains("watch?v=") }.distinctBy { it.url })
+    }
+
+    private suspend fun requestSegments(q: String): List<Segment> = coroutineScope {
+        val found = searchFor(q)
+        if (found.size < 4) return@coroutineScope emptyList()
+        // Artists you already play: their matching songs get a place up front.
+        val mine = History.tracks.map { it.artist.substringBefore(",").trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
+        fun yours(t: Track) = t.artist.substringBefore(",").trim().lowercase() in mine
+        val seeds = (found.filter(::yours).shuffled().take(2) + found.take(12).shuffled().take(3)).distinctBy { it.url }
+        val radios = seeds.map { s -> async { radioOf(s) } }.awaitAll().flatten().distinctBy { it.url }.shuffled()
+        val used = HashSet<String>()
+        val title = q.replaceFirstChar { it.uppercase() }
+        val segs = mutableListOf<Segment>()
+        val opening = fresh(found.filter(::yours).take(3) + found.take(16), used, 7, allowHeard = true)
+        if (opening.size >= 3) segs += Segment(title, "Picked for “$q”", opening)
+        val like = fresh(radios, used, 7)
+        if (like.size >= 3) segs += Segment("More like this", "Close to what you asked for", like)
+        val deeper = fresh(found.drop(16), used, 7, allowHeard = true)
+        if (deeper.size >= 3) segs += Segment("Deeper into it", "More “$q”", deeper)
+        val more = fresh(radios, used, 7)
+        if (more.size >= 3) segs += Segment("Keep it going", "Same mood, new songs", more)
+        if (segs.isEmpty()) return@coroutineScope emptyList()
+        withContext(Dispatchers.IO) { MixLibrary.loadSaved(segs.flatMap { s -> s.tracks.map { it.url } }) }
+        segs.mapIndexed { i, s -> s.copy(tracks = MixPlanner.chain(s.tracks, i * 101 + s.tracks.size)) }
+    }
+
+    /** More of a set you asked for: songs like the last ones played, nothing from your other listening. */
+    private suspend fun moreLike(recent: List<Track>): List<Segment> = coroutineScope {
+        val radios = recent.map { s -> async { radioOf(s) } }.awaitAll().flatten().distinctBy { it.url }.shuffled()
+        val used = HashSet<String>()
+        val segs = listOf(
+            Segment("Keep it going", "Same mood, new songs", fresh(radios, used, 7)),
+            Segment("More like this", "Close to what you asked for", fresh(radios, used, 7)),
+        ).filter { it.tracks.size >= 3 }
+        withContext(Dispatchers.IO) { MixLibrary.loadSaved(segs.flatMap { s -> s.tracks.map { it.url } }) }
+        segs.mapIndexed { i, s -> s.copy(tracks = MixPlanner.chain(s.tracks, i * 53 + s.tracks.size)) }
     }
 
     private suspend fun seeds(fallback: List<Track>): List<Track> {

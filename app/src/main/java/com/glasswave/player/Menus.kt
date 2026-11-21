@@ -359,7 +359,7 @@ private fun SongMenuBody(target: Menus.SongTarget, ps: PlayerState, open: (Music
                                 }
                             }.apply { isDaemon = true }.start()
                         }
-                        if (!pc) MenuRow(Icons.Rounded.Link, "Copy song link") {
+                        if (!phone) MenuRow(Icons.Rounded.Link, "Copy song link") {
                             Menus.closeSong()
                             scope.launch {
                                 val id = withContext(Dispatchers.IO) { runCatching { YtRepo.videoIdFor(t.url) }.getOrNull() }

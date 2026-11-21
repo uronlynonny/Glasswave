@@ -332,7 +332,7 @@ fun main(args: Array<String>) {
     startUp()
     GpuReset.start()
     application {
-        val ps = remember { PlayerState().also { p -> boot("player") { p.connect(); GlobalKeys.start(p) } } }
+        val ps = remember { PlayerState().also { p -> boot("player") { p.connect(); GlobalKeys.start(p); OtherAudio.start(p) } } }
         // The keyboard's media keys go to Glasswave while it has a song loaded.
         LaunchedEffect(ps.hasItem) { GlobalKeys.mediaKeys(ps.hasItem) }
         val vm = remember { MainViewModel() }

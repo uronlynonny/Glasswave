@@ -965,6 +965,7 @@ private fun Audio(c: ScreenCtx) {
     Group("Playback") {
         Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { PlaybackArt(c.ps.playing, Settings.autoplay) }
         SwitchRow("Autoplay", "When the queue ends, keep playing similar songs.", Settings.autoplay) { Settings.updateAutoplay(it) }
+        SwitchRow("Pause for other apps", "When a video or another app plays sound for a few seconds, Glasswave pauses, then carries on when it stops.", Settings.pauseForOthers) { Settings.updatePauseForOthers(it) }
         Divider()
         SwitchRow("Skip silence", "Skips quiet gaps at the start and end of songs.", Settings.skipSilence) { Settings.updateSkipSilence(it) }
         Divider()

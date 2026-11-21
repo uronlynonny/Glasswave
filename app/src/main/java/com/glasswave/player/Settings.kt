@@ -110,6 +110,8 @@ object Settings {
     var keepHistory by mutableStateOf(true); private set
     var coverMotion by mutableStateOf(CoverMotion.WIFI); private set
     var autoplay by mutableStateOf(true); private set
+    /** Pause while another app plays a video or sound, and carry on when it stops. */
+    var pauseForOthers by mutableStateOf(true); private set
     /** Keep the queue and the spot in the song, so it's waiting (paused) next time the app opens. On by default. */
     var rememberPlaying by mutableStateOf(true); private set
     /** Seconds the song fades out at its end and in at its start. 0 = off. */
@@ -176,6 +178,7 @@ object Settings {
         keepHistory = prefs.getBoolean("history", true)
         coverMotion = enumPref("cover_motion", CoverMotion.WIFI)
         autoplay = prefs.getBoolean("autoplay", true)
+        pauseForOthers = prefs.getBoolean("pause_for_others", true)
         rememberPlaying = prefs.getBoolean("remember_playing", true)
         downloadWifi = enumPref("dl_wifi", Quality.HIGH)
         downloadData = enumPref("dl_data", Quality.NORMAL)
@@ -298,6 +301,7 @@ object Settings {
     fun updateCacheSize(s: CacheSize) { cacheSize = s; prefs.edit { putString("cache_size", s.name) } }
     fun updateCoverMotion(m: CoverMotion) { coverMotion = m; prefs.edit { putString("cover_motion", m.name) } }
     fun updateKeepHistory(on: Boolean) { keepHistory = on; prefs.edit { putBoolean("history", on) } }
+    fun updatePauseForOthers(on: Boolean) { pauseForOthers = on; prefs.edit { putBoolean("pause_for_others", on) } }
     fun updateAutoplay(on: Boolean) {
         autoplay = on
         prefs.edit { putBoolean("autoplay", on) }
