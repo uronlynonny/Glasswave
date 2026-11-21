@@ -770,7 +770,7 @@ private fun General(c: ScreenCtx) {
             }
         }
     }
-    Note("Updates come straight from the Glasswave releases page on GitHub. Android asks you to confirm each install; your songs and settings stay.")
+    Note("Updates come straight from the Glasswave releases page on GitHub. When one is downloaded, Restart to update puts it in place (or it goes in when you close Glasswave); your songs and settings stay.")
     Group("Help make Glasswave better") {
         Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { HelpArt(c.ps.playing, Settings.reportProblems, Settings.countMe) }
         SwitchRow("Report songs that won't play", "Sends nonny dev the song, the error, your ${Os.system} version and the app version so it gets fixed. Nothing about you.", Settings.reportProblems) { Settings.updateReportProblems(it) }

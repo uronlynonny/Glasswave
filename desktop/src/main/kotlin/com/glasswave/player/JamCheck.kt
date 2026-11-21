@@ -37,6 +37,7 @@ fun main(args: Array<String>) {
         val props = mutableListOf("-Dgw.noCheckIn=1", "-Dgw.jamName=${role.replaceFirstChar { it.uppercase() }}", "-Dgw.jamClockSkew=${skew[role]}", "-Dgw.jamLocation=${place[role]}")
         relay?.let { props += "-Dgw.jamRelay=$it" }
         if (noLan) props += "-Dgw.jamNoLan=1"
+        if (System.getProperty("gw.jamNoTimeServers") != null) props += "-Dgw.jamNoTimeServers=1"
         ProcessBuilder(listOf(java) + props + listOf("-cp", System.getProperty("java.class.path"), "com.glasswave.player.JamCheckKt", "device", role))
             .apply { environment()["APPDATA"] = dir.absolutePath; environment()["LOCALAPPDATA"] = dir.absolutePath }
             .redirectErrorStream(true).start()
@@ -73,6 +74,9 @@ private class Check(val kids: Map<String, Process>, val noLan: Boolean) {
     @Volatile var nearby: List<String> = emptyList()
     @Volatile var qr: String? = null
     @Volatile var link: String? = null
+    /** The host's blend (song titles in order), and what the guest's Up next says each song was picked for. */
+    @Volatile var blend: List<String> = emptyList()
+    @Volatile var picked: String = ""
     /** Each one's last word on whether it's connected straight to the host. */
     val direct = ConcurrentHashMap<String, Boolean>()
     var failures = 0
@@ -91,6 +95,8 @@ private class Check(val kids: Map<String, Process>, val noLan: Boolean) {
                     if (l.startsWith("NEARBY ") && name == "guest") nearby = l.substringAfter("NEARBY ").split(',').filter { it.contains('/') }
                     if (l.startsWith("QR ")) qr = l.substringAfter("QR ")
                     if (l.startsWith("LINK ")) link = l.substringAfter("LINK ")
+                    if (l.startsWith("BLEND ") && name == "host") blend = l.substringAfter("BLEND ").split('|')
+                    if (l.startsWith("PICKED ") && name == "guest") picked = l.substringAfter("PICKED ")
                     if (l.startsWith("DIRECT ")) direct[name] = l.substringAfter("DIRECT ").trim() == "true"
                     println("  [$name] $l")
                 }
@@ -184,6 +190,8 @@ private class Check(val kids: Map<String, Process>, val noLan: Boolean) {
             qr != null && qr == link && Jam.parseCode(qr ?: "") == raw
         }
 
+        // The guest's favourite song (its own listening stats), shared with its hello.
+        tell("guest", "taste")
         // Join from nearby: no code typed.
         tell("guest", "joinnearby $raw")
         together("join from nearby: the guest hears the host's song at the host's spot", 30) { h().people == 2 && g().people == 2 }
@@ -216,6 +224,14 @@ private class Check(val kids: Map<String, Process>, val noLan: Boolean) {
         }
         tell("guest", "next")
         together("skip (guest)", 15) { h().track == "Added-By-Guest" }
+
+        // Taste blending: the host's Autoplay mixes in songs for the guest's taste, and the guest's
+        // Up next says who each was picked for.
+        tell("host", "blend")
+        waitFor("taste blending: the host's Autoplay takes in the guest's favourite, in turn with its own picks", 20) {
+            blend.size >= 3 && blend[0] == "Radio-One" && blend[1] == "Guests-Fave"
+        }
+        waitFor("taste blending: the guest's Up next shows it as picked for them", 15) { "Guests-Fave=you" in picked }
 
         tell("guest", "leave")
         waitFor("leave: the host sees one person, the guest is back on its own music", 15) {
@@ -355,6 +371,12 @@ private fun device(role: String) {
         javax.swing.Timer(100) {
             if (Jam.status != lastStatus) { lastStatus = Jam.status; println("status: ${Jam.status ?: "(none)"}") }
         }.start()
+        // Songs in Up next picked for someone's taste, when that changes.
+        var lastPicked = ""
+        javax.swing.Timer(200) {
+            val p = player.upcoming(20).mapNotNull { t -> Jam.pickedFor(t.url)?.let { "${t.title}=$it" } }.joinToString(",")
+            if (p != lastPicked) { lastPicked = p; println("PICKED $p") }
+        }.start()
         // Connected straight to the host, when that changes.
         var lastDirect: Boolean? = null
         javax.swing.Timer(100) {
@@ -398,6 +420,22 @@ private fun device(role: String) {
                 // This check's own Jam (others may be live on the same network).
                 "joinnearby" -> JamNearby.found.firstOrNull { it.code == arg }?.let { Jam.join(it.code) } ?: println("not nearby: $arg")
                 "clock" -> println("clock: ${if (JamClock.checked) "checked, this one is ${-JamClock.offset} ms off" else "not checked (no time server answered)"}")
+                // taste: a few plays of a favourite in this device's listening stats.
+                "taste" -> {
+                    val f = java.io.File(ctx.filesDir, "plays.jsonl")
+                    val now = System.currentTimeMillis()
+                    f.writeText((1..4).joinToString("") { i ->
+                        org.json.JSONObject().put("u", song("Guests-Fave", 210).url).put("t", "Guests-Fave").put("a", "Fave Artist")
+                            .put("i", "").put("at", now - i * 3_600_000L).put("ms", 200_000).toString() + "\n"
+                    })
+                    Stats.init(ctx)
+                }
+                // blend: what the host's Autoplay would add now (songs like the one playing are made up here).
+                "blend" -> Thread {
+                    val out = Jam.blendTastes(listOf(song("Radio-One", 200), song("Radio-Two", 200), song("Radio-Three", 200)))
+                    println("BLEND " + out.joinToString("|") { it.title })
+                    SwingUtilities.invokeLater { out.forEach { player.addToQueue(it) } }
+                }.start()
                 "qr" -> Jam.inviteLink()?.let { l ->
                     println("LINK $l")
                     println("QR " + runCatching { readQr(jamQrMatrix(l)) }.getOrElse { "unreadable: $it" })

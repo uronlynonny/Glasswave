@@ -57,6 +57,13 @@ private fun iconFor(name: String?): ImageVector {
     }
 }
 
+/** What "System default" follows, in this computer's words. */
+private val followsSystem = when {
+    Os.isWindows -> "Follows Windows' sound settings"
+    Os.isMac -> "Follows the Mac's sound settings"
+    else -> "Follows the system's sound settings"
+}
+
 /**
  * The player bar's output button: which speaker or headset plays the music. Lit up when it isn't the
  * system default. Opens a short list to pick from.
@@ -88,7 +95,7 @@ private fun OutputList(done: () -> Unit) {
         Modifier.width(300.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xF5121519)).padding(vertical = 10.dp),
     ) {
         GText("Play through", 13, Faint, FontWeight.SemiBold, 1, Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-        OutputRow(null, "System default", "Follows Windows' sound settings", AudioOutput.chosen == null, done)
+        OutputRow(null, "System default", followsSystem, AudioOutput.chosen == null, done)
         for (d in AudioOutput.devices) OutputRow(d.name, d.name, null, AudioOutput.chosen == d.name, done)
         // Picked before, but not plugged in now: shown, so it's clear why the default is playing.
         val missing = AudioOutput.chosen?.takeIf { c -> AudioOutput.devices.none { it.name == c } }
@@ -124,7 +131,7 @@ fun OutputSettings(choices: @Composable (options: List<String?>, selected: Strin
         { it ?: "System default" },
         { n ->
             when {
-                n == null -> "Follows Windows' sound settings"
+                n == null -> followsSystem
                 n !in names -> "Not plugged in · playing through the default for now"
                 else -> ""
             }

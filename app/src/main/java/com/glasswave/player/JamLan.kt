@@ -200,7 +200,8 @@ object JamLan {
             try {
                 while (!link.closed) {
                     val text = readLine(input) ?: break
-                    val at = System.currentTimeMillis()
+                    // The same clock the time questions are stamped with (a check can set it wrong on purpose).
+                    val at = JamClock.wall()
                     link.heardAt = SystemClock.elapsedRealtime()
                     main.post { ev.line(link, text, at) }
                 }

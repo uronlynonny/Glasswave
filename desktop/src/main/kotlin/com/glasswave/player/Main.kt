@@ -352,8 +352,8 @@ fun main(args: Array<String>) {
             ps.release()
             exitApplication()
         }
-        // On a Mac, the red button only hides the window and the music keeps playing, like Apple
-        // Music: clicking Glasswave in the Dock brings it back, and ⌘Q (or Quit in the Dock) quits.
+        // On a Mac, the red button quits, like ⌘Q or Quit in the Dock (there's no menu-bar icon to
+        // keep playing from). Only the yellow button (or ⌘M) keeps Glasswave going, minimized.
         var shown by remember { mutableStateOf(true) }
         remember {
             if (Os.isMac) runCatching {
@@ -382,7 +382,7 @@ fun main(args: Array<String>) {
         Window(
             onCloseRequest = {
                 when {
-                    Os.isMac -> shown = false
+                    Os.isMac -> quitAll()
                     // Windows, with "Close to tray" on: the music keeps playing from the tray.
                     Settings.trayClose && Tray.iconShown -> { shown = false; Tray.tucked = true; Tray.tellOnce() }
                     else -> quitAll()

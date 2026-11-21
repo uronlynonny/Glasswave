@@ -438,8 +438,8 @@ private fun InJam(ps: PlayerState, backdrop: Backdrop) {
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     GText(e.track.title, 14, Color.White, FontWeight.SemiBold, 1)
-                    val by = Jam.addedBy[e.track.url]
-                    GText(listOfNotNull(e.track.artist.takeIf { it.isNotBlank() }, by?.let { "Added by $it" }).joinToString(" · "), 12, if (by != null) CoverTint.accent else Dim, maxLines = 1)
+                    val by = Jam.addedBy[e.track.url]?.let { "Added by $it" } ?: Jam.pickedFor(e.track.url)?.let { "For $it" }
+                    GText(listOfNotNull(e.track.artist.takeIf { it.isNotBlank() }, by).joinToString(" · "), 12, if (by != null) CoverTint.accent else Dim, maxLines = 1)
                 }
             }
         }

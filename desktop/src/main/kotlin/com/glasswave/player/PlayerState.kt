@@ -1133,7 +1133,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         worker.execute {
             val tracks = try {
                 val id = YtRepo.videoIdFor(current) ?: return@execute
-                NotInterested.thin(Autoplay.similar(id))
+                // In a Jam, with everyone's taste blended in (see Jam.blendTastes).
+                Jam.blendTastes(NotInterested.thin(Autoplay.similar(id)))
             } catch (e: Exception) {
                 android.util.Log.w("Glasswave", "Autoplay lookup failed", e)
                 main.post { if (autoplayFor == current) autoplayFor = null }

@@ -18,7 +18,7 @@ object Problems {
     fun online(): Boolean = runCatching { java.net.InetAddress.getByName("music.youtube.com"); true }.getOrDefault(false)
 
     fun songFailed(t: Track, error: Throwable, tries: Int) {
-        if (!Settings.reportProblems) return
+        if (!Settings.reportProblems || Os.isTestRun) return
         // Your own music files are private: never reported.
         if (PcMusic.isPcSong(t.url)) return
         val url = t.url

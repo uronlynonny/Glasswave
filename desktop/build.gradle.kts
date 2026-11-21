@@ -13,7 +13,7 @@ plugins {
 val appBuild = file("../app/build.gradle.kts").readText()
 // Glasswave for Windows has its own version number, separate from the phone app.
 // Raise it for every Windows release: installed copies update themselves to a higher number.
-val appVersion = "1.2.61"
+val appVersion = "1.2.63"
 // Which computer this build is for: the one building it (a Mac build has to be made on a Mac).
 val hostOs = System.getProperty("os.name").lowercase()
 val isMac = hostOs.startsWith("mac")
@@ -544,4 +544,6 @@ tasks.register<JavaExec>("jamCheck") {
     if (project.hasProperty("local")) systemProperty("gw.jamLocal", "1")
     // -PnoLan: as if the two were in different places (everything through the relay).
     if (project.hasProperty("noLan")) systemProperty("gw.jamNoLan", "1")
+    // -PnoTimeServers: as if no internet time server answered, so the clocks are matched across the Wi-Fi only.
+    if (project.hasProperty("noTimeServers")) systemProperty("gw.jamNoTimeServers", "1")
 }
