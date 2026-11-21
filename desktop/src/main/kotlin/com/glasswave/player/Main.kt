@@ -289,7 +289,7 @@ internal fun startUp() {
         History.repairOnce(ctx)
         // Warm up: the first YouTube lookup is slow; doing it now makes your first click play sooner.
         lastPlayed?.let { YtRepo.prefetch(android.net.Uri.parse(it)) }
-        // Give songs imported from Spotify playlists their own pictures (runs once).
+        // Give songs that show their playlist's cover their own pictures (until all are done).
         History.fixCoversOnce()
     }.apply { isDaemon = true }.start()
 

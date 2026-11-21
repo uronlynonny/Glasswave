@@ -832,8 +832,8 @@ private fun AccountsPage(c: ScreenCtx) {
                 }
                 SpotifyStep(2, "Fill in Create app: any name (e.g. Glasswave) and description. For Redirect URI, paste this and tap Add. Tick Web API, agree, then Save.") {
                     GlassButton("Copy redirect URI", c.bg) {
-                        clip.setText(androidx.compose.ui.text.AnnotatedString("http://127.0.0.1/callback"))
-                        Menus.say("Copied http://127.0.0.1/callback")
+                        clip.setText(androidx.compose.ui.text.AnnotatedString(SpotifyApi.REDIRECT))
+                        Menus.say("Copied the redirect URI")
                     }
                 }
                 SpotifyStep(3, "On your new app's page, copy the Client ID, come back here and tap Paste.") {

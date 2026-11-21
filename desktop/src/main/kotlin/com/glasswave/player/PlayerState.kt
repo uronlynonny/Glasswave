@@ -20,11 +20,23 @@ object Autoplay {
      * played. This leaves out songs you've heard lately (unless that leaves too few), mixes up the
      * order, and keeps one artist from playing twice in a row. [taken]: songs already in the queue.
      */
+    /**
+     * Songs like [videoId] to choose from: YouTube's radio for it, plus the radio of one song picked at
+     * random from that, so the same song doesn't lead to the same mix every time. Blocking.
+     */
+    fun similar(videoId: String): List<Track> {
+        val first = YtMusicApi.radio(videoId)
+        val hop = first.take(15).randomOrNull()?.let { t ->
+            runCatching { YtRepo.videoIdFor(t.url)?.let { YtMusicApi.radio(it) } }.getOrNull()
+        }.orEmpty()
+        return (first + hop.shuffled().take(20)).distinctBy { it.url }
+    }
+
     fun pick(radio: List<Track>, taken: MutableSet<String>, playingArtist: String): List<Track> {
         val heard = History.tracks.take(50).mapTo(HashSet()) { YtRepo.songKey(it.title, it.artist) }
         val all = radio.filter { taken.add(YtRepo.songKey(it.title, it.artist)) }
         val unheard = all.filter { YtRepo.songKey(it.title, it.artist) !in heard }
-        val pool = (if (unheard.size >= 6) unheard else all).take(25).shuffled().toMutableList()
+        val pool = (if (unheard.size >= 6) unheard else all).shuffled().take(25).toMutableList()
         val out = mutableListOf<Track>()
         var last = playingArtist
         while (pool.isNotEmpty()) {
@@ -1121,7 +1133,7 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         worker.execute {
             val tracks = try {
                 val id = YtRepo.videoIdFor(current) ?: return@execute
-                NotInterested.thin(YtMusicApi.radio(id))
+                NotInterested.thin(Autoplay.similar(id))
             } catch (e: Exception) {
                 android.util.Log.w("Glasswave", "Autoplay lookup failed", e)
                 main.post { if (autoplayFor == current) autoplayFor = null }

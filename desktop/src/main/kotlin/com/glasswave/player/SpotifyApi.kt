@@ -24,12 +24,18 @@ import org.json.JSONObject
 /**
  * Spotify sign-in and playlist reading through Spotify's official Web API.
  *
- * Sign-in uses your own Spotify developer app (Client ID) with the redirect
- * http://127.0.0.1/callback. While you sign in, Glasswave listens on 127.0.0.1 on this
- * phone for a moment to receive the reply, which is the method Spotify recommends for apps.
+ * Sign-in uses your own Spotify developer app (Client ID). Spotify's dashboard no longer accepts
+ * plain http addresses (it calls http://127.0.0.1/callback "not secure"), so the redirect is a small
+ * page on the Glasswave website ([REDIRECT]) that passes Spotify's answer straight on to
+ * 127.0.0.1 on this device, where Glasswave listens for a moment. The port it listens on travels in
+ * the sign-in's state. Nothing is kept on the website, and the code is useless without this app's
+ * one-time PKCE key.
  */
 object SpotifyApi {
     private const val API = "https://api.spotify.com/v1"
+
+    /** The redirect URI to add in the Spotify dashboard. */
+    const val REDIRECT = "https://uronlynonny.github.io/Glasswave/spotify-callback.html"
     private const val SCOPES = "playlist-read-private playlist-read-collaborative user-library-read"
 
     private fun b64(bytes: ByteArray) =
@@ -84,11 +90,12 @@ object SpotifyApi {
 
     fun startLogin(clientId: String): Login {
         val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
-        val redirect = "http://127.0.0.1:${server.localPort}/callback"
+        val redirect = REDIRECT
         val rnd = SecureRandom()
         val verifier = b64(ByteArray(64).also { rnd.nextBytes(it) })
         val challenge = b64(MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray()))
-        val state = b64(ByteArray(16).also { rnd.nextBytes(it) })
+        // "port.random": the website's page reads the port to hand the answer back to this device.
+        val state = "${server.localPort}." + b64(ByteArray(16).also { rnd.nextBytes(it) })
         val url = Uri.parse("https://accounts.spotify.com/authorize").buildUpon()
             .appendQueryParameter("client_id", clientId)
             .appendQueryParameter("response_type", "code")

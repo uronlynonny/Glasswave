@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Back to Glasswave</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         background: #0a0b08; color: #fff; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 420px; padding: 32px; text-align: center; }
+  h1 { font-size: 22px; margin: 0 0 10px; }
+  p { color: rgba(255,255,255,0.7); line-height: 1.5; margin: 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">Going back to Glasswave…</h1>
+  <p id="note">This finishes your Spotify sign-in. Nothing is saved on this page.</p>
+</main>
+<script>
+  // Spotify sends you here after you sign in. Glasswave is waiting on this device at 127.0.0.1;
+  // the port it listens on is the first part of "state". Pass Spotify's answer straight on.
+  (function () {
+    var q = new URLSearchParams(location.search);
+    var port = (q.get("state") || "").split(".")[0];
+    if (/^\d{2,5}$/.test(port)) {
+      location.replace("http://127.0.0.1:" + port + "/callback" + location.search);
+    } else {
+      document.getElementById("title").textContent = "Sign-in didn't finish";
+      document.getElementById("note").textContent = "Go back to Glasswave and start the Spotify sign-in again.";
+    }
+  })();
+</script>
+</body>
+</html>

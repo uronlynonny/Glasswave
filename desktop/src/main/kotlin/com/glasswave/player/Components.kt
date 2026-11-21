@@ -368,7 +368,7 @@ fun TrackRow(
             }
         } else {
             Box(Modifier.size(50.dp)) {
-                Cover(t.thumb, Modifier.fillMaxSize(), 8.dp)
+                Cover(t.thumb?.takeUnless { isMosaic(it) }, Modifier.fillMaxSize(), 8.dp)
                 HoverPlay(hovered && !current, Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)))
             }
             Spacer(Modifier.width(12.dp))

@@ -100,6 +100,17 @@ tasks.register<JavaExec>("lyricsCheck") {
     args(listOfNotNull(project.findProperty("songs") as String?, (project.findProperty("report") as String?)?.let { "report" }))
 }
 
+// How accurate the picked lyrics are over many songs, compared with YouTube Music's own lyrics.
+// ./gradlew -p desktop lyricsAudit -Pplays=path/plays.jsonl[;more.jsonl] [-Pmax=400]
+tasks.register<JavaExec>("lyricsAudit") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.LyricsAuditKt")
+    args(listOfNotNull(project.findProperty("plays") as String?))
+    (project.findProperty("max") as String?)?.let { systemProperty("gw.auditMax", it) }
+    (project.findProperty("debug") as String?)?.let { systemProperty("gw.auditDebug", it) }
+    if (project.hasProperty("ytsync")) systemProperty("gw.ytSyncDebug", "1")
+}
+
 // Checks search order with made-up results (no internet): a song you've played a lot comes first
 // as soon as you type the start of its name. ./gradlew -p desktop searchCheck
 tasks.register<JavaExec>("searchCheck") {

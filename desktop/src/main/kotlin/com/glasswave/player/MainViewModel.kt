@@ -538,6 +538,8 @@ class MainViewModel : ViewModel() {
             try {
                 val got = LinkImport.importLink(link.trim())
                 withContext(Dispatchers.IO) { Library.createWith(got.name, got.cover, got.tracks) }
+                // Songs Spotify (or another site) left without their own picture get one from YouTube.
+                Thread { History.fixCoversNow() }.apply { isDaemon = true }.start()
                 val n = got.tracks.size
                 Menus.say(got.note ?: "Imported ${got.name} · ${if (n == 1) "1 song" else "$n songs"}")
             } catch (e: CancellationException) {
@@ -578,7 +580,16 @@ class MainViewModel : ViewModel() {
                     problems += "YouTube Music sign-in expired. Sign in again."
                 } catch (e: Exception) {
                     android.util.Log.e("Glasswave", "YouTube Music sync failed", e)
-                    problems += "YouTube Music sync failed. Check your internet."
+                    // Say what actually went wrong: only connection trouble is about the internet.
+                    problems += when {
+                        e is java.net.UnknownHostException || e is java.net.SocketTimeoutException || e is java.net.ConnectException ->
+                            "YouTube Music sync failed: couldn't reach YouTube. Check your internet."
+                        e.message?.contains("no playlists") == true ->
+                            "YouTube Music didn't send your playlists. Sign out of YouTube Music in Settings, sign in again, then sync."
+                        e.message?.contains("replied 4") == true ->
+                            "YouTube Music turned the sync down (${e.message?.substringAfter("replied ")?.take(3)}). Sign out of YouTube Music in Settings and sign in again."
+                        else -> "YouTube Music sync failed (${e.javaClass.simpleName}${e.message?.let { ": " + it.take(80) } ?: ""}). Try again, or sign out and back in."
+                    }
                 }
             }
             if (spotify && Accounts.spotifySignedIn) {

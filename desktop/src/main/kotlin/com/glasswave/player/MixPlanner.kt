@@ -272,7 +272,9 @@ object MixPlanner {
     /**
      * Picks which of [candidates] (url to artist, in queue order) should play after the song at
      * [currentUrl]: the best fit by tempo, key and energy, preferring another artist, nudged a little
-     * towards songs nearer the front and by a pinch of chance so it never gets predictable.
+     * towards songs nearer the front and by a pinch of chance so it never gets predictable: the
+     * chance is new each time a song plays (it used to depend only on the song and its place in the
+     * queue, so after a given song Automix always picked the same one).
      */
     fun choose(currentUrl: String, currentArtist: String, candidates: List<Pair<String, String>>, salt: Int): Int {
         if (candidates.isEmpty()) return -1
@@ -284,8 +286,17 @@ object MixPlanner {
         return pool.maxByOrNull { i ->
             val url = candidates[i].first
             val head = MixLibrary.profile(url, MixPart.HEAD) ?: MixLibrary.any(url)
-            compat(tail, head) + 0.6f * jitter(url, salt) + 0.15f * (n - i).toFloat() / n
+            compat(tail, head) + 0.7f * jitter(url, salt xor playSalt(currentUrl)) + 0.15f * (n - i).toFloat() / n
         } ?: pool.first()
+    }
+
+    @Volatile private var saltSong: String? = null
+    @Volatile private var saltNow = 0
+
+    /** A fresh random number each time a song starts, kept while it plays (so the pick doesn't flicker). */
+    @Synchronized private fun playSalt(url: String): Int {
+        if (url != saltSong) { saltSong = url; saltNow = kotlin.random.Random.nextInt() }
+        return saltNow
     }
 
     /** A steady 0..1 "random" number for a song in one particular moment, so picks don't flicker. */

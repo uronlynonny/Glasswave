@@ -339,7 +339,7 @@ fun TrackRow(
                 if (current) EqualizerBars(Accent, playing) else GText("$number", 15, Faint)
             }
         } else {
-            Cover(t.thumb, Modifier.size(50.dp), 8.dp)
+            Cover(t.thumb?.takeUnless { isMosaic(it) }, Modifier.size(50.dp), 8.dp)
             Spacer(Modifier.width(12.dp))
         }
         Column(Modifier.weight(1f)) {

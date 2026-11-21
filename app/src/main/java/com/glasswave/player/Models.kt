@@ -83,6 +83,9 @@ fun Track.toMediaItem(): MediaItem {
 }
 
 /** Address for a Spotify song: it gets matched to the best YouTube Music result when it plays. */
+/** Spotify's playlist pictures made of four album covers: a playlist's picture, never a song's. */
+fun isMosaic(url: String?): Boolean = url != null && "mosaic.scdn.co" in url
+
 fun matchUrl(title: String, artist: String, seconds: Long): String =
     Uri.Builder()
         .scheme("gwmatch")

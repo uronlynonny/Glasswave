@@ -292,18 +292,29 @@ object Library {
     }
 
     /**
-     * Songs that older versions gave their playlist's cover instead of their own picture (songs
-     * imported from a Spotify playlist link), by playlist. An album's songs share its cover on
-     * purpose, so only playlists with more than one artist count.
+     * Songs in your playlists that need their own picture, by playlist:
+     *  - songs showing their playlist's cover (older versions gave every song imported from a Spotify
+     *    playlist link the playlist's picture; a Spotify mosaic is never a song's own picture, and
+     *    otherwise only playlists with more than one artist count, as an album's songs share its cover);
+     *  - imported songs with no picture at all (Spotify's per-song lookup didn't answer).
+     * Only songs Glasswave finds on YouTube (imported or YouTube songs), never songs stored on the device.
      */
     @Synchronized
     fun songsWithPlaylistCover(): Map<String, List<Track>> {
         val out = LinkedHashMap<String, List<Track>>()
         for (p in ownPlaylists()) {
-            val cover = p.thumb ?: continue
-            val same = readTracks(p.id).filter { it.thumb == cover && it.url.startsWith("gwmatch") }
-            if (same.size < 2 || same.map { it.artist.substringBefore(',').trim().lowercase() }.distinct().size < 2) continue
-            out[p.id] = same
+            val list = readTracks(p.id).filter { it.url.startsWith("gwmatch") || it.url.contains("youtube.com/") }
+            val cover = p.thumb
+            val shared = if (cover == null) emptyList() else list.filter { it.thumb == cover }
+            val wrong = when {
+                shared.isEmpty() -> emptyList()
+                isMosaic(cover) -> shared
+                shared.size >= 2 && shared.map { it.artist.substringBefore(',').trim().lowercase() }.distinct().size >= 2 -> shared
+                else -> emptyList()
+            }
+            val bare = list.filter { it.thumb.isNullOrBlank() && it.url.startsWith("gwmatch") }
+            val need = (wrong + bare).distinctBy { it.url }
+            if (need.isNotEmpty()) out[p.id] = need
         }
         return out
     }

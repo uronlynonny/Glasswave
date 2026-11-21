@@ -50,7 +50,7 @@ class GlassApp : Application(), ImageLoaderFactory {
             // Warm up: the first YouTube lookup loads YouTube's player code, which is slow.
             // Doing it now (with the song you played last) makes your first tap play sooner.
             lastPlayed?.let { YtRepo.prefetch(android.net.Uri.parse(it)) }
-        // Give songs imported from Spotify playlists their own pictures (runs once).
+        // Give songs that show their playlist's cover their own pictures (until all are done).
         History.fixCoversOnce()
         }.start()
     }

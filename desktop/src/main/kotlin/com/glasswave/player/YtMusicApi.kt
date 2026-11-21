@@ -516,7 +516,14 @@ object YtMusicApi {
      * does gets the timings (the website only gets plain text). Signed out, so nothing is saved to
      * your account. Null when the song has no timed lyrics. Blocking.
      */
-    fun timedLyrics(videoId: String): List<Pair<Long, String>>? {
+    /**
+     * YouTube Music's timed lyrics for [videoId]. Its reply sometimes comes back without the timing
+     * when it's busy, so an empty answer is asked once more (with a newer app version) before giving up.
+     */
+    fun timedLyrics(videoId: String): List<Pair<Long, String>>? =
+        timedLyricsOnce(videoId, ANDROID_VERSION) ?: runCatching { Thread.sleep(400); timedLyricsOnce(videoId, "8.47.54") }.getOrNull()
+
+    private fun timedLyricsOnce(videoId: String, version: String): List<Pair<Long, String>>? {
         val next = call("next", JSONObject().put("videoId", videoId).put("isAudioOnly", true))
         val id = collect(next, "browseEndpoint").map { it.optString("browseId") }.firstOrNull { it.startsWith("MPLYt") }
             ?: return null
@@ -524,13 +531,13 @@ object YtMusicApi {
             "context",
             JSONObject().put(
                 "client",
-                JSONObject().put("clientName", "ANDROID_MUSIC").put("clientVersion", ANDROID_VERSION)
+                JSONObject().put("clientName", "ANDROID_MUSIC").put("clientVersion", version)
                     .put("androidSdkVersion", 34).put("hl", "en"),
             ),
         )
         val req = Request.Builder().url("$ORIGIN/youtubei/v1/browse?prettyPrint=false")
             .post(body.toString().toRequestBody(JSON))
-            .header("User-Agent", "com.google.android.apps.youtube.music/$ANDROID_VERSION (Linux; U; Android 14) gzip")
+            .header("User-Agent", "com.google.android.apps.youtube.music/$version (Linux; U; Android 14) gzip")
             .build()
         val json = YtRepo.http.newCall(req).execute().use { r ->
             if (!r.isSuccessful) throw IOException("YouTube Music replied ${r.code}")

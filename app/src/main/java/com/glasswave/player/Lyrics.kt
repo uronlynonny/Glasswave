@@ -118,26 +118,43 @@ object LyricsRepo {
         val fromKugou = async { runCatching { ok(kugou(t, a, seconds)) }.getOrNull() }
         val fromNetease = async { runCatching { ok(netease(t, a, seconds)) }.getOrNull() }
         val fromYoutube = async { runCatching { ok(youtubeTimed(url)) }.getOrNull() }
-        val fromLrclib = runCatching { lrclib(t, a, seconds, skip) }.getOrNull()
+        // YouTube Music's own (untimed) words for this song: what the other sites' lyrics are checked against.
+        val fromYoutubeText = async { runCatching { youtube(url) }.getOrNull() }
         fun fits(k: Lyrics) = seconds <= 0 || (k.lines.lastOrNull()?.ms ?: 0) / 1000 <= seconds + 3
-        val lrclibSynced = fromLrclib?.takeIf { it.synced }
-        val found = if (lrclibSynced != null) {
-            // LRCLIB usually times whole lines; KuGou often times every word. Use KuGou's only when
-            // it's clearly the same song with the same timing, otherwise keep LRCLIB's.
+        fun agrees(ref: Lyrics, k: Lyrics?) = k != null && k.wordTimed && fits(k) && sameSong(ref, k) && sameWords(ref, k) >= 0.9 && sameLines(ref, k) >= 0.9
+        // YouTube Music's own timed lyrics are made for the exact recording that's playing, so they're
+        // the right song and the right timing. They come first; a word-by-word version from LRCLIB or
+        // KuGou is used instead only when it's clearly the same words at the same times as YouTube's.
+        val yt = fromYoutube.await()?.takeIf { fits(it) && it.synced }
+        val found = if (yt != null) {
             fromNetease.cancel()
-            fromYoutube.cancel()
-            if (lrclibSynced.wordTimed) lrclibSynced.also { fromKugou.cancel() }
-            else fromKugou.await()
-                ?.takeIf { k -> k.wordTimed && fits(k) && sameSong(lrclibSynced, k) && sameWords(lrclibSynced, k) >= 0.9 && sameLines(lrclibSynced, k) >= 0.9 }
-                ?: lrclibSynced
+            fromYoutubeText.cancel()
+            runCatching { lrclib(t, a, seconds, skip) { agrees(yt, it) } }.getOrNull()
+                ?: fromKugou.await()?.takeIf { agrees(yt, it) }
+                ?: yt
         } else {
-            // KuGou when it times every word; otherwise YouTube Music's (made for this exact song),
-            // then KuGou's line timing, then NetEase.
-            val k = fromKugou.await()?.takeIf { fits(it) && it.synced }
-            k?.takeIf { it.wordTimed }
-                ?: fromYoutube.await()?.takeIf { fits(it) }
-                ?: k
-                ?: fromNetease.await()?.takeIf { fits(it) }
+            // Otherwise the other sites' timed lyrics, but only ones that say the same words as
+            // YouTube Music's (when it has them): that turns away another song, another language's
+            // version (BTS's Japanese "Boy With Luv"), and lyrics written down wrong by ear.
+            val ref = fromYoutubeText.await()?.takeIf { it.lines.count { l -> l.text.isNotBlank() } >= 4 }
+            fun right(l: Lyrics) = ref == null || sameWords(ref, l) >= 0.5
+            // Korean, Japanese and the like written in English letters can't be compared word for word;
+            // they're still the right song, so they're kept when nothing in the song's own writing is timed.
+            fun spelledOut(l: Lyrics) = ref != null && mainScript(ref) != Character.UnicodeScript.LATIN && mainScript(l) == Character.UnicodeScript.LATIN
+            val lrclibSynced = runCatching { lrclib(t, a, seconds, skip) { right(it) } }.getOrNull()?.takeIf { it.synced }
+            val kugou = fromKugou.await()?.takeIf { fits(it) && it.synced }
+            when {
+                lrclibSynced != null ->
+                    // LRCLIB usually times whole lines; KuGou often times every word. Use KuGou's only when
+                    // it's clearly the same song with the same timing, otherwise keep LRCLIB's.
+                    if (lrclibSynced.wordTimed) lrclibSynced else kugou?.takeIf { agrees(lrclibSynced, it) } ?: lrclibSynced
+                kugou != null && right(kugou) -> kugou
+                else -> fromNetease.await()?.takeIf { fits(it) && right(it) }
+                    ?: (if (ref != null) runCatching { lrclib(t, a, seconds, skip) { spelledOut(it) } }.getOrNull()?.takeIf { it.synced } else null)
+                    ?: kugou?.takeIf { spelledOut(it) }
+                    // Nothing timed says the right words: YouTube Music's own lyrics, untimed, beat wrong ones.
+                    ?: ref
+            }
         }
         // Filling in starred words keeps the same number of letters, so word timings still line up.
         val clean = found?.let { ly ->
@@ -209,7 +226,7 @@ object LyricsRepo {
     }
 
     /** Saves from before the name and version checks (Nov 2026) have no "v": those get looked up again. */
-    private const val SAVE_VERSION = 2
+    private const val SAVE_VERSION = 3
 
     private fun savedVersion(url: String): Int =
         runCatching { savedFile(url)?.takeIf { it.exists() }?.let { JSONObject(it.readText()).optInt("v", 1) } }.getOrNull() ?: 0
@@ -272,7 +289,7 @@ object LyricsRepo {
 
     /* ---------------- LRCLIB ---------------- */
 
-    private fun lrclib(title: String, artist: String, seconds: Long, skip: Set<String> = emptySet()): Lyrics? {
+    private fun lrclib(title: String, artist: String, seconds: Long, skip: Set<String> = emptySet(), check: (Lyrics) -> Boolean = { true }): Lyrics? {
         // Exact match first (title, artist and length), then a search where the closest length wins:
         // the same song often exists as several cuts (radio edit, album, extended) with different timing.
         val exact = fetch(
@@ -293,7 +310,8 @@ object LyricsRepo {
         }
         pickSynced(
             hits.filter { hasSynced(it) && gap(it) <= 12 && believable(it, seconds) && thisSong(it.optString("trackName"), it.optString("artistName"), title, artist) && "LRCLIB:" + it.optLong("id") !in skip }
-                .distinctBy { it.optLong("id") },
+                .distinctBy { it.optLong("id") }
+                .filter { o -> fromLrclib(o)?.let(check) ?: false },
             ::gap,
         )
             ?.let { fromLrclib(it) }?.let { return it }
@@ -498,6 +516,13 @@ object LyricsRepo {
      * must turn up at about the same time, so a different song, a translation or another cut is
      * turned down.
      */
+    /** The writing most of the lyrics' letters are in (Latin, Hangul, Han…). */
+    private fun mainScript(l: Lyrics): Character.UnicodeScript? {
+        val n = HashMap<Character.UnicodeScript, Int>()
+        for (line in l.lines) for (c in line.text) if (Character.isLetter(c)) Character.UnicodeScript.of(c.code).let { n[it] = (n[it] ?: 0) + 1 }
+        return n.maxByOrNull { it.value }?.key
+    }
+
     private fun sameSong(lrc: Lyrics, other: Lyrics): Boolean {
         // A line's words, lower case, without punctuation. Chinese and Japanese have no spaces, so
         // each of their characters counts as a word.

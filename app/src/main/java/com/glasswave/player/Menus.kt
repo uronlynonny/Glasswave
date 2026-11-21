@@ -41,6 +41,8 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.Sensors
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
@@ -271,7 +273,7 @@ private fun SongMenuBody(target: Menus.SongTarget, ps: PlayerState, open: (Music
     Column {
         // The song itself
         Row(Modifier.padding(horizontal = 20.dp).padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Cover(t.thumb, Modifier.size(52.dp), 8.dp)
+            Cover(t.thumb?.takeUnless { isMosaic(it) }, Modifier.size(52.dp), 8.dp)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 GText(t.title, 16, weight = FontWeight.SemiBold, maxLines = 1)
@@ -338,6 +340,33 @@ private fun SongMenuBody(target: Menus.SongTarget, ps: PlayerState, open: (Music
                             Icons.Rounded.Person, "Go to artist",
                             trailing = if (looking == "artist") ({ Spinner() }) else null,
                         ) { goTo("artist") }
+                        // Spotify's "Go to song radio": this song now, then songs like it.
+                        MenuRow(Icons.Rounded.Sensors, "Go to song radio") {
+                            Menus.closeSong()
+                            ps.playList(listOf(t), 0)
+                            Menus.say("Song radio: ${t.title} and songs like it")
+                            Thread {
+                                val more = runCatching {
+                                    val id = YtRepo.videoIdFor(t.url) ?: YtRepo.findSong(t.title, t.artist, t.seconds)?.let { YtRepo.videoIdFor(it.url) }
+                                    id?.let { NotInterested.thin(Autoplay.similar(it)) }
+                                }.getOrNull().orEmpty()
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    if (ps.currentId != t.url) return@post
+                                    val keys = hashSetOf(YtRepo.songKey(t.title, t.artist))
+                                    val picked = Autoplay.pick(more.filter { it.url != t.url }, keys, t.artist).take(30)
+                                    if (picked.isEmpty()) Menus.say("Couldn't find songs like this one. Check your internet.")
+                                    else ps.appendTracks(picked)
+                                }
+                            }.apply { isDaemon = true }.start()
+                        }
+                        if (!pc) MenuRow(Icons.Rounded.Link, "Copy song link") {
+                            Menus.closeSong()
+                            scope.launch {
+                                val id = withContext(Dispatchers.IO) { runCatching { YtRepo.videoIdFor(t.url) }.getOrNull() }
+                                if (id == null) Menus.say("Couldn't find this song's link")
+                                else { (ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("Song link", "https://music.youtube.com/watch?v=$id")); Menus.say("Song link copied") }
+                            }
+                        }
                         val notInterested = NotInterested.version.let { NotInterested.has(t) }
                         MenuRow(
                             if (notInterested) Icons.Rounded.ThumbUp else Icons.Rounded.Block,

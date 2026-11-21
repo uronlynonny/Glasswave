@@ -370,6 +370,9 @@ private fun look(d: Int, fancy: Boolean): LineLook = when {
 private fun SyncedLyrics(ps: PlayerState, ly: Lyrics, fancy: Boolean, accent: Color) {
     val lines = ly.lines
     val n = lines.size
+    // How fast this song is sung (ms per letter), for lines that only have a start time: from lines
+    // that follow each other closely (their gap is mostly singing), the quicker ones count.
+    val msPerLetter = remember(lines) { singingSpeed(lines) }
     val url = ps.currentId ?: ""
 
     // No stretching: lyric sites often list the wrong length for correctly timed lyrics, and
@@ -382,10 +385,16 @@ private fun SyncedLyrics(ps: PlayerState, ly: Lyrics, fancy: Boolean, accent: Co
     LaunchedEffect(stretch, nudge) {
         // A steady clock: it runs on its own between readings and is nudged toward each new reading,
         // so lines change right on time instead of in jumps. A seek or pause snaps it straight there.
+        // Lighter on slower PCs: the clock moves at most about 60 times a second (a 144 Hz screen
+        // doesn't redraw the lyrics 144 times), and while paused it only checks a few times a second.
         var smooth = ps.livePosition().toDouble()
         var lastNs = System.nanoTime()
         while (true) {
-            withFrameNanos { }
+            if (ps.playing) {
+                withFrameNanos { }
+                val gap = System.nanoTime() - lastNs
+                if (gap < 15_000_000L) delay((15_000_000L - gap) / 1_000_000L)
+            } else delay(120)
             val now = System.nanoTime()
             val measured = ps.livePosition().toDouble()
             val ahead = if (ps.playing) smooth + (now - lastNs) / 1_000_000.0 * AudioDeck.speed else measured
@@ -510,7 +519,7 @@ private fun SyncedLyrics(ps: PlayerState, ly: Lyrics, fancy: Boolean, accent: Co
                                 detectTapGestures(onTap = { ps.seekTo(((line.ms - nudge) / stretch).toLong().coerceAtLeast(0)) })
                             },
                     ) {
-                        LyricText(line, next, i, { active }, { pos.longValue }, fancy, accent)
+                        LyricText(line, next, i, { active }, { pos.longValue }, fancy, accent, msPerLetter)
                     }
                 }
                 Spacer(Modifier.height(420.dp))
@@ -522,6 +531,19 @@ private fun SyncedLyrics(ps: PlayerState, ly: Lyrics, fancy: Boolean, accent: Co
         }
 
     }
+}
+
+/** Milliseconds per letter this song is sung at (35 to 140; 70 when there's too little to tell). */
+private fun singingSpeed(lines: List<LyricLine>): Float {
+    val rates = ArrayList<Float>()
+    for (i in 0 until lines.size - 1) {
+        val letters = lines[i].text.count { !it.isWhitespace() }
+        val gap = lines[i + 1].ms - lines[i].ms
+        if (letters >= 6 && gap in 700..7000) rates += gap.toFloat() / letters
+    }
+    if (rates.size < 4) return 70f
+    rates.sort()
+    return rates[(rates.size * 0.3f).toInt()].coerceIn(35f, 140f)
 }
 
 /** A line's word timings, ready for drawing: [letters] are the timed letters' places in the text. */
@@ -546,7 +568,7 @@ private class WordFill(val words: List<LyricWord>, val first: IntArray, val coun
  * without rebuilding the text, and there's no glow to blur: one cheap layer, only on the sung line.
  */
 @Composable
-private fun LyricText(line: LyricLine, nextMs: Long, index: Int, active: () -> Int, pos: () -> Long, fancy: Boolean, accent: Color) {
+private fun LyricText(line: LyricLine, nextMs: Long, index: Int, active: () -> Int, pos: () -> Long, fancy: Boolean, accent: Color, msPerLetter: Float) {
     val text = line.text.ifBlank { "●  ●  ●" }
     val isActive = active() == index
     val passed = active() > index
@@ -572,10 +594,13 @@ private fun LyricText(line: LyricLine, nextMs: Long, index: Int, active: () -> I
     }
 
     Box(Modifier.widthIn(max = 820.dp).padding(start = 28.dp, end = 40.dp, top = if (big) 16.dp else 12.dp, bottom = if (big) 16.dp else 12.dp)) {
-        BasicText(text, style = base.copy(color = Color.White.copy(alpha = 0.4f)), onTextLayout = { layout[0] = it })
+        // Sung lines are drawn once in white (not a dim copy with a white one on top): half the text to draw.
         if (passed) {
             BasicText(text, style = base.copy(color = Color.White))
-        } else if (isActive) {
+            return@Box
+        }
+        BasicText(text, style = base.copy(color = Color.White.copy(alpha = 0.4f)), onTextLayout = { layout[0] = it })
+        if (isActive) {
             BasicText(
                 text,
                 style = base.copy(color = if (fancy) Color.White else Color.White.copy(alpha = 0.95f)),
@@ -596,7 +621,11 @@ private fun LyricText(line: LyricLine, nextMs: Long, index: Int, active: () -> I
                             x = box.left + (box.right - box.left) * (exact - li).coerceIn(0f, 1f)
                         } else {
                             // How far through the line the singing is, as a letter (with the part of the next letter).
-                            val span = ((nextMs - line.ms) * 0.92f).coerceIn(600f, 12_000f)
+                            // Only line times are known: sweep the line at this song's singing speed
+                            // (a singer finishes a line well before the next one starts, so spreading
+                            // the light over the whole gap left it seconds behind the voice).
+                            val sung = letterAt.size * msPerLetter + 250f
+                            val span = minOf((nextMs - line.ms) * 0.92f, sung).coerceIn(400f, 12_000f)
                             val f = ((pos() - line.ms) / span).coerceIn(0f, 1f)
                             val exact = f * letterAt.size
                             val li = exact.toInt()
