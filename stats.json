@@ -1,11 +1,11 @@
 {
-  "lastTime": 1795341155,
+  "lastTime": 1795365329,
   "totals": {
-    "visits": 171,
+    "visits": 172,
     "siteDownloads": 58,
-    "apk": 524
+    "apk": 529
   },
-  "apkTotal": 487,
+  "apkTotal": 492,
   "hours": [
     {
       "t": 1792763089,
@@ -3930,9 +3930,15 @@
       "v": 1,
       "d": 1,
       "a": 4
+    },
+    {
+      "t": 1795371806,
+      "v": 1,
+      "d": 0,
+      "a": 5
     }
   ],
-  "updated": 1795345160,
+  "updated": 1795371806,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -4335,7 +4341,7 @@
       "m": "\"Harder, Better, Faster, Stronger\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (26.7.2), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=JhulBGMA7G4"
     }
   ],
-  "lastActiveTime": 1795343770,
+  "lastActiveTime": 1795371128,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -4974,25 +4980,34 @@
     },
     "2026-11-22": {
       "a": [
+        "03328dbd-2d0c-47de-8488-fd9f7558d652",
+        "12eb59e5-62aa-40ac-bc7d-f146ab2df32e",
         "36d58cc1-c393-490b-9440-241580552d0a",
+        "44ecbe84-b346-4329-a0d9-601f15652210",
         "6ce16e7b-e680-44af-8dda-4211206548d5",
+        "856f2716-d5ac-4ef6-b2c0-a7ddd881f69e",
+        "9eca4f31-9444-4f04-9efb-ef119d06f154",
+        "b40577e8-17f8-4460-839e-0cef28e7acc4",
         "c4626300-15d6-4cc6-91b5-beaa11b615ee",
         "c4b9e5f5-2762-409c-a124-51e11200371d",
         "d0c828d9-66e7-4ad6-a35d-ca49c325055d"
+      ],
+      "w": [
+        "89c2540c-3836-4c46-b83c-bd2c8aeb5811"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 5,
-      "w": 0
+      "a": 11,
+      "w": 1
     },
     "week": {
-      "a": 39,
-      "w": 8
+      "a": 43,
+      "w": 9
     },
     "month": {
-      "a": 133,
+      "a": 136,
       "w": 37
     },
     "daily": [
@@ -5143,8 +5158,8 @@
       },
       {
         "d": "2026-11-22",
-        "a": 5,
-        "w": 0
+        "a": 11,
+        "w": 1
       }
     ]
   },
