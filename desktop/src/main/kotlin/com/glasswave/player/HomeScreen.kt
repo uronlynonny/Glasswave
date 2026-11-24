@@ -3,6 +3,7 @@ package com.glasswave.player
 
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.runtime.remember
@@ -385,7 +386,10 @@ private val flowLines = listOf(
     "No skipping needed",
 )
 
-/** Flow at the top of Home: a wide bar with the sound-levels icon. Tap to start; tap again to switch it up. */
+/**
+ * Flow at the top of Home: a wide bar with the sound-levels icon. Tap it and Flow starts a set and
+ * the player opens, where Flow says what it's doing. Already playing? It just opens the player.
+ */
 @Composable
 private fun FlowStrip(c: ScreenCtx, seeds: List<Track>) {
     val accent = CoverTint.accent
@@ -399,7 +403,10 @@ private fun FlowStrip(c: ScreenCtx, seeds: List<Track>) {
             .clip(shape)
             .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.2f), Color.White.copy(alpha = 0.06f), Color.White.copy(alpha = 0.04f))))
             .border(1.dp, accent.copy(alpha = 0.35f), shape)
-            .pressable(0.98f) { if (active) Flow.switchUp(c.ps) else Flow.start(c.ps, seeds) }
+            .pressable(0.98f) {
+                FlowTalk.openPlayer = true
+                if (!active && !Flow.building) Flow.start(c.ps, seeds)
+            }
             .padding(start = 12.dp, end = 14.dp, top = 11.dp, bottom = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -412,7 +419,7 @@ private fun FlowStrip(c: ScreenCtx, seeds: List<Track>) {
                 when {
                     Flow.building -> "Mixing your set…"
                     active && seg != null -> "Now: " + seg.title
-                    active -> "Tap to switch it up"
+                    active -> "Tap to open"
                     else -> line
                 },
                 13, Dim, maxLines = 1,
@@ -421,8 +428,9 @@ private fun FlowStrip(c: ScreenCtx, seeds: List<Track>) {
         Spacer(Modifier.width(10.dp))
         Box(Modifier.size(40.dp).clip(androidx.compose.foundation.shape.CircleShape).background(accent), contentAlignment = Alignment.Center) {
             Ico(
-                if (active) androidx.compose.material.icons.Icons.Rounded.AutoAwesome else Icons.Rounded.PlayArrow,
-                Color.Black, if (active) 18.dp else 22.dp,
+                // Playing already: the arrow says "open the player".
+                if (active) androidx.compose.material.icons.Icons.AutoMirrored.Rounded.ArrowForward else Icons.Rounded.PlayArrow,
+                Color.Black, if (active) 20.dp else 22.dp,
             )
         }
     }
@@ -430,7 +438,7 @@ private fun FlowStrip(c: ScreenCtx, seeds: List<Track>) {
 
 /** Flow's icon: five sound-level bars in a circle of the highlight colour. They bounce while Flow plays. */
 @Composable
-private fun FlowLevels(accent: Color, moving: Boolean, modifier: Modifier) {
+internal fun FlowLevels(accent: Color, moving: Boolean, modifier: Modifier) {
     // Only animates while moving, so a still icon costs nothing.
     val phase = if (moving) levelsPhase() else 0f
     val rest = floatArrayOf(0.29f, 0.71f, 1f, 0.59f, 0.24f)

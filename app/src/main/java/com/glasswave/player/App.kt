@@ -75,6 +75,13 @@ fun App(vm: MainViewModel, ps: PlayerState, openInBrowser: (String) -> Unit, ope
     // Back from the player: Home catches up with what you've been playing.
     LaunchedEffect(full) { if (!full && vm.tab == Tab.HOME && vm.stack.isEmpty()) vm.refreshHomeIfStale() }
     BackHandler(enabled = full) { full = false }
+    // Flow was pressed on Home: the player opens (once there's a song in it), and Flow says there what it's doing.
+    LaunchedEffect(FlowTalk.openPlayer, ps.hasItem) {
+        if (FlowTalk.openPlayer && ps.hasItem) {
+            full = true
+            FlowTalk.openPlayer = false
+        }
+    }
     BackHandler(enabled = !full && vm.showYtLogin) { vm.showYtLogin = false }
     BackHandler(enabled = !full && !vm.showYtLogin && vm.stack.isNotEmpty()) { vm.back() }
     // Settings has no tab of its own any more (it opens from Home), so Back goes home from it.

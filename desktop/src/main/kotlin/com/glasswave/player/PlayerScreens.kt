@@ -134,7 +134,9 @@ fun MiniPlayer(ps: PlayerState, page: Backdrop, onOpen: () -> Unit) {
             Modifier.fillMaxSize().offset { IntOffset(dx.value.roundToInt(), 0) }.padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Cover(ps.art, Modifier.size(48.dp), 10.dp)
+            // Flow talking with the player closed: its mark moves where the cover is (the line shows as a note).
+            if (FlowTalk.speaking != null) FlowLevels(CoverTint.accent, true, Modifier.size(48.dp))
+            else Cover(ps.art, Modifier.size(48.dp), 10.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 GText(ps.title, 15, Color.White, FontWeight.SemiBold, 1)
@@ -156,6 +158,11 @@ private enum class Sheet { NONE, MORE, QUEUE }
 
 @Composable
 fun FullPlayer(ps: PlayerState, colors: CoverColors, onClose: () -> Unit, openEqualizer: () -> Unit, onPeek: (Boolean) -> Unit = {}) {
+    // While the player is up, Flow talks here (over the cover) instead of in the small note.
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        FlowTalk.playerOpen = true
+        onDispose { FlowTalk.playerOpen = false }
+    }
     val scope = rememberCoroutineScope()
     val dragY = remember { Animatable(0f) }
     val closeAt = with(LocalDensity.current) { 160.dp.toPx() }
@@ -285,6 +292,8 @@ private fun CoverArt(ps: PlayerState, modifier: Modifier) {
             )
         }
         MusicVideoLayer(ps, Modifier.fillMaxSize())
+        // Flow, while it's saying something: its visualizer and the line, in the cover's place.
+        FlowPresence(ps, Modifier.fillMaxSize())
     }
 }
 
@@ -924,13 +933,13 @@ private fun Times(ps: PlayerState, drag: Float?, dur: Long) {
 }
 
 
-/** While Flow is on: which segment is playing, and "Switch it up" to jump to the next one. */
+/** While Flow is on: which segment is playing (tap it and Flow says its last line again), "Ask" and "Switch it up". */
 @Composable
 private fun FlowBar(ps: PlayerState) {
     val seg = Flow.now ?: return
     val accent = CoverTint.accent
     Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f).pressable(0.98f) { FlowTalk.again() }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(7.dp).clip(CircleShape).background(accent))
                 Spacer(Modifier.width(6.dp))
@@ -939,6 +948,17 @@ private fun FlowBar(ps: PlayerState) {
             GText(seg.blurb, 12, Color.White.copy(alpha = 0.6f), maxLines = 1)
         }
         Spacer(Modifier.width(8.dp))
+        // Ask Flow: type what you want to hear, and it changes the music to that.
+        Box(
+            Modifier.pressable(0.92f) {
+                Menus.askName(
+                    Menus.NameRequest("Ask Flow", "", "Play", hint = "Chill afrobeats, gym hype, 2000s R&B…", note = "Tell Flow what you want to hear.", max = 120) {
+                        Flow.request(ps, it)
+                    },
+                )
+            }.clip(CircleShape).background(Color.White.copy(alpha = 0.10f)).padding(horizontal = 12.dp, vertical = 7.dp),
+        ) { GText("Ask", 12, Color.White, FontWeight.SemiBold, 1) }
+        Spacer(Modifier.width(6.dp))
         Row(
             Modifier.pressable(0.92f) { Flow.switchUp(ps) }.clip(CircleShape)
                 .background(Color.White.copy(alpha = 0.10f)).padding(horizontal = 12.dp, vertical = 7.dp),

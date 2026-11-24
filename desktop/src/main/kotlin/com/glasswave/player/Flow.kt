@@ -48,13 +48,14 @@ object Flow {
     fun start(ps: PlayerState, fallback: List<Track>) {
         if (building) return
         building = true
+        FlowTalk.starting(afterRequest = asked != null)
         scope.launch {
             try {
                 heard.clear()
                 asked = null
                 val built = buildSegments(seeds(fallback), first = true)
                 if (built.isEmpty()) {
-                    Menus.say("Play a few songs first, then try Flow")
+                    FlowTalk.nothingToGoOn()
                     return@launch
                 }
                 segments = built
@@ -63,10 +64,10 @@ object Flow {
                 current = 0
                 active = true
                 ps.playList(built.flatMap { it.tracks }, 0, fromFlow = true)
-                Menus.say("Flow · ${built[0].title}")
+                FlowTalk.opened(built[0], null)
             } catch (e: Exception) {
                 android.util.Log.w("Glasswave", "Flow failed", e)
-                Menus.say("Couldn't start Flow. Check your internet.")
+                FlowTalk.failed()
             } finally {
                 building = false
             }
@@ -74,6 +75,7 @@ object Flow {
     }
 
     fun stop() {
+        if (active) FlowTalk.steppedBack()
         active = false
         asked = null
         segments = emptyList()
@@ -83,8 +85,9 @@ object Flow {
     /** Skips to the start of the next segment. */
     fun switchUp(ps: PlayerState) {
         if (!active) return
+        FlowTalk.switchAsked()
         val next = segments.getOrNull(current + 1)?.tracks?.firstOrNull() ?: run {
-            Menus.say("Lining up more…")
+            FlowTalk.notReady()
             return
         }
         ps.playUrl(next.url)
@@ -96,7 +99,7 @@ object Flow {
         val seg = segmentOf[url] ?: return
         if (seg != current) {
             current = seg
-            segments.getOrNull(seg)?.let { Menus.say("Flow · ${it.title}") }
+            segments.getOrNull(seg)?.let { FlowTalk.segment(it) }
         }
         if (current >= segments.size - 2 && !extending) extend(ps)
     }
@@ -131,12 +134,13 @@ object Flow {
         val q = text.trim().split(' ', '\t', '\n').filter { it.isNotEmpty() }.joinToString(" ").take(120)
         if (q.length < 2 || building) return
         building = true
+        FlowTalk.looking(q)
         scope.launch {
             try {
                 heard.clear()
                 val built = requestSegments(q)
                 if (built.isEmpty()) {
-                    Menus.say("Couldn't find music for “$q”. Try other words.")
+                    FlowTalk.nothingFound(q)
                     return@launch
                 }
                 asked = q
@@ -146,10 +150,10 @@ object Flow {
                 current = 0
                 active = true
                 ps.playList(built.flatMap { it.tracks }, 0, fromFlow = true)
-                Menus.say("Flow · ${built[0].title}")
+                FlowTalk.opened(built[0], q)
             } catch (e: Exception) {
                 android.util.Log.w("Glasswave", "Flow request failed", e)
-                Menus.say("Couldn't start Flow. Check your internet.")
+                FlowTalk.failed()
             } finally {
                 building = false
             }

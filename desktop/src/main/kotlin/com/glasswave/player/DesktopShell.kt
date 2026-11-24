@@ -322,7 +322,9 @@ fun PlayerBar(ps: PlayerState, page: Backdrop, onOpen: () -> Unit, modifier: Mod
         // The song
         Row(Modifier.weight(0.3f), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(56.dp).pressable(0.97f, onClick = onOpen)) {
-                Cover(ps.art, Modifier.fillMaxSize(), 8.dp)
+                // Flow talking with the player closed: its mark moves where the cover is (the line shows as a note).
+                if (FlowTalk.speaking != null) FlowLevels(CoverTint.accent, true, Modifier.fillMaxSize())
+                else Cover(ps.art, Modifier.fillMaxSize(), 8.dp)
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f, fill = false).pressable(0.99f, onClick = onOpen)) {

@@ -25,6 +25,7 @@ import javax.swing.Timer
  *   key ESCAPE        Esc (goes back)
  *   size 1280 800     resizes the drawing
  *   log               prints the player's state
+ *   record clip 8     8 seconds of frames into a folder "clip", for a video
  *   quit
  */
 @OptIn(ExperimentalComposeUiApi::class)
@@ -54,6 +55,7 @@ fun main(args: Array<String>) {
     SwingUtilities.invokeAndWait { frames.start() }
 
     fun onUi(f: () -> Unit) = SwingUtilities.invokeAndWait(f)
+    val recorded = HashMap<String, Int>()
     for (raw in file.readLines()) {
         val line = raw.trim()
         if (line.isEmpty() || line.startsWith("#")) continue
@@ -67,6 +69,24 @@ fun main(args: Array<String>) {
                     val img = scene.render(System.nanoTime())
                     val png = img.encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)!!.bytes
                     File(file.parentFile, "$arg.png").writeBytes(png)
+                }
+                // record clip 8: 8 seconds of frames (20 a second) into a folder "clip" next to the script, to make a
+                // video from. Recording into the same folder again carries on where it stopped.
+                "record" -> {
+                    val (name, secs) = arg.split(" ")
+                    val dir = File(file.parentFile, name).apply { mkdirs() }
+                    val from = recorded[name] ?: 0
+                    val n = (secs.toDouble() * 20).toInt()
+                    val t0 = System.nanoTime()
+                    for (i in 0 until n) {
+                        onUi {
+                            val img = scene.render(System.nanoTime())
+                            File(dir, "%05d.jpg".format(from + i)).writeBytes(img.encodeToData(org.jetbrains.skia.EncodedImageFormat.JPEG, 92)!!.bytes)
+                        }
+                        val wait = (t0 + (i + 1) * 50_000_000L - System.nanoTime()) / 1_000_000
+                        if (wait > 0) Thread.sleep(wait)
+                    }
+                    recorded[name] = from + n
                 }
                 "click" -> {
                     val (x, y) = arg.split(" ").map { it.toFloat() }
@@ -159,6 +179,22 @@ fun main(args: Array<String>) {
                     val still = NotInterested.hide(home).flatMap { it.items }.filterIsInstance<SongItem>().any { it.track.url == t.url }
                     val kept = (1..10_000).count { NotInterested.thin(listOf(t)).isNotEmpty() }
                     System.err.println("GW notint '${t.title}': still on Home=$still, kept by Autoplay in ${kept / 100.0}% of 10,000 tries")
+                }
+                // flow: what pressing Flow on Home does (starts a set, opens the player). flowask chill afrobeats: asks
+                // Flow for that, like the box on Home. flowswitch: "Switch it up". flowagain: Flow says its last line again.
+                // flowlog: prints where Flow is and what it's saying.
+                "flow" -> onUi {
+                    FlowTalk.openPlayer = true
+                    if (!Flow.active && !Flow.building) {
+                        Flow.start(ps, (vm.home as? Load.Done)?.value.orEmpty().flatMap { it.items }.filterIsInstance<SongItem>().map { it.track })
+                    }
+                }
+                "flowask" -> onUi { FlowTalk.openPlayer = true; Flow.request(ps, arg) }
+                "flowswitch" -> onUi { Flow.switchUp(ps) }
+                "flowagain" -> onUi { FlowTalk.again() }
+                "flowlog" -> onUi {
+                    System.err.println("GW flow: active=${Flow.active} building=${Flow.building} asked=${Flow.asked} segment=${Flow.now?.title} of ${Flow.segments.map { it.title }}")
+                    System.err.println("GW flow says: ${FlowTalk.speaking?.text} (last: ${FlowTalk.last?.text})")
                 }
                 "style" -> onUi { Settings.updatePlayerStyle(PlayerStyle.valueOf(arg)) }
                 "key" -> onUi { if (arg == "ESCAPE") androidx.activity.compose.BackDispatcher.back() }

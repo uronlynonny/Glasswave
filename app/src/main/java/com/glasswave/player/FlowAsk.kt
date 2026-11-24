@@ -55,13 +55,35 @@ private val flowIdeas = listOf(
 )
 
 /**
- * Under Flow on Home: type what you want to hear, like asking Spotify's DJ, and Flow plays it
- * ("chill afrobeats for the rain", "gym hype", "songs like Burna Boy"). Ask again any time to change it.
+ * Under Flow on Home: type what you want to hear and Flow plays it ("chill afrobeats for the rain",
+ * "gym hype", "songs like Burna Boy"). The player opens, where Flow answers. Ask again any time to change it.
  */
 @Composable
 fun FlowAsk(ps: PlayerState) {
-    var text by remember { mutableStateOf("") }
+    val onAsked = { FlowTalk.openPlayer = true }
     val ideas = remember { flowIdeas.random() }
+    Column(
+        Modifier.padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 2.dp)
+            .widthIn(max = 560.dp)
+            .fillMaxWidth(),
+    ) {
+        FlowAskField(ps, onAsked = onAsked)
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (idea in ideas) {
+                Box(
+                    Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.07f))
+                        .pressable(0.95f) { if (!Flow.building) { Flow.request(ps, idea); onAsked() } }.padding(horizontal = 12.dp, vertical = 7.dp),
+                ) { GText(idea, 13, Color.White.copy(alpha = 0.85f), FontWeight.Medium, 1) }
+            }
+        }
+    }
+}
+
+/** The box you type a request to Flow in. Enter or the arrow sends it. */
+@Composable
+fun FlowAskField(ps: PlayerState, modifier: Modifier = Modifier, onAsked: () -> Unit = {}) {
+    var text by remember { mutableStateOf("") }
     val focus = LocalFocusManager.current
     val accent = CoverTint.accent
     fun go(q: String = text) {
@@ -69,15 +91,12 @@ fun FlowAsk(ps: PlayerState) {
         focus.clearFocus()
         Flow.request(ps, q)
         text = ""
+        onAsked()
     }
-    Column(
-        Modifier.padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 2.dp)
-            .widthIn(max = 560.dp)
-            .fillMaxWidth(),
-    ) {
+    run {
         val shape = RoundedCornerShape(16.dp)
         Row(
-            Modifier.fillMaxWidth().height(48.dp).clip(shape).background(Color.White.copy(alpha = 0.06f))
+            modifier.fillMaxWidth().height(48.dp).clip(shape).background(Color.White.copy(alpha = 0.06f))
                 .border(1.dp, Color.White.copy(alpha = 0.1f), shape).padding(start = 14.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -115,15 +134,6 @@ fun FlowAsk(ps: PlayerState) {
             ) {
                 if (Flow.building) Ico(Icons.Rounded.AutoAwesome, Dim, 16.dp)
                 else Ico(Icons.Rounded.ArrowUpward, if (text.isBlank()) Dim else Color.Black, 18.dp)
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (idea in ideas) {
-                Box(
-                    Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.07f))
-                        .pressable(0.95f) { go(idea) }.padding(horizontal = 12.dp, vertical = 7.dp),
-                ) { GText(idea, 13, Color.White.copy(alpha = 0.85f), FontWeight.Medium, 1) }
             }
         }
     }
