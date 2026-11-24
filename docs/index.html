@@ -39,7 +39,7 @@
       "url": "https://uronlynonny.github.io/Glasswave/",
       "downloadUrl": "https://github.com/uronlynonny/Glasswave/releases/latest/download/Glasswave.apk",
       "image": "https://uronlynonny.github.io/Glasswave/og.png?v=2",
-      "fileSize": "4.1 MB",
+      "fileSize": "4.6 MB",
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
       "author": { "@type": "Person", "name": "nonny dev", "url": "https://github.com/uronlynonny" }
     }
@@ -321,8 +321,8 @@ footer .sig{font-family:Syne;font-weight:700;font-size:18px;color:var(--ink);mar
     <div class="chip glass a"><span class="dot"></span>Synced playlists</div>
     <div class="chip glass d"><span class="dot"></span>Synced from YT Music</div>
     <div class="chip glass b">✦ Synced lyrics</div>
-    <div class="chip glass c"><span>⚡ <span data-size="phone">4.1 MB</span> on phone, no ads</span></div>
-    <div class="chip glass e"><span class="dot"></span><span><span data-size="pc">130 MB</span> on PC</span></div>
+    <div class="chip glass c"><span>⚡ <span data-size="phone">4.6 MB</span> on phone, no ads</span></div>
+    <div class="chip glass e"><span class="dot"></span><span><span data-size="pc">104 MB</span> on PC</span></div>
   </div>
 </section>
 
@@ -349,9 +349,10 @@ footer .sig{font-family:Syne;font-weight:700;font-size:18px;color:var(--ink);mar
     <div class="card wide glass rv"><div class="ico">◐</div><h3>A clean look</h3><p>The tab bar, mini player and buttons are softly frosted, and the background takes its colours from the cover of whatever's playing.</p></div>
     <div class="card glass rv"><div class="ico">⇄</div><h3>Your playlists, synced</h3><p>Sign in to YouTube Music and Spotify once. Playlists and liked songs come over and stay up to date by themselves.</p></div>
     <div class="card glass rv"><div class="ico">▶</div><h3>Music video covers</h3><p>Covers come alive with the song's music video, on Wi-Fi only or always. Your choice.</p></div>
-    <div class="card glass rv"><div class="ico">↓</div><h3>Offline downloads</h3><p>Save songs for the plane. Pick a different quality for Wi-Fi and mobile data.</p></div>
-    <div class="card glass rv"><div class="ico">≋</div><h3>Crossfade &amp; Autoplay</h3><p>Songs melt into each other, and when your queue ends, more like it keep coming.</p></div>
+    <div class="card wide glass rv"><div class="ico">↓</div><h3>Offline downloads</h3><p>Save songs for the plane. Pick a different quality for Wi-Fi and mobile data.</p></div>
+    <div class="card glass rv"><div class="ico">≋</div><h3>Automix &amp; Autoplay</h3><p>Songs blend into each other on the beat and in key, and when your queue ends, more like it keep coming.</p></div>
     <div class="card wide glass rv"><div class="ico">♪</div><h3>Home that knows you</h3><p>Picked for you, Because you like…, and Your top songs are built from what you play most, and they change every time you refresh. Search by typing or by singing.</p></div>
+    <div class="card wide glass rv"><div class="ico">◎</div><h3>Jam with friends</h3><p>Listen together, in sync. Friends nearby get an invite with your picture, and Autoplay takes turns picking songs for everyone's taste.</p></div>
     <div class="card glass rv"><div class="ico">▭</div><h3>Tablet layouts</h3><p>Big screens get side-by-side player and lyrics.</p></div>
   </div>
 </section>
@@ -360,10 +361,10 @@ footer .sig{font-family:Syne;font-weight:700;font-size:18px;color:var(--ink);mar
   <div class="rv">
     <span class="kicker">Meet Flow</span>
     <h2>A DJ that<br><span class="grad">reads the room.</span></h2>
-    <p class="lead">Tap Flow and it builds a mix around your taste: old favourites, new finds and deep cuts, shuffled so it never plays the same set twice. No talking, just music.</p>
+    <p class="lead">Tap Flow and it builds a mix around your taste: old favourites, new finds and deep cuts, shuffled so it never plays the same set twice. Or just type what you're in the mood for, like “chill afrobeats” or “gym hype”, and Flow mixes a set for it. No talking, just music.</p>
   </div>
   <div class="orb rv"><span class="ring"></span><span class="ring"></span><span class="ring"></span><div class="core lv" aria-label="Flow"><i></i><i></i><i></i><i></i><i></i></div></div>
-  <div class="pills rv"><span class="glass">Favourites</span><span class="glass">New finds</span><span class="glass">Deep cuts</span><span class="glass">Same vibe</span><span class="glass">Never repeats</span></div>
+  <div class="pills rv"><span class="glass">Favourites</span><span class="glass">New finds</span><span class="glass">Deep cuts</span><span class="glass">Same vibe</span><span class="glass">Ask for a vibe</span><span class="glass">Never repeats</span></div>
 </section>
 
 <section id="stats">
@@ -550,7 +551,7 @@ footer .sig{font-family:Syne;font-weight:700;font-size:18px;color:var(--ink);mar
   });
 
   // Marquee
-  const words = ['Synced lyrics','YouTube Music','Spotify sync','Flow DJ','Crossfade','Offline','Music video covers','Listening stats','Voice search','No ads'];
+  const words = ['Synced lyrics','YouTube Music','Spotify sync','Flow DJ','Automix','Jam','Offline','Music video covers','Listening stats','Voice search','No ads'];
   const mq = document.getElementById('mq');
   mq.innerHTML = words.map(w => `<span>${w}</span>`).join('');
 
