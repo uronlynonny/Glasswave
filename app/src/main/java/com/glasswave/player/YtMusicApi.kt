@@ -460,8 +460,8 @@ object YtMusicApi {
         }
         // A song or artist you know well whose name starts like what's typed comes first.
         val top = rank.top(best, artist, usual)
-        // The top result doesn't show again right under it (nor its song/video twin).
-        val rest = (top as? SongItem)?.let { t -> ordered.filterNot { SearchRank.same(it, t) } } ?: ordered
+        // The top result doesn't show again right under it (nor its music video), but other versions do.
+        val rest = (top as? SongItem)?.let { t -> ordered.filterNot { SearchRank.twin(it, t) } } ?: ordered
         
         val out = mutableListOf<Section>()
         if (top != null) out += Section("Top result", listOf(top))

@@ -90,7 +90,9 @@ fun openInBrowser(url: String) {
 }
 
 /** The app icon (the wave), drawn in code so the window and taskbar get it at any size. */
-internal val AppIcon: ImageVector = ImageVector.Builder("Glasswave", 108.dp, 108.dp, 108f, 108f)
+// (Made when first needed, not as the app starts, so the start-up helpers in Boot.kt get going first.)
+internal val AppIcon: ImageVector by lazy { appIcon() }
+private fun appIcon(): ImageVector = ImageVector.Builder("Glasswave", 108.dp, 108.dp, 108f, 108f)
     .addPath(PathParser().parsePathString("M18,0h72a18,18 0 0 1 18,18v72a18,18 0 0 1 -18,18h-72a18,18 0 0 1 -18,-18v-72a18,18 0 0 1 18,-18z").toNodes(), fill = SolidColor(Color(0xFF0E0E0E)))
     .addPath(
         PathParser().parsePathString("M30,60C38,38 48,38 54,54S70,70 78,48").toNodes(),
@@ -315,6 +317,9 @@ private fun startSize(): DpSize {
 fun main(args: Array<String>) {
     // A second copy started only to turn a voice search into text (see Voice): no window, then quits.
     if (args.firstOrNull() == "--voice-worker") { Voice.worker(File(args[1])); return }
+    // Opening faster: read ahead the code the first screen needs, on other cores (see Boot.kt).
+    Preload.start()
+    StartPriority.boost()
     // Draw with OpenGL: on Windows' default (Direct3D 12) the graphics driver takes memory in
     // 64 MB blocks and keeps them, which alone pushed the app well past 300 MB. If OpenGL doesn't
     // work on a PC, the drawing library moves on to another way by itself.
@@ -451,7 +456,10 @@ fun main(args: Array<String>) {
                     kotlinx.coroutines.delay(60_000)
                 }
             }
-            LaunchedEffect(Unit) { if (bootTimes) System.err.println("GW boot window drawn ${(System.nanoTime() - bootStart) / 1_000_000} ms after startUp began") }
+            LaunchedEffect(Unit) {
+                if (bootTimes) System.err.println("GW boot window drawn ${(System.nanoTime() - bootStart) / 1_000_000} ms after startUp began")
+                StartPriority.settle()
+            }
             // Someone opened Glasswave again while it was already running: show this window.
             LaunchedEffect(SingleInstance.showRequests) {
                 if (SingleInstance.showRequests == 0) return@LaunchedEffect

@@ -134,7 +134,12 @@ class SearchRank(
             if (title.contains(q) || (title + " " + norm(t.artist)).contains(q)) score += 2.0
         }
         if (intent.isNotEmpty()) score += 3.0 * intent.count { it in all } / intent.size
-        score += 0.9 * (if (s.plays > 0) log10(s.plays.toDouble()) else 4.5)
+        // How popular it is counts a lot, like Spotify: of two songs with the name you typed, the one
+        // played 100 times more comes first (a song with no count shown is taken as a middling one).
+        score += 2.0 * (if (s.plays > 0) log10(s.plays.toDouble()) else 4.5)
+        // Sped up, slowed, remixes, karaoke and other versions come after the song itself, unless
+        // the search asks for them ("perfect acoustic").
+        if (isVersion(title)) score -= 3.0
         // A song you know only counts for searches it's about, so songs from your history that
         // YouTube fills the list with don't climb up. The more you've played it, the more it counts.
         val k = knownOf(t)
@@ -142,6 +147,35 @@ class SearchRank(
         else if (s.plays in 1 until 20_000) score -= 5.0
         score += 2.0 * (1.0 - index / 60.0).coerceAtLeast(0.0) // YouTube's own order counts a little
         return score
+    }
+
+    /**
+     * YouTube Music's suggestions while you type, put in order like the search itself: its songs
+     * best first (popular ones and ones you know), the song and its video only once, and songs the
+     * words aren't about (one it pads the list with) left out. Artists, albums and playlists stay
+     * where they were.
+     */
+    fun suggestions(items: List<MusicItem>): List<MusicItem> {
+        val kept = mutableListOf<SongItem>()
+        for (s in sort(items.filterIsInstance<SongItem>())) {
+            val mine = knownOf(s.track) != null
+            if (!mine && !relevant(s)) continue
+            // A little-known instrumental, karaoke or sped-up copy isn't worth a place here.
+            if (!mine && isVersion(norm(s.track.title)) && s.plays in 1 until 1_000_000) continue
+            if (kept.any { twin(it, s) }) continue
+            kept += s
+        }
+        val songs = kept.iterator()
+        return items.mapNotNull { i -> if (i is SongItem) (if (songs.hasNext()) songs.next() else null) else i }
+    }
+
+    /** True when [title] (cleaned up) is another version of a song (sped up, remix...) and the search didn't ask for one. */
+    fun isVersion(title: String): Boolean {
+        val t = " $title "
+        val asked = " $q "
+        // ("Taylor's Version" is the song itself, re-recorded.)
+        if (" taylors version " in t) return false
+        return versionWords.any { w -> " $w " in t && " $w " !in asked }
     }
 
     /**
@@ -188,6 +222,12 @@ class SearchRank(
 
     companion object {
         private val extras = Regex("""\s*[(\[][^)\]]*[)\]]""")
+        /** Words in a name (whole words) that mean it's another version of a song. */
+        private val versionWords = listOf(
+            "extended", "extended version", "remix", "sped up", "speed up", "slowed", "reverb", "nightcore",
+            "instrumental", "karaoke", "8d", "8d audio", "cover", "acapella", "mashup", "flip", "bass boosted",
+            "lofi", "lo fi", "tribute", "version",
+        )
         private val marks = Regex("""\p{M}+""")
         private val junk = Regex("""[^\p{L}\p{N} ]+""")
         private val spaces = Regex("""\s+""")
@@ -241,6 +281,21 @@ class SearchRank(
 
         /** Played fewer than a thousand times on YouTube. */
         fun rare(s: SongItem) = s.plays in 1 until 1_000
+
+        private val videoWords = Regex("""\b(official|video|audio|lyrics?|visuali[sz]er|music video|mv)\b""")
+
+        /**
+         * The same recording shown twice: the song and its music video (or lyric video), same name
+         * and main artist. Unlike [same], a different version with other singers ("feat. Justin
+         * Bieber") or a remix isn't a twin, so both show.
+         */
+        fun twin(a: SongItem, b: SongItem): Boolean {
+            if (a.track.url == b.track.url) return true
+            if (key(a.track) != key(b.track)) return false
+            val ta = norm(a.track.title)
+            val tb = norm(b.track.title)
+            return ta == tb || videoWords.containsMatchIn(ta) || videoWords.containsMatchIn(tb)
+        }
 
         /** The same song (say its song and video versions): same name and main artist. */
         fun same(a: SongItem, b: SongItem) = a.track.url == b.track.url || key(a.track) == key(b.track)
