@@ -275,7 +275,12 @@ class MainViewModel : ViewModel() {
         showSuggestions = true
         suggestJob = viewModelScope.launch {
             delay(120)
-            suggestions = runCatching { YtMusicApi.suggestions(q.trim()) }.getOrNull() ?: suggestions
+            suggestions = runCatching {
+                // Its songs in the same order the search uses (most played first, other versions after).
+                YtMusicApi.suggestions(q.trim()).let { s ->
+                    s.copy(items = SearchRank(q.trim(), s.queries, SearchPicks.known(), artists = SearchPicks.knownArtists()).suggestions(s.items))
+                }
+            }.getOrNull() ?: suggestions
         }
         searchJob?.cancel()
         searchJob = viewModelScope.launch {

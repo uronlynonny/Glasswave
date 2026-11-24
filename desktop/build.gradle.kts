@@ -1,7 +1,9 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import java.net.URI
 import java.security.MessageDigest
+import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 plugins {
     kotlin("jvm") version "2.2.21"
@@ -13,7 +15,7 @@ plugins {
 val appBuild = file("../app/build.gradle.kts").readText()
 // Glasswave for Windows has its own version number, separate from the phone app.
 // Raise it for every Windows release: installed copies update themselves to a higher number.
-val appVersion = "1.2.64"
+val appVersion = "1.2.65"
 // Which computer this build is for: the one building it (a Mac build has to be made on a Mac).
 val hostOs = System.getProperty("os.name").lowercase()
 val isMac = hostOs.startsWith("mac")
@@ -25,6 +27,49 @@ val nativeTarget = when {
     isLinux -> "linux-x86_64"
     else -> "windows-x86_64"
 }
+/**
+ * The icons the app uses, out of the full icon set: every icon class the compiled app refers to
+ * (found by name in its class files), packed into a small jar. Stops the build if one isn't found.
+ */
+val trimIcons = tasks.register("trimIcons") {
+    val classes = layout.buildDirectory.dir("classes/kotlin/main")
+    val full = configurations.named("compileClasspath").map { c -> c.filter { it.name.startsWith("material-icons-extended") } }
+    // The everyday icons (Home, Search, Close...) are in the small core set, which ships whole.
+    val core = configurations.named("compileClasspath").map { c -> c.filter { it.name.startsWith("material-icons-core") } }
+    val out = layout.buildDirectory.file("icons/material-icons-used.jar")
+    dependsOn("compileKotlin")
+    inputs.files(full, core)
+    inputs.dir(classes)
+    outputs.file(out)
+    doLast {
+        val ref = Regex("androidx/compose/material/icons/(?:automirrored/)?(?:filled|rounded|outlined|sharp|twotone)/[A-Za-z0-9_]+Kt")
+        val used = sortedSetOf<String>()
+        classes.get().asFile.walk().filter { it.name.endsWith(".class") }.forEach { f ->
+            ref.findAll(String(f.readBytes(), Charsets.ISO_8859_1)).forEach { used += it.value }
+        }
+        val jar = full.get().singleFile
+        val found = mutableSetOf<String>()
+        out.get().asFile.apply { parentFile.mkdirs() }.outputStream().use { o ->
+            ZipOutputStream(o).use { z ->
+                ZipFile(jar).use { src ->
+                    for (e in src.entries()) {
+                        val name = e.name.removeSuffix(".class")
+                        val owner = used.firstOrNull { name == it || name.startsWith("$it\$") } ?: continue
+                        found += owner
+                        z.putNextEntry(ZipEntry(e.name))
+                        src.getInputStream(e).use { it.copyTo(z) }
+                        z.closeEntry()
+                    }
+                }
+            }
+        }
+        val inCore = ZipFile(core.get().singleFile).use { z -> z.entries().asSequence().map { it.name.removeSuffix(".class") }.toSet() }
+        val missing = used - found - inCore
+        check(missing.isEmpty()) { "Icons not in the icon sets: $missing" }
+        logger.lifecycle("Icons: ${found.size} of the full set kept")
+    }
+}
+
 val newPipe = Regex("NewPipeExtractor:(v?[0-9][0-9.]*)").find(appBuild)?.groupValues?.get(1)
     ?: error("Couldn't find the NewPipeExtractor version in app/build.gradle.kts")
 
@@ -32,7 +77,11 @@ dependencies {
     implementation(compose.desktop.currentOs)
     implementation(compose.foundation)
     implementation(compose.animation)
-    implementation(compose.materialIconsExtended)
+    // The big icon set (11,000 files, 38 MB) is only compiled against; the app ships just the icons
+    // it uses (see trimIcons), so there's far less for Java (and Windows' virus scan) to open at launch.
+    compileOnly(compose.materialIconsExtended)
+    implementation(compose.materialIconsExtended.replace("material-icons-extended", "material-icons-core"))
+    runtimeOnly(files(trimIcons))
     implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.9.6")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
 
@@ -116,6 +165,15 @@ tasks.register<JavaExec>("lyricsAudit") {
 tasks.register<JavaExec>("searchCheck") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("com.glasswave.player.SearchCheckKt")
+}
+
+// Real searches, printed with every song's plays and score (see SearchDebug.kt).
+// ./gradlew -p desktop searchDebug -Pq="call me by your name;last last"
+tasks.register<JavaExec>("searchDebug") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.SearchDebugKt")
+    (project.findProperty("q") as String?)?.let { args(it) }
+    if (project.hasProperty("typingOnly")) systemProperty("gw.typingOnly", "1")
 }
 
 // ./gradlew -p desktop fxCheck -Pfile=path/to/song.wav
