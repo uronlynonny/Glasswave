@@ -272,6 +272,7 @@ internal fun startUp() {
     MixLibrary.decoder = MixAudio
     boot("GlassTier.init") { GlassTier.init(ctx) }
     boot("Stats.init") { Stats.init(ctx) }
+    boot("SkipNet.init") { SkipNet.init(ctx) }
     boot("Badges.init") { Badges.init(ctx) }
     boot("Sync.init") { Sync.init(ctx) }
     boot("Jam.init") { Jam.init(ctx) }

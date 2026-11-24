@@ -225,7 +225,7 @@ object Flow {
 
     /** Shuffles, then spreads songs out so the same artist never plays twice in a row. */
     private fun mix(list: List<Track>): List<Track> {
-        val pool = list.shuffled().toMutableList()
+        val pool = SkipNet.arrange(list).toMutableList()
         val out = mutableListOf<Track>()
         while (pool.isNotEmpty()) {
             val last = out.lastOrNull()?.artist?.substringBefore(",")?.trim()

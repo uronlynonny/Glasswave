@@ -714,6 +714,7 @@ private fun Audio(c: ScreenCtx) {
     Group("Playback") {
         Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) { PlaybackArt(c.ps.playing, Settings.autoplay) }
         SwitchRow("Autoplay", "When the queue ends, keep playing similar songs.", Settings.autoplay) { Settings.updateAutoplay(it) }
+        SwitchRow("Smart order", "Songs Glasswave picks for you come in an order you're likelier to enjoy, learned from what you play and skip. It stays on this device.", Settings.smartOrder) { Settings.updateSmartOrder(it) }
         SwitchRow("Pause for other apps", "When a video or another app starts playing sound, Glasswave pauses, then carries on when it stops.", Settings.pauseForOthers) { Settings.updatePauseForOthers(it) }
         SwitchRow("Remember what was playing", "When you open Glasswave again, the last song is waiting where you left off. Just tap play.", Settings.rememberPlaying) {
             Settings.updateRememberPlaying(it)

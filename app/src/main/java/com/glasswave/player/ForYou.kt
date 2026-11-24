@@ -175,12 +175,13 @@ object ForYou {
      */
     fun mix(yt: List<Section>, mine: List<Section>): List<Section> {
         fun isSongs(s: Section) = s.items.count { it is SongItem } * 2 > s.items.size
-        val shuffledYt = yourShelves(yt).map { s -> if (isSongs(s)) s.copy(items = s.items.shuffled()) else s }.toMutableList()
+        fun song(m: MusicItem) = (m as? SongItem)?.track
+        val shuffledYt = yourShelves(yt).map { s -> if (isSongs(s)) s.copy(items = SkipNet.arrange(s.items, ::song)) else s }.toMutableList()
         val minePicked = mine.firstOrNull { it.title == "Picked for you" }
         if (minePicked != null) {
             val i = shuffledYt.indexOfFirst { it.title == "Picked for you" }
             if (i >= 0) {
-                val merged = (minePicked.items + shuffledYt[i].items).distinctBy { m -> (m as? SongItem)?.track?.let { YtRepo.songKey(it.title, it.artist) } ?: m.title.lowercase() }.shuffled().take(28)
+                val merged = (minePicked.items + shuffledYt[i].items).distinctBy { m -> (m as? SongItem)?.track?.let { YtRepo.songKey(it.title, it.artist) } ?: m.title.lowercase() }.let { SkipNet.arrange(it, ::song) }.take(28)
                 shuffledYt[i] = Section("Picked for you", merged)
             } else {
                 shuffledYt.add(0, minePicked)

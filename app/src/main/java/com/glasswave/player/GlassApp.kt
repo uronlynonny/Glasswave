@@ -33,6 +33,7 @@ class GlassApp : Application(), ImageLoaderFactory {
         MixLibrary.init(this)
         GlassTier.init(this)
         Stats.init(this)
+        SkipNet.init(this)
         Badges.init(this)
         Sync.init(this)
         SyncPlatform.init(this)

@@ -36,7 +36,7 @@ object Autoplay {
         val heard = History.tracks.take(50).mapTo(HashSet()) { YtRepo.songKey(it.title, it.artist) }
         val all = radio.filter { taken.add(YtRepo.songKey(it.title, it.artist)) }
         val unheard = all.filter { YtRepo.songKey(it.title, it.artist) !in heard }
-        val pool = (if (unheard.size >= 6) unheard else all).shuffled().take(25).toMutableList()
+        val pool = SkipNet.arrange(if (unheard.size >= 6) unheard else all).take(25).toMutableList()
         val out = mutableListOf<Track>()
         var last = playingArtist
         while (pool.isNotEmpty()) {
@@ -1091,6 +1091,8 @@ class PlayerState(@Suppress("UNUSED_PARAMETER") context: android.content.Context
         if (t != null && t.url.isNotEmpty()) {
             val dur = durationMs
             if (ms >= 30_000 || (ms >= 10_000 && dur in 1..(ms * 2))) Stats.record(t.copy(seconds = 0), ms)
+            // Smart order learns from skips too, so it hears about every song, however short the listen.
+            SkipNet.record(t, ms, if (dur > 0) dur else t.seconds * 1000, pickedByYou = t.url !in Autoplay.added && !Flow.active)
         }
         listenedMs = 0
         playingSince = if (playing) now else 0

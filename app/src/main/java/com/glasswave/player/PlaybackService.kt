@@ -87,7 +87,7 @@ object Autoplay {
         val heard = History.tracks.take(50).mapTo(HashSet()) { YtRepo.songKey(it.title, it.artist) }
         val all = radio.filter { taken.add(YtRepo.songKey(it.title, it.artist)) }
         val unheard = all.filter { YtRepo.songKey(it.title, it.artist) !in heard }
-        val pool = (if (unheard.size >= 6) unheard else all).shuffled().take(25).toMutableList()
+        val pool = SkipNet.arrange(if (unheard.size >= 6) unheard else all).take(25).toMutableList()
         val out = mutableListOf<Track>()
         var last = playingArtist
         while (pool.isNotEmpty()) {
@@ -516,6 +516,7 @@ class PlaybackService : MediaSessionService() {
                 listenAhead(player)
                 logPlay(player)
                 listening = mediaItem
+                noteDuration(player)
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) SleepTimer.onSongEnded(player)
                 prefetchAhead(player)
                 maybeAutoplay(player)
@@ -544,6 +545,7 @@ class PlaybackService : MediaSessionService() {
                 val now = android.os.SystemClock.elapsedRealtime()
                 if (isPlaying) {
                     if (listening == null) listening = player.currentMediaItem
+                    noteDuration(player)
                     playingSince = now
                 } else if (playingSince > 0) {
                     listenedMs += now - playingSince
@@ -703,6 +705,14 @@ class PlaybackService : MediaSessionService() {
     private var listening: MediaItem? = null
     private var listenedMs = 0L
     private var playingSince = 0L
+    /** How long the song being listened to is, once the player knows (0 until then). */
+    private var listeningDurationMs = 0L
+
+    /** Remembers the current song's length while it is the one being listened to. */
+    private fun noteDuration(p: Player) {
+        val d = p.duration
+        if (d > 0 && p.currentMediaItem?.mediaId == listening?.mediaId) listeningDurationMs = d
+    }
 
     /** Logs the song that was playing (if listened to for 30 s, or most of a short song), then starts counting afresh. */
     private fun logPlay(p: Player) {
@@ -715,7 +725,14 @@ class PlaybackService : MediaSessionService() {
             if (enough) {
                 Stats.record(Track(item.mediaId, md.title?.toString() ?: "", md.artist?.toString() ?: "", 0, md.artworkUri?.toString()), ms)
             }
+            // Smart order learns from skips too, so it hears about every song, however short the listen.
+            val length = if (listeningDurationMs > 0) listeningDurationMs else (Sources.hintFor(item.mediaId)?.seconds ?: 0L) * 1000
+            SkipNet.record(
+                Track(item.mediaId, md.title?.toString() ?: "", md.artist?.toString() ?: "", 0, md.artworkUri?.toString()),
+                ms, length, pickedByYou = item.mediaId !in Autoplay.added && !Flow.active,
+            )
         }
+        listeningDurationMs = 0
         listenedMs = 0
         playingSince = if (p.isPlaying) now else 0
     }

@@ -176,6 +176,14 @@ tasks.register<JavaExec>("searchDebug") {
     if (project.hasProperty("typingOnly")) systemProperty("gw.typingOnly", "1")
 }
 
+// Checks Smart order against the training code: the same history must give the same inputs and
+// the same answers as when the network was trained (see SkipCheck.kt). ./gradlew -p desktop skipCheck
+tasks.register<JavaExec>("skipCheck") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.glasswave.player.SkipCheckKt")
+    args(file("checks/skipnet-golden.json").absolutePath)
+}
+
 // ./gradlew -p desktop fxCheck -Pfile=path/to/song.wav
 tasks.register<JavaExec>("fxCheck") {
     classpath = sourceSets.main.get().runtimeClasspath

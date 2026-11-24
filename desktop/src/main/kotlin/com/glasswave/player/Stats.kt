@@ -135,6 +135,7 @@ object Stats {
 
     fun clear() {
         writer.execute { runCatching { file.delete(); Sync.syncedPlaysFile()?.delete() }; SearchPicks.usePlays(emptyList()) }
+        SkipNet.clear()
         version++
     }
 

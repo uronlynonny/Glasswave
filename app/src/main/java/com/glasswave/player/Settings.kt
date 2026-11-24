@@ -110,6 +110,8 @@ object Settings {
     var keepHistory by mutableStateOf(true); private set
     var coverMotion by mutableStateOf(CoverMotion.WIFI); private set
     var autoplay by mutableStateOf(true); private set
+    /** Smart order: songs Glasswave picks are put in an order you're likelier to enjoy (see SkipNet). */
+    var smartOrder by mutableStateOf(true); private set
     /** Pause while another app plays a video or sound, and carry on when it stops. */
     var pauseForOthers by mutableStateOf(true); private set
     /** Keep the queue and the spot in the song, so it's waiting (paused) next time the app opens. On by default. */
@@ -178,6 +180,7 @@ object Settings {
         keepHistory = prefs.getBoolean("history", true)
         coverMotion = enumPref("cover_motion", CoverMotion.WIFI)
         autoplay = prefs.getBoolean("autoplay", true)
+        smartOrder = prefs.getBoolean("smart_order", true)
         pauseForOthers = prefs.getBoolean("pause_for_others", true)
         rememberPlaying = prefs.getBoolean("remember_playing", true)
         downloadWifi = enumPref("dl_wifi", Quality.HIGH)
@@ -314,6 +317,7 @@ object Settings {
         if (!on) LastPlayed.clear()
     }
     fun updateAutomix(on: Boolean) { automix = on; prefs.edit { putBoolean("automix", on) } }
+    fun updateSmartOrder(on: Boolean) { smartOrder = on; prefs.edit { putBoolean("smart_order", on) } }
 
 
     /** Raw preferences for the cache size, read before the cache opens. */
