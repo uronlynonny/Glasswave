@@ -1,11 +1,11 @@
 {
-  "lastTime": 1795546974,
+  "lastTime": 1795581756,
   "totals": {
-    "visits": 180,
+    "visits": 181,
     "siteDownloads": 62,
-    "apk": 563
+    "apk": 571
   },
-  "apkTotal": 526,
+  "apkTotal": 534,
   "hours": [
     {
       "t": 1792763089,
@@ -3972,9 +3972,15 @@
       "v": 1,
       "d": 1,
       "a": 15
+    },
+    {
+      "t": 1795609794,
+      "v": 1,
+      "d": 0,
+      "a": 8
     }
   ],
-  "updated": 1795572647,
+  "updated": 1795609794,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -4377,7 +4383,7 @@
       "m": "\"Harder, Better, Faster, Stronger\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (26.7.2), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=JhulBGMA7G4"
     }
   ],
-  "lastActiveTime": 1795561994,
+  "lastActiveTime": 1795601677,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -5079,12 +5085,24 @@
         "7e1f835a-166e-4035-ab5f-9e99dbfa1633",
         "ff5e4c03-6f4b-4aaf-9481-52797777d6ff"
       ]
+    },
+    "2026-11-25": {
+      "a": [
+        "184148ec-8bf5-4b8c-b520-34b852ae7a56",
+        "36d58cc1-c393-490b-9440-241580552d0a",
+        "9e340ea9-83bd-46d7-959c-e544e253ec9e",
+        "c4626300-15d6-4cc6-91b5-beaa11b615ee",
+        "f26e3a11-ef03-4fea-a5bd-bda93da47da3"
+      ],
+      "w": [
+        "7e1f835a-166e-4035-ab5f-9e99dbfa1633"
+      ]
     }
   },
   "active": {
     "today": {
-      "a": 0,
-      "w": 0
+      "a": 5,
+      "w": 1
     },
     "week": {
       "a": 38,
@@ -5095,11 +5113,6 @@
       "w": 38
     },
     "daily": [
-      {
-        "d": "2026-10-26",
-        "a": 9,
-        "w": 4
-      },
       {
         "d": "2026-10-27",
         "a": 9,
@@ -5244,6 +5257,11 @@
         "d": "2026-11-24",
         "a": 12,
         "w": 4
+      },
+      {
+        "d": "2026-11-25",
+        "a": 5,
+        "w": 1
       }
     ]
   },
