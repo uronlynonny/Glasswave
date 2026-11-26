@@ -1,11 +1,11 @@
 {
-  "lastTime": 1795668701,
+  "lastTime": 1795719303,
   "totals": {
-    "visits": 184,
+    "visits": 187,
     "siteDownloads": 64,
-    "apk": 584
+    "apk": 587
   },
-  "apkTotal": 547,
+  "apkTotal": 550,
   "hours": [
     {
       "t": 1792763089,
@@ -3996,9 +3996,15 @@
       "v": 0,
       "d": 0,
       "a": 4
+    },
+    {
+      "t": 1795736394,
+      "v": 3,
+      "d": 0,
+      "a": 3
     }
   ],
-  "updated": 1795704899,
+  "updated": 1795736394,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -4401,7 +4407,7 @@
       "m": "\"Harder, Better, Faster, Stronger\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (26.7.2), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=JhulBGMA7G4"
     }
   ],
-  "lastActiveTime": 1795698686,
+  "lastActiveTime": 1795729479,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -5130,29 +5136,35 @@
         "184148ec-8bf5-4b8c-b520-34b852ae7a56",
         "36d58cc1-c393-490b-9440-241580552d0a",
         "564eab64-238a-40d0-a0ee-869efc244f9c",
+        "600004b6-23f9-4905-a41a-37fc8a6db0dc",
         "8573979e-f1a4-4db1-aefb-e282d072b2f4",
         "9e340ea9-83bd-46d7-959c-e544e253ec9e",
         "b40577e8-17f8-4460-839e-0cef28e7acc4",
         "c3a91105-b7c7-413a-85f1-fb8481e7736e",
+        "c4b9e5f5-2762-409c-a124-51e11200371d",
+        "cf47fa68-12cc-428c-b658-36de9948affb",
         "dc1deb64-75ee-426a-b88b-effee2f0025c",
         "f26e3a11-ef03-4fea-a5bd-bda93da47da3"
       ],
       "w": [
-        "7e1f835a-166e-4035-ab5f-9e99dbfa1633"
+        "1acf6e0b-6faa-44ef-aab2-085f9b135094",
+        "44413ebe-769e-4160-b36a-b2a927d97a57",
+        "7e1f835a-166e-4035-ab5f-9e99dbfa1633",
+        "ff5e4c03-6f4b-4aaf-9481-52797777d6ff"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 10,
-      "w": 1
+      "a": 13,
+      "w": 4
     },
     "week": {
-      "a": 38,
+      "a": 40,
       "w": 10
     },
     "month": {
-      "a": 129,
+      "a": 131,
       "w": 39
     },
     "daily": [
@@ -5303,8 +5315,8 @@
       },
       {
         "d": "2026-11-26",
-        "a": 10,
-        "w": 1
+        "a": 13,
+        "w": 4
       }
     ]
   },
