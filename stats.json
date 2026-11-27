@@ -1,11 +1,11 @@
 {
-  "lastTime": 1795719303,
+  "lastTime": 1795736396,
   "totals": {
     "visits": 187,
     "siteDownloads": 64,
-    "apk": 587
+    "apk": 589
   },
-  "apkTotal": 550,
+  "apkTotal": 552,
   "hours": [
     {
       "t": 1792763089,
@@ -4002,9 +4002,15 @@
       "v": 3,
       "d": 0,
       "a": 3
+    },
+    {
+      "t": 1795766134,
+      "v": 0,
+      "d": 0,
+      "a": 2
     }
   ],
-  "updated": 1795736394,
+  "updated": 1795766134,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -4407,7 +4413,7 @@
       "m": "\"Harder, Better, Faster, Stronger\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (26.7.2), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=JhulBGMA7G4"
     }
   ],
-  "lastActiveTime": 1795729479,
+  "lastActiveTime": 1795758672,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -5152,27 +5158,32 @@
         "7e1f835a-166e-4035-ab5f-9e99dbfa1633",
         "ff5e4c03-6f4b-4aaf-9481-52797777d6ff"
       ]
+    },
+    "2026-11-27": {
+      "a": [
+        "36d58cc1-c393-490b-9440-241580552d0a",
+        "44ecbe84-b346-4329-a0d9-601f15652210",
+        "8573979e-f1a4-4db1-aefb-e282d072b2f4",
+        "874e63d5-b44e-4d31-993c-dcfe3532ee92",
+        "c3a91105-b7c7-413a-85f1-fb8481e7736e",
+        "c4b9e5f5-2762-409c-a124-51e11200371d"
+      ]
     }
   },
   "active": {
     "today": {
-      "a": 13,
-      "w": 4
+      "a": 6,
+      "w": 0
     },
     "week": {
-      "a": 40,
-      "w": 10
+      "a": 36,
+      "w": 7
     },
     "month": {
-      "a": 131,
+      "a": 129,
       "w": 39
     },
     "daily": [
-      {
-        "d": "2026-10-28",
-        "a": 9,
-        "w": 5
-      },
       {
         "d": "2026-10-29",
         "a": 14,
@@ -5317,6 +5328,11 @@
         "d": "2026-11-26",
         "a": 13,
         "w": 4
+      },
+      {
+        "d": "2026-11-27",
+        "a": 6,
+        "w": 0
       }
     ]
   },
