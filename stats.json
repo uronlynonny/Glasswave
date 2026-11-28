@@ -1,11 +1,11 @@
 {
-  "lastTime": 1795825816,
+  "lastTime": 1795847816,
   "totals": {
-    "visits": 191,
+    "visits": 192,
     "siteDownloads": 66,
-    "apk": 593
+    "apk": 594
   },
-  "apkTotal": 556,
+  "apkTotal": 557,
   "hours": [
     {
       "t": 1792763089,
@@ -4020,9 +4020,15 @@
       "v": 2,
       "d": 2,
       "a": 2
+    },
+    {
+      "t": 1795860361,
+      "v": 1,
+      "d": 0,
+      "a": 1
     }
   ],
-  "updated": 1795828880,
+  "updated": 1795860361,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -4465,7 +4471,7 @@
       "m": "\"Meksika Açmazı 2. Sezon 8. Bölüm\" wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nParsingException: URL not accepted: https://music.youtube.com/watch?v=C7suTky8-ZE\n\nWindows 11 (10.0), Glasswave for Windows 1.2.67\nhttps://music.youtube.com/watch?v=C7suTky8-ZE"
     }
   ],
-  "lastActiveTime": 1795827212,
+  "lastActiveTime": 1795853690,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -5233,21 +5239,24 @@
     },
     "2026-11-28": {
       "a": [
+        "1f04002d-50da-4be5-9b07-e698eae17b5f",
+        "36d58cc1-c393-490b-9440-241580552d0a",
+        "8573979e-f1a4-4db1-aefb-e282d072b2f4",
         "b3503594-49f1-4676-bcaf-ebba16df8988"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 1,
+      "a": 4,
       "w": 0
     },
     "week": {
-      "a": 35,
+      "a": 36,
       "w": 9
     },
     "month": {
-      "a": 122,
+      "a": 123,
       "w": 40
     },
     "daily": [
@@ -5398,7 +5407,7 @@
       },
       {
         "d": "2026-11-28",
-        "a": 1,
+        "a": 4,
         "w": 0
       }
     ]
