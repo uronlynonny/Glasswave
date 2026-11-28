@@ -1,11 +1,11 @@
 {
-  "lastTime": 1795789709,
+  "lastTime": 1795825816,
   "totals": {
-    "visits": 189,
-    "siteDownloads": 64,
-    "apk": 591
+    "visits": 191,
+    "siteDownloads": 66,
+    "apk": 593
   },
-  "apkTotal": 554,
+  "apkTotal": 556,
   "hours": [
     {
       "t": 1792763089,
@@ -4014,9 +4014,15 @@
       "v": 2,
       "d": 0,
       "a": 2
+    },
+    {
+      "t": 1795828880,
+      "v": 2,
+      "d": 2,
+      "a": 2
     }
   ],
-  "updated": 1795802505,
+  "updated": 1795828880,
   "failedSongs": [
     {
       "t": 1792854647,
@@ -4417,9 +4423,49 @@
     {
       "t": 1794678784,
       "m": "\"Harder, Better, Faster, Stronger\" by Daft Punk wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nSignInConfirmNotBotException: YouTube probably temporarily blocked anonymous watch access with this IP , got error LOGIN_REQUIRED: \"Sign in to confirm that you're not a bot\"\n\nMac OS X (26.7.2), Glasswave for Mac 1.2.61\nhttps://music.youtube.com/watch?v=JhulBGMA7G4"
+    },
+    {
+      "t": 1795809713,
+      "m": "\"Meksika Açmazı 1. Sezon 38. Bölüm\" wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nParsingException: URL not accepted: https://music.youtube.com/watch?v=f16MAQ-yn64\n\nWindows 11 (10.0), Glasswave for Windows 1.2.67\nhttps://music.youtube.com/watch?v=f16MAQ-yn64"
+    },
+    {
+      "t": 1795809717,
+      "m": "\"Meksika Açmazı 1. Sezon 39. Bölüm\" wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nParsingException: URL not accepted: https://music.youtube.com/watch?v=LX2FJeBimlI\n\nWindows 11 (10.0), Glasswave for Windows 1.2.67\nhttps://music.youtube.com/watch?v=LX2FJeBimlI"
+    },
+    {
+      "t": 1795809721,
+      "m": "\"Meksika Açmazı 2. Sezon 1. Bölüm\" wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nParsingException: URL not accepted: https://music.youtube.com/watch?v=V04MJkPCO5A\n\nWindows 11 (10.0), Glasswave for Windows 1.2.67\nhttps://music.youtube.com/watch?v=V04MJkPCO5A"
+    },
+    {
+      "t": 1795809726,
+      "m": "\"Meksika Açmazı 2. Sezon 2. Bölüm\" wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nParsingException: URL not accepted: https://music.youtube.com/watch?v=5Iax5T0ncfI\n\nWindows 11 (10.0), Glasswave for Windows 1.2.67\nhttps://music.youtube.com/watch?v=5Iax5T0ncfI"
+    },
+    {
+      "t": 1795809730,
+      "m": "\"Meksika Açmazı 2. Sezon 3. Bölüm\" wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nParsingException: URL not accepted: https://music.youtube.com/watch?v=T0PQEvf6SEA\n\nWindows 11 (10.0), Glasswave for Windows 1.2.67\nhttps://music.youtube.com/watch?v=T0PQEvf6SEA"
+    },
+    {
+      "t": 1795809734,
+      "m": "\"Meksika Açmazı 2. Sezon 4. Bölüm\" wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nParsingException: URL not accepted: https://music.youtube.com/watch?v=9MiA0fbuqZc\n\nWindows 11 (10.0), Glasswave for Windows 1.2.67\nhttps://music.youtube.com/watch?v=9MiA0fbuqZc"
+    },
+    {
+      "t": 1795809738,
+      "m": "\"Meksika Açmazı 2. Sezon 5. Bölüm\" wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nParsingException: URL not accepted: https://music.youtube.com/watch?v=jWdrg5IwpkI\n\nWindows 11 (10.0), Glasswave for Windows 1.2.67\nhttps://music.youtube.com/watch?v=jWdrg5IwpkI"
+    },
+    {
+      "t": 1795809743,
+      "m": "\"Meksika Açmazı 2. Sezon 6. Bölüm\" wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nParsingException: URL not accepted: https://music.youtube.com/watch?v=K_bhiH_eLuE\n\nWindows 11 (10.0), Glasswave for Windows 1.2.67\nhttps://music.youtube.com/watch?v=K_bhiH_eLuE"
+    },
+    {
+      "t": 1795809747,
+      "m": "\"Meksika Açmazı 2. Sezon 7. Bölüm\" wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nParsingException: URL not accepted: https://music.youtube.com/watch?v=7Y2VPuyjLPw\n\nWindows 11 (10.0), Glasswave for Windows 1.2.67\nhttps://music.youtube.com/watch?v=7Y2VPuyjLPw"
+    },
+    {
+      "t": 1795809751,
+      "m": "\"Meksika Açmazı 2. Sezon 8. Bölüm\" wouldn't play (tried 4 times).\nIOException: YouTube lookup failed\nParsingException: URL not accepted: https://music.youtube.com/watch?v=C7suTky8-ZE\n\nWindows 11 (10.0), Glasswave for Windows 1.2.67\nhttps://music.youtube.com/watch?v=C7suTky8-ZE"
     }
   ],
-  "lastActiveTime": 1795797163,
+  "lastActiveTime": 1795827212,
   "activeIds": {
     "2026-10-24": {
       "w": [
@@ -5174,34 +5220,37 @@
         "6e949a65-80a1-4177-b071-c7066ee5b105",
         "8573979e-f1a4-4db1-aefb-e282d072b2f4",
         "874e63d5-b44e-4d31-993c-dcfe3532ee92",
+        "b40577e8-17f8-4460-839e-0cef28e7acc4",
         "c3a91105-b7c7-413a-85f1-fb8481e7736e",
         "c4b9e5f5-2762-409c-a124-51e11200371d"
       ],
       "w": [
         "1acf6e0b-6faa-44ef-aab2-085f9b135094",
+        "5314926c-62ca-4c50-98d6-e2455e0df570",
+        "79558d96-45ca-4702-ae74-c020a5febe80",
         "ff5e4c03-6f4b-4aaf-9481-52797777d6ff"
+      ]
+    },
+    "2026-11-28": {
+      "a": [
+        "b3503594-49f1-4676-bcaf-ebba16df8988"
       ]
     }
   },
   "active": {
     "today": {
-      "a": 9,
-      "w": 2
+      "a": 1,
+      "w": 0
     },
     "week": {
-      "a": 36,
-      "w": 7
+      "a": 35,
+      "w": 9
     },
     "month": {
-      "a": 129,
-      "w": 39
+      "a": 122,
+      "w": 40
     },
     "daily": [
-      {
-        "d": "2026-10-29",
-        "a": 14,
-        "w": 6
-      },
       {
         "d": "2026-10-30",
         "a": 10,
@@ -5344,8 +5393,13 @@
       },
       {
         "d": "2026-11-27",
-        "a": 9,
-        "w": 2
+        "a": 10,
+        "w": 4
+      },
+      {
+        "d": "2026-11-28",
+        "a": 1,
+        "w": 0
       }
     ]
   },
